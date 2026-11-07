@@ -48,6 +48,7 @@ fi
 
 echo "== utilisateur et dépôt"
 id amphi >/dev/null 2>&1 || useradd --system --home "$DEST" --shell /usr/sbin/nologin amphi
+git config --global --add safe.directory "$DEST" >/dev/null 2>&1 || true
 if [ -d "$DEST/.git" ]; then
   git -C "$DEST" pull --ff-only
 else

@@ -4,6 +4,7 @@
 set -euo pipefail
 DEST=/opt/amphi-replay
 cd "$DEST"
+git config --global --add safe.directory "$DEST" >/dev/null 2>&1 || true
 git pull --ff-only
 .venv/bin/pip install -q -r requirements.txt
 bash tools/fetch_reveal.sh
