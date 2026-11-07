@@ -1,87 +1,142 @@
 [
   {
-    "id": "q1",
+    "id": "sondage1",
     "type": "qcm",
-    "question": "Quel est, selon vous, le premier facteur de réussite d'une captation solo ?",
-    "options": ["Le matériel", "La répétition générale", "Le logiciel de montage", "Le débit internet"],
-    "bonne": 1,
-    "chrono": 30
+    "question": "Corriger l'orthographe de mon mémoire : comment faites-vous aujourd'hui ?",
+    "options": ["Je le fais moi-même", "Je le fais avec l'aide d'une IA", "J'utilise un outil numérique (correcteur)"]
   },
   {
-    "id": "q2",
+    "id": "sondage2",
+    "type": "qcm",
+    "question": "Résumer un article scientifique pour ma revue de littérature : comment faites-vous ?",
+    "options": ["Je le fais moi-même", "Je le fais avec l'aide d'une IA", "J'utilise un outil numérique"]
+  },
+  {
+    "id": "sondage3",
+    "type": "qcm",
+    "question": "Rédiger l'introduction de mon rapport de stage : comment faites-vous ?",
+    "options": ["Je le fais moi-même", "Je le fais avec l'aide d'une IA", "J'utilise un outil numérique"]
+  },
+  {
+    "id": "sondage4",
+    "type": "qcm",
+    "question": "Transcrire et analyser les entretiens de mon enquête : comment faites-vous ?",
+    "options": ["Je le fais moi-même", "Je le fais avec l'aide d'une IA", "J'utilise un outil numérique"]
+  },
+  {
+    "id": "defi",
+    "type": "texte_libre",
+    "question": "Complétez : « Dans un monde où les robots pensent, les humains… »",
+    "max_longueur": 120,
+    "chrono": 120
+  },
+  {
+    "id": "biais",
     "type": "nuage",
-    "question": "En un mot, qu'attendez-vous de cette séance ?",
+    "question": "Quels biais voyez-vous dans ces images de « médecin » ? (un mot par idée)",
     "max_mots": 3
   },
   {
-    "id": "q3",
-    "type": "rapidite",
-    "question": "Combien de plans alternés voyez-vous dans le replay ?",
-    "options": ["Un", "Deux", "Trois", "Quatre"],
-    "bonne": 2,
-    "chrono": 15
+    "id": "principes",
+    "type": "trou",
+    "question": "La règle par défaut",
+    "texte": "Sans autorisation explicite dans la consigne, l'usage de l'IA générative dans un travail évalué est ___.",
+    "bonnes": ["interdit", "interdite", "interdit."],
+    "chrono": 30
   },
   {
-    "id": "q4",
-    "type": "vrai_faux",
-    "question": "Le serveur transporte la vidéo entre les machines.",
-    "bonne": false,
+    "id": "avis1",
+    "type": "qcm",
+    "question": "Léa colle le sujet de son TFE dans une IA pour obtenir un plan, le retravaille et l'indique en annexe. La consigne ne dit rien sur l'IA.",
+    "options": ["Autorisé", "Interdit"],
+    "bonne": 1,
     "chrono": 20
   },
   {
-    "id": "q5",
-    "type": "emoji",
-    "question": "Votre humeur à cet instant ?",
-    "options": ["😀", "🤔", "😴", "🤯", "🔥", "🙃"]
+    "id": "avis2",
+    "type": "qcm",
+    "question": "Mehdi a rédigé trois pages lui-même et demande à l'IA de « reformuler pour que ce soit plus fluide ». Il relit, valide et déclare l'outil.",
+    "options": ["Autorisé", "Interdit"],
+    "bonne": 1,
+    "chrono": 20
   },
   {
-    "id": "q6",
+    "id": "avis3",
+    "type": "qcm",
+    "question": "Sarah demande à l'IA dix références bibliographiques récentes et les intègre à sa bibliographie sans les ouvrir.",
+    "options": ["Autorisé", "Interdit"],
+    "bonne": 1,
+    "chrono": 20
+  },
+  {
+    "id": "avis4",
+    "type": "qcm",
+    "question": "Thomas fait transcrire par une IA un entretien enregistré en stage, après avoir supprimé le nom de l'infirmière et du service.",
+    "options": ["Autorisé", "Interdit"],
+    "bonne": 1,
+    "chrono": 20
+  },
+  {
+    "id": "avis5",
+    "type": "qcm",
+    "question": "Pauline demande à l'IA quels points de son brouillon manquent de clarté, reprend le texte elle-même et mentionne l'outil en annexe.",
+    "options": ["Autorisé (avec accord préalable et déclaration)", "Interdit"],
+    "bonne": 0,
+    "chrono": 20
+  },
+  {
+    "id": "avis6",
+    "type": "qcm",
+    "question": "Kévin photographie le diaporama du cours et le donne à une IA pour générer des fiches de révision, pour son usage personnel uniquement.",
+    "options": ["Autorisé", "Interdit"],
+    "bonne": 1,
+    "chrono": 20
+  },
+  {
+    "id": "avis7",
+    "type": "qcm",
+    "question": "Inès passe son dossier dans le correcteur d'une IA, n'accepte que l'orthographe et la grammaire ; la consigne autorise les correcteurs et elle le signale.",
+    "options": ["Autorisé", "Interdit"],
+    "bonne": 0,
+    "chrono": 20
+  },
+  {
+    "id": "avis8",
+    "type": "qcm",
+    "question": "Le détecteur d'IA indique 12 % de texte suspect sur le mémoire de Nadia, qui n'a utilisé aucune IA. Que se passe-t-il ?",
+    "options": ["Sanction disciplinaire immédiate", "Mesure de vérification, puis entretien d'authenticité si besoin", "Rien, le seuil n'est pas atteint"],
+    "bonne": 1,
+    "chrono": 20
+  },
+  {
+    "id": "mentions",
     "type": "multi",
-    "question": "Quelles sources entrent dans OBS ? (plusieurs réponses)",
-    "options": ["Le DSLR", "La webcam", "Le deck", "Le téléphone de l'orateur"],
+    "question": "Quelles mentions sont obligatoires quand vous déclarez un usage d'IA générative ?",
+    "options": ["Le nom de l'outil", "La finalité d'usage", "Le type de traitement", "Le nombre de requêtes", "Le coût de l'abonnement"],
     "bonnes": [0, 1, 2],
     "chrono": 30
   },
   {
-    "id": "q7",
-    "type": "buzzer",
-    "question": "Premier à buzzer : qui veut répondre à l'oral ?"
+    "id": "seuil",
+    "type": "nombre",
+    "question": "À partir de quel pourcentage de texte suspect le détecteur déclenche-t-il une vérification ?",
+    "bonne": 10,
+    "unite": "%",
+    "chrono": 20
   },
   {
-    "id": "q8",
-    "type": "trou",
-    "question": "Le recalage audio",
-    "texte": "Le décalage entre le téléphone et OBS est mesuré par corrélation ___.",
-    "bonnes": ["croisée", "croisee"],
-    "chrono": 30
-  },
-  {
-    "id": "q9",
+    "id": "bilan",
     "type": "echelle",
-    "question": "À quel point vous sentez-vous prêt à refaire cette captation seul ?",
+    "question": "Après cette séance, à quel point la règle vous paraît-elle claire ?",
     "min": 1,
     "max": 5,
     "libelle_min": "Pas du tout",
     "libelle_max": "Tout à fait"
   },
   {
-    "id": "q10",
-    "type": "classement",
-    "question": "Classez par ordre de priorité si le temps manque",
-    "options": ["Captation OBS et audio", "Deck et synchronisation", "Télécommande", "Quiz"],
-    "bonne": [0, 1, 2, 3]
-  },
-  {
-    "id": "q11",
-    "type": "nombre",
-    "question": "Combien de participants peut encaisser le serveur en 10 secondes ?",
-    "bonne": 300,
-    "unite": "votes"
-  },
-  {
-    "id": "q12",
+    "id": "questions",
     "type": "texte_libre",
-    "question": "Une question ou une remarque pour la suite ?",
+    "question": "Une question ou une situation que vous aimeriez qu'on tranche ensemble ?",
     "max_longueur": 140
   }
 ]

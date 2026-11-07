@@ -1,0 +1,87 @@
+[
+  {
+    "id": "q1",
+    "type": "qcm",
+    "question": "Quel est, selon vous, le premier facteur de réussite d'une captation solo ?",
+    "options": ["Le matériel", "La répétition générale", "Le logiciel de montage", "Le débit internet"],
+    "bonne": 1,
+    "chrono": 30
+  },
+  {
+    "id": "q2",
+    "type": "nuage",
+    "question": "En un mot, qu'attendez-vous de cette séance ?",
+    "max_mots": 3
+  },
+  {
+    "id": "q3",
+    "type": "rapidite",
+    "question": "Combien de plans alternés voyez-vous dans le replay ?",
+    "options": ["Un", "Deux", "Trois", "Quatre"],
+    "bonne": 2,
+    "chrono": 15
+  },
+  {
+    "id": "q4",
+    "type": "vrai_faux",
+    "question": "Le serveur transporte la vidéo entre les machines.",
+    "bonne": false,
+    "chrono": 20
+  },
+  {
+    "id": "q5",
+    "type": "emoji",
+    "question": "Votre humeur à cet instant ?",
+    "options": ["😀", "🤔", "😴", "🤯", "🔥", "🙃"]
+  },
+  {
+    "id": "q6",
+    "type": "multi",
+    "question": "Quelles sources entrent dans OBS ? (plusieurs réponses)",
+    "options": ["Le DSLR", "La webcam", "Le deck", "Le téléphone de l'orateur"],
+    "bonnes": [0, 1, 2],
+    "chrono": 30
+  },
+  {
+    "id": "q7",
+    "type": "buzzer",
+    "question": "Premier à buzzer : qui veut répondre à l'oral ?"
+  },
+  {
+    "id": "q8",
+    "type": "trou",
+    "question": "Le recalage audio",
+    "texte": "Le décalage entre le téléphone et OBS est mesuré par corrélation ___.",
+    "bonnes": ["croisée", "croisee"],
+    "chrono": 30
+  },
+  {
+    "id": "q9",
+    "type": "echelle",
+    "question": "À quel point vous sentez-vous prêt à refaire cette captation seul ?",
+    "min": 1,
+    "max": 5,
+    "libelle_min": "Pas du tout",
+    "libelle_max": "Tout à fait"
+  },
+  {
+    "id": "q10",
+    "type": "classement",
+    "question": "Classez par ordre de priorité si le temps manque",
+    "options": ["Captation OBS et audio", "Deck et synchronisation", "Télécommande", "Quiz"],
+    "bonne": [0, 1, 2, 3]
+  },
+  {
+    "id": "q11",
+    "type": "nombre",
+    "question": "Combien de participants peut encaisser le serveur en 10 secondes ?",
+    "bonne": 300,
+    "unite": "votes"
+  },
+  {
+    "id": "q12",
+    "type": "texte_libre",
+    "question": "Une question ou une remarque pour la suite ?",
+    "max_longueur": 140
+  }
+]

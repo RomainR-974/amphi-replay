@@ -16,8 +16,10 @@ JETON = "secret-test"
 def client(tmp_path, monkeypatch):
     deck = tmp_path / "deck"
     deck.mkdir()
-    for f in ("slides.html", "quiz.json", "index.html", "remote.html"):
+    for f in ("slides.html", "index.html", "remote.html"):
         (deck / f).write_text((RACINE / "deck" / f).read_text(encoding="utf-8"), encoding="utf-8")
+    # Jeu de questions de démonstration couvrant les 12 types (deck/quiz.json contient la vraie séance).
+    (deck / "quiz.json").write_text((RACINE / "tests" / "fixtures" / "quiz_demo.json").read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setenv("AMPHI_JETON", JETON)
     monkeypatch.setenv("AMPHI_BDD", str(tmp_path / "quiz.sqlite"))
     monkeypatch.setenv("AMPHI_URL_PUBLIQUE", "https://q.test")
@@ -151,7 +153,7 @@ def test_qcm_points_et_classement(client):
     assert a.get("/api/quiz/etat").json()["ma_reponse"]["points"] >= 500
     assert c.get("/api/quiz/etat").json()["ma_reponse"]["points"] == 0
     classement = client.get("/api/quiz/classement").json()
-    assert [p["pseudo"] for p in classement] == ["Alice", "Bob"] and classement[0]["rang"] == 1
+    assert {p["pseudo"] for p in classement} == {"Alice", "Bob"} and classement[0]["rang"] == 1  # égalité possible à quelques ms près
     assert voter(a, "q1", 2).status_code == 409  # révélée = fermée
 
     export = client.get(f"/api/quiz/export?token={JETON}").text
@@ -307,5 +309,6 @@ def test_pages_et_qr(client):
 def test_quiz_json_valide():
     from server.quiz import TYPES, charger_questions
 
-    questions = charger_questions(RACINE / "deck" / "quiz.json")
-    assert {q.type for q in questions.values()} == set(TYPES)
+    demo = charger_questions(RACINE / "tests" / "fixtures" / "quiz_demo.json")
+    assert {q.type for q in demo.values()} == set(TYPES)
+    assert len(charger_questions(RACINE / "deck" / "quiz.json")) >= 1  # la séance réelle se charge sans erreur

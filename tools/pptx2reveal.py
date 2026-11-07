@@ -10,6 +10,10 @@
   le dossier médias (`s<diapo>_<n>.<ext>`), formes pleines, tableaux, notes de l'orateur, fond.
 - Transitions (`p:transition`) et animations (`p:timing`) traduites en `data-transition` et en
   fragments reveal.js (`fragment fade-in`, `fade-up`, `zoom-in`…) avec `data-fragment-index`.
+- Objets complexes (groupes, SmartArt, graphiques, formes libres, flèches…) rastérisés en PNG via
+  LibreOffice (`soffice`, un seul export PDF pour toute la présentation) : `medias/s<diapo>_r<n>.png`,
+  avec le fond uni de la diapositive rendu transparent. `--sans-raster` désactive ; sans `soffice`
+  dans le PATH, ces objets sont ignorés avec un avertissement.
 - Tout ce qui n'est pas géré devient un commentaire `<!-- non converti : … -->` et un avertissement
   sur stderr ; aucune exception n'interrompt la conversion.
 
@@ -20,8 +24,12 @@ from __future__ import annotations
 
 import argparse
 import html
+import math
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from lxml import etree
@@ -62,6 +70,11 @@ TRANSITIONS = {
 
 TAILLES_DEFAUT_PT = {"titre": 44, "corps": 24, "autre": 18}
 
+# Formes automatiques rendues en CSS ; toute autre forme automatique est rastérisée.
+FORMES_SIMPLES = (MSO_SHAPE.RECTANGLE, MSO_SHAPE.ROUNDED_RECTANGLE, MSO_SHAPE.OVAL)
+MARGE_RASTER = 4  # px autour de la boîte englobante d'un objet rastérisé
+SEUIL_TRANSPARENCE = 12  # distance RVB en deçà de laquelle un pixel du fond devient transparent
+
 
 # --------------------------------------------------------------------------------------------------
 # Contexte de conversion
@@ -89,6 +102,9 @@ class Contexte:
         self.compteur_images = 0  # par diapositive
         self.compteur_fonds = 0
         self._part_courante = None  # partie OPC de la forme en cours (résolution des liens)
+        # Objets rastérisés : (diapo, shape_id) → (chemin HTML, (left, top, width, height) px, nom)
+        self.rasters: dict[tuple[int, int], tuple[str, tuple[int, int, int, int], str]] = {}
+        self.nb_rasters = 0
 
     def px(self, emu) -> int:
         return round(int(emu) * self.facteur)

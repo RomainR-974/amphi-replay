@@ -25,7 +25,13 @@ window.AmphiQuizDeck = (function () {
       if (re.ok) urlPublique = (await re.json()).url_publique || urlPublique;
     } catch (e) { console.warn('quiz indisponible, diapositives de quiz laissées telles quelles', e); }
 
-    racine.querySelectorAll('section[data-qr]').forEach(s => s.insertAdjacentHTML('beforeend', blocQr()));
+    racine.querySelectorAll('section[data-qr]').forEach(s => {
+      // Section libre (PowerPoint converti) : QR code en bas à droite, sur fond blanc ; section en flux : centré sous le contenu.
+      const libre = s.classList.contains('libre');
+      s.insertAdjacentHTML('beforeend', libre
+        ? `<div class="el qr-libre" data-amphi="qr-fixe" style="left:1500px;top:720px;width:380px;height:300px">${blocQr()}</div>`
+        : blocQr());
+    });
     racine.querySelectorAll('section[data-quiz]:not(.libre)').forEach(construireQuiz);
     racine.querySelectorAll('[data-amphi]').forEach(construireElement);
   }
