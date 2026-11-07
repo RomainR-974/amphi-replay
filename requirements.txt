@@ -6,3 +6,5 @@ qrcode[pil]>=7.4
 numpy>=1.26
 pymupdf>=1.24
 pytest>=8
+python-multipart>=0.0.9
+python-pptx>=1.0
