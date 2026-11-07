@@ -53,7 +53,7 @@ if [ -d "$DEST/.git" ]; then
 else
   git clone "$DEPOT" "$DEST"
 fi
-mkdir -p "$DEST/data"
+mkdir -p "$DEST/data" "$DEST/deck/medias"
 
 echo "== environnement python"
 python3 -m venv "$DEST/.venv"
