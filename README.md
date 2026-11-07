@@ -107,6 +107,10 @@ Anonymat : pas de compte, pas de nom réel. Le participant choisit un pseudo (ou
 
 Charge : `python tools/charge.py https://<domaine> --token … --clients 300 --duree 10` (cible PRD : 300 WebSockets, 300 votes en 10 s, diffusion < 1 s, CPU < 50 % sur 1 vCPU). Le serveur regroupe les diffusions sous rafale (un état toutes les 200 ms) : mesuré en local, 300 votes en 5 s donnent une latence de vote p95 de 12 ms et une diffusion complète en 100 ms.
 
+## Tester sans VPS : GitHub Codespaces
+
+Bouton **Code → Codespaces → Create codespace on main** sur la page du dépôt. Le serveur s'installe et démarre tout seul (`.devcontainer/`, `deploy/codespaces.sh`), le port 8000 est rendu public et `DEMO.md` est réécrit avec les URL réelles (projecteur, télécommande, éditeur, participants). Jeton de démo : `demo`. Suffisant pour une répétition avec de vrais téléphones ; pour le jour J, préférer le VPS (domaine court pour le QR code, pas d'arrêt automatique après 30 minutes d'inactivité).
+
 ## Déploiement sur le VPS Infomaniak
 
 Prérequis dans le Manager Infomaniak : un VPS (VPS Lite ou Public Cloud, 1 vCPU / 2 Go suffisent, Debian 12 ou Ubuntu 24.04), les ports 80 et 443 ouverts dans le pare-feu du VPS, et un enregistrement DNS `A` du sous-domaine court (par exemple `q.mondomaine.fr`) vers l'IP du VPS.

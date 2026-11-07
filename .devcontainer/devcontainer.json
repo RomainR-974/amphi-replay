@@ -1,0 +1,16 @@
+{
+  "name": "amphi-replay",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "bash deploy/codespaces.sh installer",
+  "postStartCommand": "bash deploy/codespaces.sh demarrer",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "amphi-replay", "onAutoForward": "notify" }
+  },
+  "customizations": {
+    "codespaces": { "openFiles": ["DEMO.md"] }
+  }
+}
