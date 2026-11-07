@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+deck/vendor/
+deck/images/
+*.mkv
+*.mp4
+*.wav
+*.m4a
+replay_*.json
+.env

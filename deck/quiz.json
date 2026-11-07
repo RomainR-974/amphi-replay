@@ -1,0 +1,19 @@
+[
+  {
+    "id": "q1",
+    "question": "Quel est, selon vous, le premier facteur de réussite d'une captation solo ?",
+    "options": [
+      "Le matériel",
+      "La répétition générale",
+      "Le logiciel de montage",
+      "Le débit internet"
+    ],
+    "diapositive": { "h": 3, "v": 0 }
+  },
+  {
+    "id": "q2",
+    "question": "Combien de plans alternés voyez-vous dans le replay ?",
+    "options": ["Un", "Deux", "Trois"],
+    "diapositive": { "h": 4, "v": 0 }
+  }
+]

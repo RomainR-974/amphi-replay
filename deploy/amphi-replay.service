@@ -1,0 +1,24 @@
+[Unit]
+Description=amphi-replay : deck synchronisé, télécommande, quiz
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=amphi
+Group=amphi
+WorkingDirectory=/opt/amphi-replay
+EnvironmentFile=/etc/amphi-replay.env
+ExecStart=/opt/amphi-replay/.venv/bin/uvicorn server.app:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log
+Restart=always
+RestartSec=2
+
+# Durcissement : le service n'écrit que dans data/ (SQLite).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/amphi-replay/data
+
+[Install]
+WantedBy=multi-user.target

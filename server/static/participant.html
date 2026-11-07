@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz</title>
+<style>
+  :root { color-scheme: light dark; --accent: #2563eb; --ok: #16a34a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: Canvas; color: CanvasText; display: flex; flex-direction: column; min-height: 100vh; }
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 20px; gap: 14px; max-width: 520px; width: 100%; margin: 0 auto; }
+  h1 { font-size: 1.5rem; line-height: 1.3; margin: 0 0 10px; }
+  button.option { width: 100%; min-height: 64px; font-size: 1.15rem; padding: 14px 18px; border-radius: 14px; border: 2px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+  button.option.choisie { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); font-weight: 600; }
+  button.option:disabled { opacity: .5; cursor: default; }
+  .attente { text-align: center; font-size: 1.3rem; opacity: .75; }
+  .confirmation { text-align: center; color: var(--ok); font-weight: 600; min-height: 1.5em; }
+  .etat { text-align: center; font-size: .8rem; opacity: .5; padding: 8px; }
+</style>
+</head>
+<body>
+<main id="vue"><p class="attente">Connexion…</p></main>
+<div class="etat" id="etat"></div>
+<script>
+(() => {
+  const vue = document.getElementById('vue');
+  const etatEl = document.getElementById('etat');
+  let courant = null;     // dernier état reçu
+  let maReponse = null;
+  let enCours = false;
+
+  function rendre() {
+    if (!courant || !courant.question || !courant.ouverte) {
+      vue.innerHTML = '<p class="attente">En attente de la prochaine question…</p>';
+      return;
+    }
+    const q = courant.question;
+    vue.innerHTML = `<h1>${echap(q.question)}</h1>` +
+      q.options.map((o, i) =>
+        `<button class="option ${maReponse === i ? 'choisie' : ''}" data-i="${i}">${echap(o)}</button>`).join('') +
+      `<p class="confirmation">${maReponse !== null ? 'Réponse enregistrée. Vous pouvez la modifier tant que la question est ouverte.' : ''}</p>`;
+    vue.querySelectorAll('button.option').forEach(b => b.onclick = () => voter(q.id, Number(b.dataset.i)));
+  }
+
+  async function voter(questionId, option) {
+    if (enCours) return;
+    enCours = true;
+    try {
+      const r = await fetch('/api/quiz/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: questionId, option }) });
+      if (r.ok) { maReponse = option; rendre(); }
+      else if (r.status === 409) { await recharger(); }
+    } finally { enCours = false; }
+  }
+
+  async function recharger() {
+    const r = await fetch('/api/quiz/etat', { cache: 'no-store' });
+    const etat = await r.json();
+    appliquer(etat, true);
+  }
+
+  function appliquer(etat, avecReponse) {
+    const changement = !courant || !courant.question || !etat.question || courant.question.id !== etat.question.id;
+    if (changement) maReponse = null;
+    if (avecReponse && etat.ma_reponse !== undefined) maReponse = etat.ma_reponse;
+    courant = etat;
+    rendre();
+    if (changement && etat.question && etat.ouverte && !avecReponse) recharger(); // récupérer ma réponse éventuelle
+  }
+
+  // WebSocket avec reconnexion à délai croissant ; repli en interrogation toutes les 3 s.
+  let delai = 1000, ws = null, interrogation = null;
+  function connecter() {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
+    ws.onopen = () => { delai = 1000; etatEl.textContent = ''; clearInterval(interrogation); interrogation = null; recharger(); };
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') appliquer(m, false); };
+    ws.onclose = () => {
+      etatEl.textContent = 'Connexion perdue, nouvelle tentative…';
+      if (!interrogation) interrogation = setInterval(() => recharger().catch(() => {}), 3000);
+      setTimeout(connecter, delai); delai = Math.min(delai * 2, 10000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  function echap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  connecter();
+})();
+</script>
+</body>
+</html>

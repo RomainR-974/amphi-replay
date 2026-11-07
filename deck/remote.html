@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#111">
+<title>Télécommande</title>
+<style>
+  /* Un seul écran, en portrait, sans menu. Chaque action critique d'un seul geste. */
+  :root { --fond: #111; --texte: #eee; --sourd: #888; --vert: #22c55e; --rouge: #ef4444; --bleu: #3b82f6; --orange: #f59e0b; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--fond); color: var(--texte); font-family: system-ui, sans-serif; overscroll-behavior: none; }
+  body { display: grid; grid-template-rows: auto auto 1fr auto auto; height: 100dvh; }
+
+  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .voyants { display: flex; gap: 10px; }
+  .voyant { display: flex; align-items: center; gap: 5px; }
+  .voyant::before { content: ''; width: 12px; height: 12px; border-radius: 50%; background: var(--rouge); }
+  .voyant.ok::before { background: var(--vert); }
+  .voyant.vieux::before { background: var(--orange); }
+  #chrono { font-size: 18px; font-weight: 600; }
+
+  .miniature { position: relative; margin: 0 12px; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
+  .miniature iframe { width: 1920px; height: 1080px; border: 0; transform-origin: top left; pointer-events: none; }
+  .numero { position: absolute; right: 8px; bottom: 6px; background: rgba(0,0,0,.6); padding: 2px 8px; border-radius: 6px; font-size: 14px; }
+
+  .notes { margin: 10px 12px 0; padding: 12px; overflow-y: auto; font-size: 20px; line-height: 1.45; background: #1b1b1b; border-radius: 8px; min-height: 0; }
+  .notes p { margin: 0 0 .6em; }
+  .notes:empty::before { content: 'Pas de notes pour cette diapositive.'; color: var(--sourd); }
+
+  .quiz { margin: 10px 12px 0; padding: 10px 12px; background: #1b1b1b; border-radius: 8px; display: none; gap: 8px; grid-template-columns: 1fr 1fr auto; align-items: center; }
+  .quiz.visible { display: grid; }
+  .quiz .titre { grid-column: 1 / -1; font-size: 14px; color: var(--sourd); display: flex; justify-content: space-between; }
+  .quiz .compteur { font-size: 28px; font-weight: 700; text-align: center; min-width: 64px; }
+  .quiz button { min-height: 56px; font-size: 18px; font-weight: 600; border: 0; border-radius: 10px; color: #fff; }
+  .quiz .ouvrir { background: var(--vert); } .quiz .fermer { background: var(--rouge); }
+  .quiz .reinit { grid-column: 1 / -1; background: #333; color: var(--sourd); min-height: 40px; font-size: 14px; }
+  .quiz button:disabled { opacity: .35; }
+
+  nav { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; padding: 12px; }
+  nav button { min-height: 88px; font-size: 24px; font-weight: 700; border: 0; border-radius: 14px; color: #fff; background: #2a2a2a; }
+  nav .suivant { background: var(--bleu); }
+  nav button:active { filter: brightness(1.3); }
+
+  .barre-erreur { display: none; position: fixed; top: 0; left: 0; right: 0; background: var(--rouge); color: #fff; text-align: center; padding: 6px; font-size: 14px; }
+  .barre-erreur.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="barre-erreur" id="erreur"></div>
+
+<header>
+  <div class="voyants">
+    <span class="voyant" id="v-serveur">serveur</span>
+    <span class="voyant" id="v-scene">scene</span>
+    <span class="voyant" id="v-obs">obs</span>
+  </div>
+  <div id="chrono">00:00</div>
+</header>
+
+<div class="miniature" id="miniature">
+  <iframe id="deck" title="Deck"></iframe>
+  <div class="numero" id="numero">– / –</div>
+</div>
+
+<div class="notes" id="notes"></div>
+
+<div class="quiz" id="quiz">
+  <div class="titre"><span id="quiz-id">quiz</span><span id="quiz-etat">fermé</span></div>
+  <button class="ouvrir" id="q-ouvrir">Ouvrir</button>
+  <button class="fermer" id="q-fermer" disabled>Fermer</button>
+  <div class="compteur" id="q-compteur">0</div>
+  <button class="reinit" id="q-reinit">Réinitialiser les réponses</button>
+</div>
+
+<nav>
+  <button id="prec">◀ Précédent</button>
+  <button class="suivant" id="suiv">Suivant ▶</button>
+</nav>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const $ = id => document.getElementById(id);
+  const deck = $('deck');
+  let R = null;               // Reveal de l'iframe
+  let questions = {};         // id -> question
+  let questionCourante = null; // id de la question de la diapositive affichée
+  let etatQuiz = { question: null, ouverte: false, total: 0 };
+
+  if (!token) afficherErreur('Jeton manquant : ouvrir /remote?token=…');
+
+  // --- Miniature : le même deck, rôle remote, mis à l'échelle de la largeur disponible ----
+  deck.src = `/deck/?role=remote&token=${encodeURIComponent(token)}`;
+  function redimensionner() {
+    const l = $('miniature').clientWidth;
+    deck.style.transform = `scale(${l / 1920})`;
+  }
+  new ResizeObserver(redimensionner).observe($('miniature'));
+  redimensionner();
+
+  deck.addEventListener('load', () => {
+    const w = deck.contentWindow;
+    const attendre = setInterval(() => {
+      if (w.Reveal && w.Reveal.isReady && w.Reveal.isReady()) {
+        clearInterval(attendre);
+        R = w.Reveal;
+        ['slidechanged', 'fragmentshown', 'fragmenthidden', 'ready'].forEach(ev => R.on(ev, rafraichir));
+        if (w.AmphiSync) {
+          w.AmphiSync.on('connexion', ({ connecte }) => voyant('v-serveur', connecte ? 0 : Infinity));
+          w.AmphiSync.on('ack', m => { acks[m.role] = Date.now(); });
+        }
+        rafraichir();
+      }
+    }, 200);
+  });
+
+  // --- Navigation : appliquée localement d'abord, la publication suit (AmphiSync dans l'iframe) ----
+  $('suiv').onclick = () => R && R.next();
+  $('prec').onclick = () => R && R.prev();
+  let x0 = null;
+  $('miniature').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('miniature').addEventListener('touchend', e => {
+    if (x0 === null || !R) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 60) (dx < 0 ? R.next() : R.prev());
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') R && R.next();
+    if (e.key === 'ArrowLeft') R && R.prev();
+  });
+
+  function rafraichir() {
+    if (!R) return;
+    const i = R.getIndices();
+    $('numero').textContent = `${R.getSlidePastCount() + 1} / ${R.getTotalSlides()}`;
+    const diapo = R.getCurrentSlide();
+    $('notes').innerHTML = R.getSlideNotes(diapo) || '';
+    questionCourante = diapo.dataset.quiz || null;
+    $('quiz').classList.toggle('visible', !!questionCourante);
+    if (questionCourante) { $('quiz-id').textContent = `quiz ${questionCourante}`; rendreQuiz(); }
+    if (!chronoDebut && (i.h > 0 || i.f >= 0)) demarrerChrono();
+  }
+
+  // --- Quiz : administration par HTTP avec jeton, état par WebSocket ----
+  const api = (chemin, corps) => fetch(`${chemin}?token=${encodeURIComponent(token)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps || {}) })
+    .then(async r => { if (!r.ok) throw new Error((await r.json()).detail || r.status); return r.json(); })
+    .catch(e => afficherErreur('Quiz : ' + e.message));
+
+  $('q-ouvrir').onclick = () => questionCourante && api('/api/quiz/ouvrir', { question_id: questionCourante });
+  $('q-fermer').onclick = () => api('/api/quiz/fermer');
+  $('q-reinit').onclick = () => {
+    if (questionCourante && confirm(`Effacer toutes les réponses de ${questionCourante} ?`)) api('/api/quiz/reinitialiser', { question_id: questionCourante });
+  };
+
+  function rendreQuiz() {
+    const ouverteIci = etatQuiz.ouverte && etatQuiz.question && etatQuiz.question.id === questionCourante;
+    const autreOuverte = etatQuiz.ouverte && etatQuiz.question && etatQuiz.question.id !== questionCourante;
+    $('quiz-etat').textContent = ouverteIci ? 'OUVERTE' : autreOuverte ? `${etatQuiz.question.id} ouverte ailleurs` : 'fermée';
+    $('quiz-etat').style.color = ouverteIci ? 'var(--vert)' : autreOuverte ? 'var(--orange)' : 'var(--sourd)';
+    $('q-ouvrir').disabled = ouverteIci;
+    $('q-fermer').disabled = !etatQuiz.ouverte;
+    $('q-compteur').textContent = (etatQuiz.question && etatQuiz.question.id === questionCourante) ? etatQuiz.total : '–';
+  }
+
+  let delaiQ = 1000;
+  function connecterQuiz() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
+    ws.onopen = () => { delaiQ = 1000; };
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') { etatQuiz = m; rendreQuiz(); } };
+    ws.onclose = () => { setTimeout(connecterQuiz, delaiQ); delaiQ = Math.min(delaiQ * 2, 10000); };
+    ws.onerror = () => ws.close();
+  }
+  connecterQuiz();
+  // Si la question courante est fermée, son compteur vient de l'état ciblé.
+  setInterval(() => {
+    if (questionCourante && !(etatQuiz.question && etatQuiz.question.id === questionCourante)) {
+      fetch(`/api/quiz/etat?question_id=${encodeURIComponent(questionCourante)}`, { cache: 'no-store' })
+        .then(r => r.json()).then(m => { if (!etatQuiz.ouverte) { etatQuiz = m; rendreQuiz(); } }).catch(() => {});
+    }
+  }, 3000);
+
+  // --- Voyants : vert si accusé de réception reçu depuis moins de 5 s ----
+  const acks = { scene: 0, obs: 0 };
+  function voyant(id, age) {
+    const el = $(id);
+    el.classList.toggle('ok', age < 5000);
+    el.classList.toggle('vieux', age >= 5000 && age < 30000);
+  }
+  setInterval(() => {
+    voyant('v-scene', Date.now() - acks.scene);
+    voyant('v-obs', Date.now() - acks.obs);
+    const w = deck.contentWindow;
+    voyant('v-serveur', w && w.AmphiSync && w.AmphiSync.connecte ? 0 : Infinity);
+    // Relance d'un état toutes les 10 s pour provoquer un ack et détecter un décrochage silencieux.
+    if (w && w.AmphiSync && Date.now() % 10000 < 1000) w.AmphiSync.publier(true);
+  }, 1000);
+
+  // --- Chronomètre démarré à la première diapositive ----
+  let chronoDebut = null;
+  function demarrerChrono() {
+    chronoDebut = Date.now();
+    setInterval(() => {
+      const s = Math.floor((Date.now() - chronoDebut) / 1000);
+      $('chrono').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    }, 1000);
+  }
+
+  // --- Écran maintenu allumé ----
+  async function wakeLock() {
+    try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch (e) { /* refusé : ignorer */ }
+  }
+  wakeLock();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wakeLock(); });
+
+  function afficherErreur(texte) {
+    const el = $('erreur'); el.textContent = texte; el.classList.add('visible');
+    clearTimeout(afficherErreur.t); afficherErreur.t = setTimeout(() => el.classList.remove('visible'), 5000);
+  }
+})();
+</script>
+</body>
+</html>

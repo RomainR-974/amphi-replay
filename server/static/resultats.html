@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Résultats</title>
+<style>
+  /* Lisible depuis le fond de l'amphi : 32 px minimum à 1920×1080. Page sans aucune action possible. */
+  :root { --accent: #2563eb; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; color: inherit; font-family: system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; justify-content: center; padding: 2vh 3vw; gap: 1.2vh; }
+  h1 { font-size: 40px; margin: 0 0 1vh; line-height: 1.2; }
+  .ligne { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "libelle nombre" "barre barre"; align-items: center; column-gap: 1.5vw; row-gap: .4vh; font-size: 32px; margin-bottom: 1.2vh; }
+  .libelle { grid-area: libelle; font-weight: 600; line-height: 1.2; }
+  .nombre { grid-area: nombre; }
+  .barre { grid-area: barre; height: 44px; background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; overflow: hidden; }
+  .barre > div { height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
+  .nombre { font-variant-numeric: tabular-nums; }
+  .total { font-size: 32px; opacity: .7; margin-top: 1vh; }
+  .attente { font-size: 40px; opacity: .6; text-align: center; }
+</style>
+</head>
+<body>
+<div id="vue"><p class="attente">En attente d'une question…</p></div>
+<script>
+(() => {
+  const vue = document.getElementById('vue');
+  const params = new URLSearchParams(location.search);
+  const questionFixe = params.get('question'); // ?question=q1 : fige la vue sur une question donnée
+  let dernier = null;
+
+  function rendre(etat) {
+    if (!etat.question) { vue.innerHTML = '<p class="attente">En attente d\'une question…</p>'; return; }
+    if (questionFixe && etat.question.id !== questionFixe) return;
+    const q = etat.question, total = etat.total || 0;
+    vue.innerHTML = `<h1>${echap(q.question)}</h1>` +
+      q.options.map((o, i) => {
+        const n = etat.comptes[i] || 0, pct = total ? Math.round(100 * n / total) : 0;
+        return `<div class="ligne"><div class="libelle">${echap(o)}</div>
+          <div class="barre"><div style="width:${pct}%"></div></div>
+          <div class="nombre">${n} <small>(${pct} %)</small></div></div>`;
+      }).join('') +
+      `<div class="total">${total} réponse${total > 1 ? 's' : ''}${etat.ouverte ? ' · question ouverte' : ' · question fermée'}</div>`;
+    dernier = etat;
+  }
+
+  async function recharger() {
+    const url = '/api/quiz/etat' + (questionFixe ? '?question_id=' + encodeURIComponent(questionFixe) : '');
+    const r = await fetch(url, { cache: 'no-store' });
+    rendre(await r.json());
+  }
+
+  let delai = 1000, interrogation = null;
+  function connecter() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
+    ws.onopen = () => { delai = 1000; clearInterval(interrogation); interrogation = null; recharger(); };
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') rendre(m); };
+    ws.onclose = () => {
+      if (!interrogation) interrogation = setInterval(() => recharger().catch(() => {}), 3000);
+      setTimeout(connecter, delai); delai = Math.min(delai * 2, 10000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  function echap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  connecter();
+})();
+</script>
+</body>
+</html>

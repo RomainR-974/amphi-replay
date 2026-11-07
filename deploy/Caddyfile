@@ -1,0 +1,39 @@
+# Caddy : HTTPS automatique (Let's Encrypt) devant uvicorn.
+# Le domaine vient de /etc/amphi-replay.env (AMPHI_DOMAINE), chargé par le service caddy via EnvironmentFile
+# (voir deploy/install.sh) ; sinon remplacer {$AMPHI_DOMAINE} par le sous-domaine court du QR code.
+
+{$AMPHI_DOMAINE} {
+	encode zstd gzip
+
+	# WebSockets et API : uvicorn sur le port local 8000.
+	reverse_proxy 127.0.0.1:8000 {
+		# Un deck lourd en iframes ne doit jamais être coupé par un délai trop court.
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+
+	header {
+		# Les pages participant/résultats sont publiques ; la télécommande est protégée par jeton.
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/amphi-replay.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+		# Pas d'adresse IP conservée (données personnelles) : on ne journalise que le chemin et le statut.
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>client_ip delete
+				request>headers delete
+			}
+		}
+	}
+}
