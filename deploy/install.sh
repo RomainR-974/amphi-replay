@@ -5,10 +5,11 @@
 #
 # ou, après un clone manuel : sudo bash deploy/install.sh q.exemple.fr
 #
-# Prérequis côté Infomaniak :
-#   - VPS (VPS Lite ou Public Cloud), 1 vCPU / 2 Go suffisent ;
-#   - ports 80 et 443 ouverts dans le pare-feu du VPS (Manager Infomaniak → VPS → Pare-feu) ;
-#   - enregistrement DNS A du sous-domaine vers l'IP du VPS (Manager → Domaines → DNS).
+# Prérequis (Infomaniak, Hostinger ou tout VPS Debian/Ubuntu) :
+#   - 1 vCPU / 2 Go suffisent ;
+#   - ports 80 et 443 ouverts dans le pare-feu de l'hébergeur s'il y en a un ;
+#   - enregistrement DNS A du sous-domaine vers l'IP du VPS, propagé AVANT de lancer le script.
+# Si Nginx tourne déjà (autres sites), le script s'y branche (site dédié + certbot) au lieu d'installer Caddy.
 set -euo pipefail
 
 DOMAINE="${1:-}"
@@ -20,14 +21,29 @@ if [ -z "$DOMAINE" ]; then echo "usage : $0 <sous-domaine>  (ex. q.exemple.fr)";
 if [ "$(id -u)" -ne 0 ]; then echo "à lancer en root (sudo)"; exit 2; fi
 
 echo "== paquets"
+export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q python3 python3-venv python3-pip git curl ffmpeg debian-keyring debian-archive-keyring apt-transport-https sqlite3
 
-if ! command -v caddy >/dev/null; then
-  echo "== caddy"
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -q && apt-get install -y -q caddy
+# Reverse proxy HTTPS : Caddy par défaut ; si Nginx tourne déjà (autres sites sur le serveur), on s'y branche
+# avec un site dédié et un certificat Let's Encrypt obtenu par certbot, sans toucher aux autres sites.
+if systemctl is-active --quiet nginx; then
+  PROXY=nginx
+  echo "== nginx déjà actif : site dédié + certbot (Caddy non installé)"
+  apt-get install -y -q certbot python3-certbot-nginx
+else
+  PROXY=caddy
+  if ! command -v caddy >/dev/null; then
+    echo "== caddy"
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update -q && apt-get install -y -q caddy
+  fi
+fi
+
+# Pare-feu Ubuntu éventuel : ouvrir HTTP/HTTPS si ufw est actif.
+if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+  ufw allow 80/tcp >/dev/null && ufw allow 443/tcp >/dev/null && echo "== ufw : ports 80 et 443 ouverts"
 fi
 
 echo "== utilisateur et dépôt"
@@ -60,12 +76,27 @@ fi
 
 echo "== services"
 cp "$DEST/deploy/amphi-replay.service" /etc/systemd/system/amphi-replay.service
-cp "$DEST/deploy/Caddyfile" /etc/caddy/Caddyfile
-mkdir -p /etc/systemd/system/caddy.service.d
-printf '[Service]\nEnvironmentFile=%s\n' "$ENV_FICHIER" > /etc/systemd/system/caddy.service.d/amphi.conf
 systemctl daemon-reload
 systemctl enable --now amphi-replay
-systemctl restart caddy
+
+if [ "$PROXY" = nginx ]; then
+  sed "s/__DOMAINE__/$DOMAINE/g" "$DEST/deploy/nginx.conf" > /etc/nginx/sites-available/amphi-replay
+  ln -sf /etc/nginx/sites-available/amphi-replay /etc/nginx/sites-enabled/amphi-replay
+  nginx -t && systemctl reload nginx
+  echo "== certificat Let's Encrypt pour $DOMAINE (le DNS doit déjà pointer vers ce serveur)"
+  if certbot --nginx -d "$DOMAINE" --non-interactive --agree-tos --register-unsafely-without-email --redirect; then
+    systemctl reload nginx
+  else
+    echo "!! certbot a échoué (DNS pas encore propagé ?). Relancer plus tard :"
+    echo "   certbot --nginx -d $DOMAINE --non-interactive --agree-tos --register-unsafely-without-email --redirect"
+  fi
+else
+  cp "$DEST/deploy/Caddyfile" /etc/caddy/Caddyfile
+  mkdir -p /etc/systemd/system/caddy.service.d
+  printf '[Service]\nEnvironmentFile=%s\n' "$ENV_FICHIER" > /etc/systemd/system/caddy.service.d/amphi.conf
+  systemctl daemon-reload
+  systemctl restart caddy
+fi
 
 JETON="$(grep '^AMPHI_JETON=' "$ENV_FICHIER" | cut -d= -f2-)"
 echo

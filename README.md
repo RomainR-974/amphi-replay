@@ -111,9 +111,9 @@ Charge : `python tools/charge.py https://<domaine> --token … --clients 300 --d
 
 Bouton **Code → Codespaces → Create codespace on main** sur la page du dépôt. Le serveur s'installe et démarre tout seul (`.devcontainer/`, `deploy/codespaces.sh`), le port 8000 est rendu public et `DEMO.md` est réécrit avec les URL réelles (projecteur, télécommande, éditeur, participants). Jeton de démo : `demo`. Suffisant pour une répétition avec de vrais téléphones ; pour le jour J, préférer le VPS (domaine court pour le QR code, pas d'arrêt automatique après 30 minutes d'inactivité).
 
-## Déploiement sur le VPS Infomaniak
+## Déploiement sur un VPS (Hostinger, Infomaniak…)
 
-Prérequis dans le Manager Infomaniak : un VPS (VPS Lite ou Public Cloud, 1 vCPU / 2 Go suffisent, Debian 12 ou Ubuntu 24.04), les ports 80 et 443 ouverts dans le pare-feu du VPS, et un enregistrement DNS `A` du sous-domaine court (par exemple `q.mondomaine.fr`) vers l'IP du VPS.
+Prérequis : un VPS Debian 12 ou Ubuntu 24.04 avec accès root (1 vCPU / 2 Go suffisent), les ports 80 et 443 ouverts dans le pare-feu de l'hébergeur s'il y en a un, et un enregistrement DNS `A` du sous-domaine court (par exemple `q.mondomaine.fr`) vers l'IP du VPS, **propagé avant de lancer l'installation** (le certificat Let's Encrypt en dépend). Si Nginx tourne déjà sur le serveur pour d'autres sites, le script le détecte et ajoute un site dédié avec certbot (`deploy/nginx.conf`) au lieu d'installer Caddy ; les autres sites ne sont pas touchés.
 
 ```bash
 ssh root@<ip du vps>
