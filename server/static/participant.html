@@ -2,73 +2,252 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#1d4ed8">
 <title>Quiz</title>
 <style>
-  :root { color-scheme: light dark; --accent: #2563eb; --ok: #16a34a; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: Canvas; color: CanvasText; display: flex; flex-direction: column; min-height: 100vh; }
-  main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 20px; gap: 14px; max-width: 520px; width: 100%; margin: 0 auto; }
-  h1 { font-size: 1.5rem; line-height: 1.3; margin: 0 0 10px; }
-  button.option { width: 100%; min-height: 64px; font-size: 1.15rem; padding: 14px 18px; border-radius: 14px; border: 2px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+  :root { color-scheme: light dark; --accent: #2563eb; --ok: #16a34a; --ko: #dc2626; --fond-carte: color-mix(in srgb, CanvasText 6%, Canvas); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: Canvas; color: CanvasText; min-height: 100dvh; display: flex; flex-direction: column; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: .9rem; opacity: .8; }
+  header .pseudo { cursor: pointer; text-decoration: underline dotted; }
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 16px; gap: 12px; max-width: 560px; width: 100%; margin: 0 auto; }
+  h1 { font-size: 1.45rem; line-height: 1.3; margin: 0 0 6px; }
+  .chrono { height: 8px; border-radius: 4px; background: var(--fond-carte); overflow: hidden; margin-bottom: 6px; }
+  .chrono > div { height: 100%; background: var(--accent); transition: width 1s linear; }
+  .chrono-txt { font-size: .85rem; opacity: .7; text-align: right; margin-top: -4px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button.option { width: 100%; min-height: 64px; font-size: 1.15rem; padding: 14px 18px; border-radius: 14px; border: 2px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; text-align: left; }
   button.option.choisie { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); font-weight: 600; }
-  button.option:disabled { opacity: .5; cursor: default; }
-  .attente { text-align: center; font-size: 1.3rem; opacity: .75; }
+  button.option.bonne { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, transparent); }
+  button.option.mauvaise.choisie { border-color: var(--ko); background: color-mix(in srgb, var(--ko) 15%, transparent); }
+  button:disabled { opacity: .55; cursor: default; }
+  .grille-emoji { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+  .grille-emoji button.option { font-size: 3rem; text-align: center; min-height: 110px; padding: 8px; }
+  .vf { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .vf button.option { text-align: center; min-height: 120px; font-size: 1.6rem; font-weight: 700; }
+  .buzzer { width: min(80vw, 320px); aspect-ratio: 1; border-radius: 50%; margin: 0 auto; font-size: 2.2rem; font-weight: 800; color: #fff; background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c); border: 10px solid #7f1d1d; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .buzzer:active { transform: scale(.96); }
+  .buzzer:disabled { filter: grayscale(.7); }
+  input[type=text], input[type=number], textarea { width: 100%; font: inherit; font-size: 1.15rem; padding: 12px 14px; border-radius: 12px; border: 2px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; color: inherit; }
+  textarea { min-height: 110px; resize: vertical; }
+  .primaire { width: 100%; min-height: 56px; font-size: 1.1rem; font-weight: 700; border: 0; border-radius: 14px; background: var(--accent); color: #fff; }
+  .trou { font-size: 1.3rem; line-height: 1.6; }
+  .trou input { display: inline-block; width: auto; min-width: 140px; max-width: 100%; padding: 6px 10px; font-size: 1.15rem; vertical-align: baseline; }
+  .echelle { display: flex; gap: 8px; justify-content: space-between; }
+  .echelle button.option { flex: 1; text-align: center; padding: 10px 0; font-size: 1.4rem; font-weight: 700; }
+  .libelles { display: flex; justify-content: space-between; font-size: .85rem; opacity: .7; }
+  .classement-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .classement-liste li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--fond-carte); font-size: 1.05rem; }
+  .classement-liste .rang { font-weight: 800; width: 1.6em; opacity: .6; }
+  .classement-liste .libelle { flex: 1; }
+  .classement-liste button { width: 40px; height: 40px; border-radius: 10px; border: 0; background: color-mix(in srgb, CanvasText 12%, transparent); font-size: 1.1rem; }
+  .mots { display: flex; flex-direction: column; gap: 8px; }
   .confirmation { text-align: center; color: var(--ok); font-weight: 600; min-height: 1.5em; }
+  .attente { text-align: center; font-size: 1.3rem; opacity: .75; }
+  .resultat { text-align: center; padding: 24px; border-radius: 18px; font-size: 1.3rem; font-weight: 700; }
+  .resultat.bon { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .resultat.mauvais { background: color-mix(in srgb, var(--ko) 15%, transparent); color: var(--ko); }
+  .resultat .pts { display: block; font-size: 2.4rem; margin-top: 6px; }
+  .resultat small { display: block; font-weight: 400; font-size: .9rem; opacity: .8; margin-top: 8px; }
   .etat { text-align: center; font-size: .8rem; opacity: .5; padding: 8px; }
+  dialog { border: 0; border-radius: 18px; padding: 22px; width: min(92vw, 380px); background: Canvas; color: CanvasText; }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  dialog h2 { margin: 0 0 8px; font-size: 1.2rem; }
+  dialog p { margin: 0 0 14px; font-size: .9rem; opacity: .8; }
+  dialog .boutons { display: flex; gap: 8px; margin-top: 12px; }
+  dialog .boutons button { flex: 1; min-height: 48px; border-radius: 12px; border: 2px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; font-weight: 600; }
+  dialog .boutons .primaire { border: 0; }
 </style>
 </head>
 <body>
+<header><span>Quiz</span><span class="pseudo" id="pseudo" title="Changer de pseudo"></span></header>
 <main id="vue"><p class="attente">Connexion…</p></main>
 <div class="etat" id="etat"></div>
+
+<dialog id="dlg-pseudo">
+  <h2>Votre pseudo</h2>
+  <p>Il sert uniquement au classement. Pas de nom réel, pas de compte : tout est effacé après la séance.</p>
+  <input type="text" id="champ-pseudo" maxlength="20" placeholder="Ex. Panda-42" autocomplete="off">
+  <div class="boutons">
+    <button id="pseudo-hasard">Au hasard</button>
+    <button class="primaire" id="pseudo-ok">C'est parti</button>
+  </div>
+</dialog>
+
 <script>
 (() => {
-  const vue = document.getElementById('vue');
-  const etatEl = document.getElementById('etat');
-  let courant = null;     // dernier état reçu
-  let maReponse = null;
+  const $ = id => document.getElementById(id);
+  const vue = $('vue'), etatEl = $('etat');
+  let courant = null;        // dernier état reçu du serveur
+  let maReponse = null;      // {reponse, points} pour la question courante
+  let brouillon = null;      // saisie locale en cours (classement, multi, nuage)
   let enCours = false;
+  let finChrono = null;      // horodatage local de fin de chrono
 
+  // ----- Pseudo ------------------------------------------------------------------------
+  const dlg = $('dlg-pseudo');
+  async function definirPseudo(pseudo) {
+    const r = await fetch('/api/quiz/pseudo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pseudo }) });
+    const { pseudo: p } = await r.json();
+    $('pseudo').textContent = '👤 ' + p;
+    try { localStorage.setItem('amphi_pseudo', p); } catch {}
+  }
+  $('pseudo-ok').onclick = async () => { dlg.close(); await definirPseudo($('champ-pseudo').value); };
+  $('pseudo-hasard').onclick = async () => { dlg.close(); await definirPseudo(''); };
+  $('pseudo').onclick = () => { $('champ-pseudo').value = ''; dlg.showModal(); };
+  dlg.addEventListener('cancel', e => { e.preventDefault(); });
+
+  // ----- Rendu -------------------------------------------------------------------------------
   function rendre() {
-    if (!courant || !courant.question || !courant.ouverte) {
-      vue.innerHTML = '<p class="attente">En attente de la prochaine question…</p>';
-      return;
-    }
+    if (!courant || !courant.question) { vue.innerHTML = '<p class="attente">En attente de la prochaine question…</p>'; return; }
     const q = courant.question;
-    vue.innerHTML = `<h1>${echap(q.question)}</h1>` +
-      q.options.map((o, i) =>
-        `<button class="option ${maReponse === i ? 'choisie' : ''}" data-i="${i}">${echap(o)}</button>`).join('') +
-      `<p class="confirmation">${maReponse !== null ? 'Réponse enregistrée. Vous pouvez la modifier tant que la question est ouverte.' : ''}</p>`;
-    vue.querySelectorAll('button.option').forEach(b => b.onclick = () => voter(q.id, Number(b.dataset.i)));
+    const repondu = maReponse !== null;
+    const ouverte = courant.ouverte && (finChrono === null || Date.now() < finChrono);
+    let html = `<h1>${echap(q.type === 'trou' ? 'Complétez' : q.question)}</h1>`;
+    if (q.chrono > 0 && courant.ouverte) html += `<div class="chrono"><div id="barre" style="width:100%"></div></div><div class="chrono-txt" id="chrono-txt"></div>`;
+
+    if (courant.revele && q.notee) {
+      html += rendreCorrection(q);
+    } else if (!courant.ouverte) {
+      html += `<p class="attente">${repondu ? 'Réponse enregistrée. ' : ''}Question fermée, résultats à l'écran.</p>`;
+    }
+    if (courant.ouverte) html += rendreSaisie(q, ouverte);
+    if (ouverte && repondu && !['buzzer'].includes(q.type)) html += `<p class="confirmation">Réponse enregistrée. Vous pouvez la modifier tant que la question est ouverte.</p>`;
+    vue.innerHTML = html;
+    brancher(q, ouverte);
+    majChrono();
   }
 
-  async function voter(questionId, option) {
-    if (enCours) return;
+  function rendreSaisie(q, ouverte) {
+    const r = maReponse && maReponse.reponse;
+    const dis = ouverte ? '' : 'disabled';
+    switch (q.type) {
+      case 'qcm': case 'rapidite':
+        return q.options.map((o, i) => `<button class="option ${r === i ? 'choisie' : ''}" data-i="${i}" ${dis}>${lettre(i)}. ${echap(o)}</button>`).join('');
+      case 'emoji':
+        return `<div class="grille-emoji">${q.options.map((o, i) => `<button class="option ${r === i ? 'choisie' : ''}" data-i="${i}" ${dis}>${echap(o)}</button>`).join('')}</div>`;
+      case 'vrai_faux':
+        return `<div class="vf"><button class="option ${r === true ? 'choisie' : ''}" data-vf="1" ${dis}>Vrai</button><button class="option ${r === false ? 'choisie' : ''}" data-vf="0" ${dis}>Faux</button></div>`;
+      case 'multi': {
+        const sel = brouillon || r || [];
+        return q.options.map((o, i) => `<button class="option ${sel.includes(i) ? 'choisie' : ''}" data-m="${i}" ${dis}>${sel.includes(i) ? '☑' : '☐'} ${echap(o)}</button>`).join('') +
+          `<button class="primaire" id="valider" ${dis}>Valider (${sel.length})</button>`;
+      }
+      case 'buzzer':
+        return `<button class="buzzer" id="buzz" ${r || !ouverte ? 'disabled' : ''}>${r ? 'Buzzé !' : 'BUZZ'}</button>`;
+      case 'nuage': {
+        const mots = r || [];
+        return `<div class="mots">${Array.from({ length: q.max_mots }, (_, i) => `<input type="text" class="mot" maxlength="${q.max_longueur}" placeholder="Mot ${i + 1}${i ? ' (facultatif)' : ''}" value="${echap(mots[i] || '')}" ${dis}>`).join('')}</div>
+          <button class="primaire" id="valider" ${dis}>Envoyer</button>`;
+      }
+      case 'texte_libre':
+        return `<textarea id="texte" maxlength="${q.max_longueur}" placeholder="Votre réponse…" ${dis}>${echap(r || '')}</textarea><button class="primaire" id="valider" ${dis}>Envoyer</button>`;
+      case 'trou': {
+        const [avant, ...reste] = q.texte.split('___');
+        return `<p class="trou">${echap(avant)}<input type="text" id="texte" maxlength="60" value="${echap(r || '')}" autocomplete="off" ${dis}>${echap(reste.join('___'))}</p><button class="primaire" id="valider" ${dis}>Envoyer</button>`;
+      }
+      case 'echelle': {
+        const valeurs = []; for (let v = q.min; v <= q.max; v++) valeurs.push(v);
+        return `<div class="echelle">${valeurs.map(v => `<button class="option ${r === v ? 'choisie' : ''}" data-e="${v}" ${dis}>${v}</button>`).join('')}</div>
+          <div class="libelles"><span>${echap(q.libelle_min || '')}</span><span>${echap(q.libelle_max || '')}</span></div>`;
+      }
+      case 'classement': {
+        const ordre = brouillon || r || q.options.map((_, i) => i);
+        return `<p style="opacity:.7;margin:0">Du premier au dernier : déplacez avec les flèches.</p><ol class="classement-liste">${ordre.map((i, pos) =>
+          `<li><span class="rang">${pos + 1}</span><span class="libelle">${echap(q.options[i])}</span><button data-up="${pos}" ${pos === 0 ? 'disabled' : ''} aria-label="Monter">▲</button><button data-down="${pos}" ${pos === ordre.length - 1 ? 'disabled' : ''} aria-label="Descendre">▼</button></li>`).join('')}</ol>
+          <button class="primaire" id="valider" ${dis}>Valider cet ordre</button>`;
+      }
+      case 'nombre':
+        return `<input type="number" id="nombre" inputmode="decimal" step="any" placeholder="Votre estimation${q.unite ? ' en ' + echap(q.unite) : ''}" value="${r ?? ''}" ${dis}><button class="primaire" id="valider" ${dis}>Envoyer</button>`;
+    }
+    return '';
+  }
+
+  function rendreCorrection(q) {
+    const c = courant.correction || {};
+    const r = maReponse && maReponse.reponse;
+    const pts = maReponse ? Math.round(maReponse.points || 0) : 0;
+    if (maReponse === null) return `<div class="resultat mauvais">Pas de réponse<small>0 point</small></div>`;
+    const bon = pts > 0;
+    let detail = '';
+    if (['qcm', 'emoji', 'rapidite'].includes(q.type)) detail = 'Bonne réponse : ' + echap(q.options[c.bonne]);
+    else if (q.type === 'vrai_faux') detail = 'Bonne réponse : ' + (c.bonne ? 'Vrai' : 'Faux');
+    else if (q.type === 'multi') detail = 'Bonnes réponses : ' + (c.bonnes || []).map(i => echap(q.options[i])).join(', ');
+    else if (q.type === 'trou') detail = 'Réponse attendue : ' + (c.bonnes || []).map(echap).join(' / ');
+    else if (q.type === 'nombre') detail = 'Valeur exacte : ' + c.bonne + (q.unite ? ' ' + echap(q.unite) : '');
+    else if (q.type === 'classement') detail = 'Bon ordre : ' + (c.bonne || []).map(i => echap(q.options[i])).join(' › ');
+    else if (q.type === 'buzzer') detail = bon ? 'Vous étiez dans les premiers !' : 'Trop tard cette fois.';
+    return `<div class="resultat ${bon ? 'bon' : 'mauvais'}">${bon ? (pts >= 1000 ? 'Parfait !' : 'Bien joué') : 'Raté'}<span class="pts">+${pts}</span><small>${detail}</small></div>`;
+  }
+
+  function brancher(q, ouverte) {
+    if (!ouverte) return;
+    vue.querySelectorAll('button.option[data-i]').forEach(b => b.onclick = () => voter(Number(b.dataset.i)));
+    vue.querySelectorAll('button.option[data-vf]').forEach(b => b.onclick = () => voter(b.dataset.vf === '1'));
+    vue.querySelectorAll('button.option[data-e]').forEach(b => b.onclick = () => voter(Number(b.dataset.e)));
+    vue.querySelectorAll('button.option[data-m]').forEach(b => b.onclick = () => {
+      const i = Number(b.dataset.m); brouillon = [...(brouillon || (maReponse && maReponse.reponse) || [])];
+      brouillon = brouillon.includes(i) ? brouillon.filter(x => x !== i) : [...brouillon, i]; rendre();
+    });
+    vue.querySelectorAll('button[data-up], button[data-down]').forEach(b => b.onclick = () => {
+      const ordre = [...(brouillon || (maReponse && maReponse.reponse) || q.options.map((_, i) => i))];
+      const pos = Number(b.dataset.up ?? b.dataset.down), cible = b.dataset.up !== undefined ? pos - 1 : pos + 1;
+      [ordre[pos], ordre[cible]] = [ordre[cible], ordre[pos]]; brouillon = ordre; rendre();
+    });
+    const buzz = $('buzz'); if (buzz) buzz.onclick = () => voter(true);
+    const valider = $('valider');
+    if (valider) valider.onclick = () => {
+      if (q.type === 'multi') return voter(brouillon || (maReponse && maReponse.reponse) || []);
+      if (q.type === 'classement') return voter(brouillon || (maReponse && maReponse.reponse) || q.options.map((_, i) => i));
+      if (q.type === 'nuage') return voter([...vue.querySelectorAll('.mot')].map(i => i.value.trim()).filter(Boolean));
+      if (q.type === 'nombre') { const v = parseFloat($('nombre').value); if (!isNaN(v)) voter(v); return; }
+      voter($('texte').value.trim());
+    };
+    const texte = $('texte'); if (texte && texte.tagName === 'INPUT') texte.onkeydown = e => { if (e.key === 'Enter') valider.click(); };
+  }
+
+  async function voter(reponse) {
+    if (enCours || !courant || !courant.question) return;
     enCours = true;
     try {
-      const r = await fetch('/api/quiz/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: questionId, option }) });
-      if (r.ok) { maReponse = option; rendre(); }
-      else if (r.status === 409) { await recharger(); }
+      const r = await fetch('/api/quiz/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question_id: courant.question.id, reponse }) });
+      if (r.ok) { maReponse = (await r.json()).ma_reponse; brouillon = null; rendre(); }
+      else if (r.status === 409) { etatEl.textContent = (await r.json()).detail; await recharger(); }
+      else { etatEl.textContent = 'Réponse refusée : ' + ((await r.json()).detail || r.status); }
     } finally { enCours = false; }
+  }
+
+  // ----- Chrono -----------------------------------------------------------------------------
+  function majChrono() {
+    const barre = $('barre'), txt = $('chrono-txt');
+    if (!barre || finChrono === null) return;
+    const total = courant.question.chrono * 1000, reste = Math.max(0, finChrono - Date.now());
+    barre.style.width = (100 * reste / total) + '%';
+    txt.textContent = Math.ceil(reste / 1000) + ' s';
+    if (reste === 0 && courant.ouverte) { courant.ouverte = false; rendre(); }
+  }
+  setInterval(majChrono, 250);
+
+  // ----- État ---------------------------------------------------------------------------------
+  function appliquer(etat, avecReponse) {
+    const changement = !courant || !courant.question || !etat.question || courant.question.id !== etat.question.id;
+    if (changement) { maReponse = null; brouillon = null; }
+    if (avecReponse && etat.ma_reponse !== undefined) maReponse = etat.ma_reponse;
+    if (etat.revele && !avecReponse) { courant = etat; recharger(); return; } // récupérer mes points
+    finChrono = etat.ouverte && etat.reste !== null && etat.reste !== undefined ? Date.now() + etat.reste * 1000 : null;
+    courant = etat;
+    rendre();
+    if (changement && etat.question && etat.ouverte && !avecReponse) recharger();
   }
 
   async function recharger() {
     const r = await fetch('/api/quiz/etat', { cache: 'no-store' });
     const etat = await r.json();
+    if (etat.pseudo) $('pseudo').textContent = '👤 ' + etat.pseudo;
     appliquer(etat, true);
   }
 
-  function appliquer(etat, avecReponse) {
-    const changement = !courant || !courant.question || !etat.question || courant.question.id !== etat.question.id;
-    if (changement) maReponse = null;
-    if (avecReponse && etat.ma_reponse !== undefined) maReponse = etat.ma_reponse;
-    courant = etat;
-    rendre();
-    if (changement && etat.question && etat.ouverte && !avecReponse) recharger(); // récupérer ma réponse éventuelle
-  }
-
-  // WebSocket avec reconnexion à délai croissant ; repli en interrogation toutes les 3 s.
   let delai = 1000, ws = null, interrogation = null;
   function connecter() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
@@ -81,8 +260,17 @@
     };
     ws.onerror = () => ws.close();
   }
-  function echap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-  connecter();
+  function lettre(i) { return String.fromCharCode(65 + i); }
+  function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // Premier passage : demander un pseudo, sauf si déjà connu.
+  (async () => {
+    const r = await fetch('/api/quiz/etat', { cache: 'no-store' });
+    const etat = await r.json();
+    if (etat.pseudo) $('pseudo').textContent = '👤 ' + etat.pseudo;
+    else { let memo = ''; try { memo = localStorage.getItem('amphi_pseudo') || ''; } catch {} $('champ-pseudo').value = memo; dlg.showModal(); }
+    connecter();
+  })();
 })();
 </script>
 </body>

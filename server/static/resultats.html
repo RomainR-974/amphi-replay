@@ -6,43 +6,176 @@
 <title>Résultats</title>
 <style>
   /* Lisible depuis le fond de l'amphi : 32 px minimum à 1920×1080. Page sans aucune action possible. */
-  :root { --accent: #2563eb; }
+  :root { --accent: #2563eb; --ok: #16a34a; --ko: #dc2626; --c1: #2563eb; --c2: #f59e0b; --c3: #10b981; --c4: #ef4444; --c5: #8b5cf6; --c6: #ec4899; --c7: #14b8a6; --c8: #f97316; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: transparent; color: inherit; font-family: system-ui, sans-serif; }
-  body { display: flex; flex-direction: column; justify-content: center; padding: 2vh 3vw; gap: 1.2vh; }
+  body { display: flex; flex-direction: column; justify-content: center; padding: 2vh 3vw; gap: 1vh; overflow: hidden; }
   h1 { font-size: 40px; margin: 0 0 1vh; line-height: 1.2; }
-  .ligne { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "libelle nombre" "barre barre"; align-items: center; column-gap: 1.5vw; row-gap: .4vh; font-size: 32px; margin-bottom: 1.2vh; }
+  .ligne { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "libelle nombre" "barre barre"; align-items: center; column-gap: 1.5vw; row-gap: .3vh; font-size: 32px; margin-bottom: 1vh; }
   .libelle { grid-area: libelle; font-weight: 600; line-height: 1.2; }
-  .nombre { grid-area: nombre; }
-  .barre { grid-area: barre; height: 44px; background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; overflow: hidden; }
-  .barre > div { height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
-  .nombre { font-variant-numeric: tabular-nums; }
+  .libelle .lettre { display: inline-block; min-width: 1.4em; opacity: .55; }
+  .nombre { grid-area: nombre; font-variant-numeric: tabular-nums; }
+  .barre { grid-area: barre; height: 40px; background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; overflow: hidden; }
+  .barre > div { height: 100%; width: 0; background: var(--accent); transition: width .5s cubic-bezier(.2,.8,.2,1); }
+  .ligne.bonne .barre > div { background: var(--ok); }
+  .ligne.bonne .libelle::after { content: ' ✔'; color: var(--ok); }
+  .ligne.mauvaise .barre > div { background: color-mix(in srgb, currentColor 30%, transparent); }
   .total { font-size: 32px; opacity: .7; margin-top: 1vh; }
   .attente { font-size: 40px; opacity: .6; text-align: center; }
+  .emoji .libelle { font-size: 56px; }
+  /* Nuage de mots */
+  .nuage { position: relative; flex: 1; min-height: 60vh; }
+  .nuage span { position: absolute; white-space: nowrap; font-weight: 700; line-height: 1; transform: translate(-50%, -50%); animation: pop .5s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes pop { from { opacity: 0; scale: .3; } to { opacity: 1; scale: 1; } }
+  /* Cartes de texte libre */
+  .cartes { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1.2vw; }
+  .carte { padding: 18px 22px; border-radius: 16px; background: color-mix(in srgb, currentColor 8%, transparent); font-size: 30px; line-height: 1.3; animation: pop .4s both; }
+  .carte .qui { display: block; font-size: 22px; opacity: .55; margin-top: 6px; }
+  /* Podium / liste nominative */
+  ol.premiers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1vh; }
+  ol.premiers li { display: flex; align-items: center; gap: 1.5vw; font-size: 36px; padding: 10px 20px; border-radius: 14px; background: color-mix(in srgb, currentColor 8%, transparent); animation: pop .4s both; }
+  ol.premiers li .rang { font-weight: 800; width: 2em; }
+  ol.premiers li .temps { margin-left: auto; opacity: .7; font-variant-numeric: tabular-nums; }
+  ol.premiers li:first-child { background: color-mix(in srgb, #f59e0b 25%, transparent); }
+  .grand { font-size: 72px; font-weight: 800; text-align: center; }
+  .deux-colonnes { display: grid; grid-template-columns: 1fr; gap: 1vh; }
+  .deux-colonnes .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2vw; align-items: center; }
+  .deux-colonnes .stats ol.premiers li { font-size: 28px; padding: 6px 16px; }
+  .histo { display: flex; align-items: flex-end; gap: 1vw; height: 32vh; }
+  .histo > div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 26px; }
+  .histo .col { width: 100%; background: var(--accent); border-radius: 10px 10px 0 0; transition: height .5s; min-height: 4px; }
+  .histo .leg { margin-top: 6px; opacity: .7; font-size: 22px; white-space: nowrap; }
+  .histo .val { margin-bottom: 4px; font-weight: 700; }
+  .histo > div.bonne .col { background: var(--ok); }
+  .bonne-reponse { font-size: 30px; color: var(--ok); font-weight: 700; margin-top: 1vh; }
 </style>
 </head>
 <body>
-<div id="vue"><p class="attente">En attente d'une question…</p></div>
+<div id="vue" style="display:contents"><p class="attente">En attente d'une question…</p></div>
 <script>
 (() => {
   const vue = document.getElementById('vue');
   const params = new URLSearchParams(location.search);
   const questionFixe = params.get('question'); // ?question=q1 : fige la vue sur une question donnée
-  let dernier = null;
+  const COULEURS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'];
 
   function rendre(etat) {
     if (!etat.question) { vue.innerHTML = '<p class="attente">En attente d\'une question…</p>'; return; }
     if (questionFixe && etat.question.id !== questionFixe) return;
-    const q = etat.question, total = etat.total || 0;
-    vue.innerHTML = `<h1>${echap(q.question)}</h1>` +
-      q.options.map((o, i) => {
-        const n = etat.comptes[i] || 0, pct = total ? Math.round(100 * n / total) : 0;
-        return `<div class="ligne"><div class="libelle">${echap(o)}</div>
-          <div class="barre"><div style="width:${pct}%"></div></div>
-          <div class="nombre">${n} <small>(${pct} %)</small></div></div>`;
-      }).join('') +
-      `<div class="total">${total} réponse${total > 1 ? 's' : ''}${etat.ouverte ? ' · question ouverte' : ' · question fermée'}</div>`;
-    dernier = etat;
+    const q = etat.question, r = etat.resultat || { total: 0 }, c = etat.correction || {};
+    const total = r.total || 0;
+    const statut = etat.ouverte ? 'question ouverte' : etat.revele ? 'réponse révélée' : 'question fermée';
+    let html = `<h1>${echap(q.type === 'trou' ? q.texte.replace('___', '______') : q.question)}</h1>`;
+    const rendus = { qcm: barres, rapidite: barres, emoji: barres, multi: barres, vrai_faux: barres, echelle: barres, classement: classement, buzzer: premiers, nuage: nuage, texte_libre: cartes, trou: trou, nombre: nombre };
+    html += (rendus[q.type] || barres)(q, r, c, etat);
+    html += `<div class="total">${total} réponse${total > 1 ? 's' : ''} · ${statut}</div>`;
+    vue.innerHTML = html;
+  }
+
+  function libellesDe(q) {
+    if (q.type === 'vrai_faux') return ['Vrai', 'Faux'];
+    if (q.type === 'echelle') { const l = []; for (let v = q.min; v <= q.max; v++) l.push(String(v)); return l; }
+    return q.options || [];
+  }
+  function estBonne(q, c, i) {
+    if (!c || Object.keys(c).length === 0) return null;
+    if (q.type === 'vrai_faux') return c.bonne === null || c.bonne === undefined ? null : (i === 0) === c.bonne;
+    if (q.type === 'multi') return c.bonnes && c.bonnes.length ? c.bonnes.includes(i) : null;
+    if (q.type === 'echelle') return null;
+    return c.bonne === null || c.bonne === undefined ? null : c.bonne === i;
+  }
+
+  function barres(q, r, c, etat) {
+    const libelles = libellesDe(q), comptes = r.comptes || [], total = r.total || 0;
+    const max = Math.max(1, ...comptes);
+    let html = `<div class="${q.type === 'emoji' ? 'emoji' : ''}">`;
+    html += libelles.map((o, i) => {
+      const n = comptes[i] || 0, pct = total ? Math.round(100 * n / total) : 0;
+      const bonne = etat.revele ? estBonne(q, c, i) : null;
+      const classe = bonne === true ? 'bonne' : bonne === false ? 'mauvaise' : '';
+      return `<div class="ligne ${classe}"><div class="libelle">${q.type === 'emoji' || q.type === 'echelle' || q.type === 'vrai_faux' ? '' : `<span class="lettre">${lettre(i)}</span>`}${echap(o)}</div>
+        <div class="nombre">${n} <small>(${pct} %)</small></div>
+        <div class="barre"><div style="width:${Math.round(100 * n / max)}%; background: var(${COULEURS[i % COULEURS.length]})"></div></div></div>`;
+    }).join('') + '</div>';
+    if (q.type === 'echelle' && r.moyenne !== null && r.moyenne !== undefined) html += `<div class="grand">moyenne ${r.moyenne}</div>`;
+    if (q.type === 'rapidite' && r.rapides && r.rapides.length && etat.revele) html += `<ol class="premiers">${r.rapides.map((p, i) => `<li><span class="rang">${medaille(i)}</span>${echap(p.pseudo)}<span class="temps">${p.temps.toFixed(2)} s</span></li>`).join('')}</ol>`;
+    return html;
+  }
+
+  function premiers(q, r) {
+    const liste = r.premiers || [];
+    if (!liste.length) return `<p class="attente">Qui sera le plus rapide ?</p>`;
+    return `<ol class="premiers">${liste.map((p, i) => `<li style="animation-delay:${i * .1}s"><span class="rang">${medaille(i)}</span>${echap(p.pseudo)}<span class="temps">${p.temps.toFixed(2)} s</span></li>`).join('')}</ol>`;
+  }
+
+  function classement(q, r, c, etat) {
+    const ordre = r.ordre || q.options.map((_, i) => i);
+    return `<ol class="premiers">${ordre.map((i, pos) => {
+      const bon = etat.revele && c.bonne ? c.bonne[pos] === i : null;
+      return `<li style="${bon === true ? 'background:color-mix(in srgb, var(--ok) 20%, transparent)' : ''}"><span class="rang">${pos + 1}.</span>${echap(q.options[i])}<span class="temps">${r.rang_moyen && r.rang_moyen[i] !== null ? 'rang moyen ' + r.rang_moyen[i] : ''}</span></li>`;
+    }).join('')}</ol>` + (etat.revele && c.bonne ? `<div class="bonne-reponse">Bon ordre : ${c.bonne.map(i => echap(q.options[i])).join(' › ')}</div>` : '');
+  }
+
+  function cartes(q, r) {
+    const textes = r.textes || [];
+    if (!textes.length) return `<p class="attente">Les réponses apparaissent ici…</p>`;
+    return `<div class="cartes">${textes.slice(0, 12).map((t, i) => `<div class="carte" style="animation-delay:${i * .05}s">${echap(t.texte)}<span class="qui">— ${echap(t.pseudo)}</span></div>`).join('')}</div>`;
+  }
+
+  function trou(q, r, c, etat) {
+    const total = r.total || 0, bonnes = r.bonnes_n || 0;
+    let html = etat.revele ? `<div class="grand" style="color:var(--ok)">${total ? Math.round(100 * bonnes / total) : 0} % de bonnes réponses</div><div class="bonne-reponse">Réponse : ${(c.bonnes || []).map(echap).join(' / ')}</div>` : '';
+    const freq = r.frequentes || [], max = Math.max(1, ...freq.map(f => f.n));
+    html += freq.map(f => `<div class="ligne ${etat.revele ? (f.bonne ? 'bonne' : 'mauvaise') : ''}"><div class="libelle">${echap(f.texte)}</div><div class="nombre">${f.n}</div><div class="barre"><div style="width:${Math.round(100 * f.n / max)}%"></div></div></div>`).join('');
+    return html;
+  }
+
+  function nombre(q, r, c, etat) {
+    const classes = r.classes || [], max = Math.max(1, ...classes.map(k => k.n));
+    let html = `<div class="deux-colonnes"><div class="histo">${classes.map(k => {
+      const bonne = etat.revele && c.bonne !== null && c.bonne !== undefined && k.de <= c.bonne && (c.bonne < k.a || k === classes[classes.length - 1]);
+      return `<div class="${bonne ? 'bonne' : ''}"><span class="val">${k.n}</span><div class="col" style="height:${Math.round(100 * k.n / max)}%"></div><span class="leg">${fmt(k.de)}–${fmt(k.a)}</span></div>`;
+    }).join('')}</div><div class="stats"><div>`;
+    if (r.mediane !== null && r.mediane !== undefined) html += `<div class="grand">${fmt(r.mediane)}${q.unite ? ' ' + echap(q.unite) : ''}</div><div style="text-align:center;font-size:28px;opacity:.7">médiane · de ${fmt(r.min)} à ${fmt(r.max)}</div>`;
+    if (etat.revele && c.bonne !== null && c.bonne !== undefined) html += `<div class="bonne-reponse" style="text-align:center">Valeur exacte : ${fmt(c.bonne)}${q.unite ? ' ' + echap(q.unite) : ''}</div>`;
+    html += '</div><div>';
+    if (etat.revele && r.proches) html += `<ol class="premiers">${r.proches.slice(0, 4).map((p, i) => `<li><span class="rang">${medaille(i)}</span>${echap(p.pseudo)}<span class="temps">${fmt(p.valeur)}</span></li>`).join('')}</ol>`;
+    return html + '</div></div></div>';
+  }
+
+  // Nuage de mots : placement en spirale, taille proportionnelle à la fréquence, sans chevauchement.
+  function nuage(q, r) {
+    const mots = (r.mots || []).slice(0, 50);
+    if (!mots.length) return `<p class="attente">Envoyez vos mots…</p>`;
+    requestAnimationFrame(() => placerNuage(mots));
+    return `<div class="nuage" id="nuage"></div>`;
+  }
+  function placerNuage(mots) {
+    const zone = document.getElementById('nuage'); if (!zone) return;
+    const L = zone.clientWidth, H = zone.clientHeight, max = mots[0].n, min = mots[mots.length - 1].n;
+    const ctx = document.createElement('canvas').getContext('2d');
+    const places = [];
+    mots.forEach((m, i) => {
+      const taille = Math.round(32 + (max === min ? 40 : 88 * (m.n - min) / (max - min)));
+      ctx.font = `700 ${taille}px system-ui, sans-serif`;
+      const l = ctx.measureText(m.mot).width + 16, h = taille * 1.1;
+      let x = L / 2, y = H / 2, a = 0, trouve = false;
+      for (let k = 0; k < 2000 && !trouve; k++) {
+        const rad = 6 * a;
+        x = L / 2 + rad * Math.cos(a) * 1.4; y = H / 2 + rad * Math.sin(a);
+        a += 0.15;
+        const boite = { x: x - l / 2, y: y - h / 2, l, h };
+        if (boite.x < 0 || boite.y < 0 || boite.x + l > L || boite.y + h > H) continue;
+        trouve = !places.some(p => boite.x < p.x + p.l && boite.x + l > p.x && boite.y < p.y + p.h && boite.y + h > p.y);
+        if (trouve) places.push(boite);
+      }
+      if (!trouve) return;
+      const span = document.createElement('span');
+      span.textContent = m.mot;
+      span.style.cssText = `left:${x}px;top:${y}px;font-size:${taille}px;color:var(${COULEURS[i % COULEURS.length]});animation-delay:${i * 40}ms`;
+      span.title = m.n + ' fois';
+      zone.appendChild(span);
+    });
   }
 
   async function recharger() {
@@ -50,7 +183,6 @@
     const r = await fetch(url, { cache: 'no-store' });
     rendre(await r.json());
   }
-
   let delai = 1000, interrogation = null;
   function connecter() {
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
@@ -62,7 +194,11 @@
     };
     ws.onerror = () => ws.close();
   }
-  function echap(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function medaille(i) { return ['🥇', '🥈', '🥉'][i] || (i + 1) + '.'; }
+  function lettre(i) { return String.fromCharCode(65 + i); }
+  function fmt(n) { return n === null || n === undefined ? '–' : Number.isInteger(n) ? String(n) : Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 2 }); }
+  function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  window.addEventListener('resize', () => recharger().catch(() => {}));
   connecter();
 })();
 </script>

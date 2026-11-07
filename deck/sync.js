@@ -14,7 +14,7 @@ window.AmphiSync = (function () {
   const params = new URLSearchParams(location.search);
   const role = ['scene', 'obs', 'remote'].includes(params.get('role')) ? params.get('role') : 'scene';
   const token = params.get('token') || '';
-  const ecouteurs = { ack: [], connexion: [], etat: [] };
+  const ecouteurs = { ack: [], connexion: [], etat: [], recharger: [] };
 
   let ws = null;
   let delai = 1000;
@@ -81,6 +81,8 @@ window.AmphiSync = (function () {
         appliquer(m);
       } else if (m.type === 'ack') {
         emettre('ack', m);
+      } else if (m.type === 'recharger') {
+        emettre('recharger', m);
       }
     };
     ws.onclose = () => {

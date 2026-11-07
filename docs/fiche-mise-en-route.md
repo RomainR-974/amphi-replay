@@ -26,7 +26,8 @@
 ## Pendant l'intervention
 
 - Suivant / Précédent : boutons du bas ou balayage sur la miniature.
-- Diapositive de quiz : **Ouvrir** → attendre 60 à 90 s en regardant le compteur → **Fermer** → commenter.
+- Diapositive de quiz : **Ouvrir** → attendre (le chrono ferme tout seul s'il y en a un) → **Fermer** → **Révéler** (points attribués, bonne réponse affichée) → commenter.
+- Diapositive « Classement » : le podium se met à jour tout seul après chaque Révéler.
 - Voyant orange ou rouge pendant plus de 10 s : regarder le PC concerné, sans s'arrêter de parler.
 
 ## Séquence de fin

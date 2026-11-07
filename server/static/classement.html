@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Classement</title>
+<style>
+  /* Podium + top N, lisible depuis le fond de l'amphi, aucune action possible. Mis à jour à chaque révélation. */
+  :root { --or: #f59e0b; --argent: #9ca3af; --bronze: #b45309; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; color: inherit; font-family: system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; padding: 2vh 3vw; gap: 2vh; overflow: hidden; }
+  h1 { font-size: 44px; margin: 0; text-align: center; }
+  .podium { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end; gap: 2vw; height: 38vh; }
+  .marche { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; height: 100%; }
+  .marche .nom { font-size: 34px; font-weight: 700; text-align: center; overflow-wrap: anywhere; }
+  .marche .pts { font-size: 28px; opacity: .75; font-variant-numeric: tabular-nums; }
+  .marche .bloc { width: 100%; border-radius: 16px 16px 0 0; display: flex; align-items: flex-start; justify-content: center; font-size: 56px; padding-top: 10px; transform-origin: bottom; animation: monte .8s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes monte { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  .m1 .bloc { height: 60%; background: var(--or); animation-delay: .4s; }
+  .m2 .bloc { height: 42%; background: var(--argent); animation-delay: .2s; }
+  .m3 .bloc { height: 30%; background: var(--bronze); }
+  .m1 { order: 2; } .m2 { order: 1; } .m3 { order: 3; }
+  ol { list-style: none; margin: 2vh 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1vh 2vw; }
+  li { display: flex; align-items: center; gap: 1vw; font-size: 32px; padding: 8px 18px; border-radius: 12px; background: color-mix(in srgb, currentColor 8%, transparent); animation: glisse .4s both; }
+  @keyframes glisse { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }
+  li .rang { width: 2em; font-weight: 800; opacity: .6; }
+  li .nom { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  li .pts { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .attente { font-size: 40px; opacity: .6; text-align: center; margin: auto; }
+</style>
+</head>
+<body>
+<h1 id="titre">Classement</h1>
+<div id="vue"><p class="attente">Pas encore de points…</p></div>
+<script>
+(() => {
+  const vue = document.getElementById('vue');
+  const nombre = Math.max(3, Math.min(100, Number(new URLSearchParams(location.search).get('nombre')) || 10));
+  let precedent = '';
+
+  function rendre(liste) {
+    const cle = JSON.stringify(liste);
+    if (cle === precedent) return;
+    precedent = cle;
+    if (!liste.length) { vue.innerHTML = '<p class="attente">Pas encore de points…</p>'; return; }
+    const [p1, p2, p3] = liste;
+    let html = '<div class="podium">';
+    [[p1, 'm1', '🥇'], [p2, 'm2', '🥈'], [p3, 'm3', '🥉']].forEach(([p, cls, med]) => {
+      html += `<div class="marche ${cls}">${p ? `<div class="nom">${echap(p.pseudo)}</div><div class="pts">${p.points} pts</div>` : '<div class="nom">&nbsp;</div>'}<div class="bloc">${p ? med : ''}</div></div>`;
+    });
+    html += '</div>';
+    const reste = liste.slice(3);
+    if (reste.length) html += `<ol>${reste.map((p, i) => `<li style="animation-delay:${.8 + i * .06}s"><span class="rang">${p.rang}.</span><span class="nom">${echap(p.pseudo)}</span><span class="pts">${p.points}</span></li>`).join('')}</ol>`;
+    vue.innerHTML = html;
+  }
+
+  async function recharger() {
+    const r = await fetch('/api/quiz/classement?nombre=' + nombre, { cache: 'no-store' });
+    rendre(await r.json());
+  }
+  let delai = 1000, interrogation = null;
+  function connecter() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
+    ws.onopen = () => { delai = 1000; clearInterval(interrogation); interrogation = null; recharger(); };
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') recharger().catch(() => {}); };
+    ws.onclose = () => {
+      if (!interrogation) interrogation = setInterval(() => recharger().catch(() => {}), 3000);
+      setTimeout(connecter, delai); delai = Math.min(delai * 2, 10000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  connecter();
+})();
+</script>
+</body>
+</html>

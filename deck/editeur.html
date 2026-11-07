@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur du deck</title>
+<!-- Thème du deck (mêmes règles que deck/index.html) pour un rendu fidèle dans la scène et les vignettes. -->
+<link rel="stylesheet" href="vendor/reveal/theme/white.css">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="editeur.css">
+</head>
+<body>
+
+<header id="barre">
+  <div class="groupe">
+    <strong id="nom-fichier">slides.html</strong>
+    <span id="etat-sauvegarde" class="etat">chargement…</span>
+  </div>
+  <div class="groupe onglets">
+    <button class="onglet actif" data-vue="deck">Diapositives</button>
+    <button class="onglet" data-vue="questions">Questions</button>
+  </div>
+  <div class="groupe">
+    <button id="b-annuler" title="Annuler (Ctrl+Z)">↶ Annuler</button>
+    <button id="b-retablir" title="Rétablir (Ctrl+Y)">↷ Rétablir</button>
+    <button id="b-importer" title="Charger un fichier .html local dans l'éditeur">Importer…</button>
+    <input type="file" id="fichier-import" accept=".html,text/html" hidden>
+    <button id="b-apercu" title="Ouvre le deck (rôle scène) dans un nouvel onglet">Aperçu</button>
+    <button id="b-enregistrer" class="principal" title="Enregistrer (Ctrl+S)">Enregistrer</button>
+  </div>
+</header>
+
+<!-- ===== Vue « Diapositives » : trois colonnes ===== -->
+<main id="vue-deck" class="vue">
+  <aside id="colonne-liste">
+    <div class="outils-liste">
+      <div class="menu">
+        <button id="b-ajouter-diapo" title="Ajouter une diapositive">+ Ajouter ▾</button>
+        <div class="menu-contenu" id="menu-ajouter-diapo">
+          <button data-type="libre">Diapositive libre vide</button>
+          <button data-type="titre">Diapositive de titre</button>
+          <button data-type="quiz">Diapositive de quiz…</button>
+        </div>
+      </div>
+      <button id="b-dupliquer-diapo" title="Dupliquer la diapositive">⧉</button>
+      <button id="b-monter-diapo" title="Monter">↑</button>
+      <button id="b-descendre-diapo" title="Descendre">↓</button>
+      <button id="b-supprimer-diapo" title="Supprimer la diapositive" class="danger">🗑</button>
+    </div>
+    <ol id="liste-diapos"></ol>
+  </aside>
+
+  <section id="colonne-scene">
+    <div id="barre-ajout" class="barre-outils">
+      <span class="libelle">Ajouter :</span>
+      <button data-ajout="texte">Texte</button>
+      <button data-ajout="titre">Titre</button>
+      <button data-ajout="image">Image</button>
+      <div class="menu">
+        <button>Forme ▾</button>
+        <div class="menu-contenu">
+          <button data-ajout="forme" data-variante="rectangle">Rectangle</button>
+          <button data-ajout="forme" data-variante="arrondi">Rectangle arrondi</button>
+          <button data-ajout="forme" data-variante="cercle">Cercle</button>
+        </div>
+      </div>
+      <button data-ajout="iframe">Iframe</button>
+      <button data-ajout="video">Vidéo</button>
+      <button data-ajout="lottie">Lottie</button>
+      <button data-ajout="minuteur">Minuteur</button>
+      <button data-ajout="resultats">Résultats</button>
+      <button data-ajout="nuage">Nuage de mots</button>
+      <button data-ajout="classement">Classement</button>
+      <button data-ajout="qr">QR code</button>
+      <span class="espace"></span>
+      <label class="case"><input type="checkbox" id="c-grille"> Grille</label>
+    </div>
+    <div id="zone-scene">
+      <div id="regle-h" class="regle"></div>
+      <div id="regle-v" class="regle"></div>
+      <div id="cadre">
+        <div id="scene">
+          <div id="rendu" class="reveal"></div>
+          <div id="grille" hidden></div>
+          <div id="calque"></div>
+          <div id="selection" hidden>
+            <div class="poignee" data-p="nw"></div><div class="poignee" data-p="n"></div><div class="poignee" data-p="ne"></div>
+            <div class="poignee" data-p="w"></div><div class="poignee" data-p="e"></div>
+            <div class="poignee" data-p="sw"></div><div class="poignee" data-p="s"></div><div class="poignee" data-p="se"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Mini barre de mise en forme pour l'édition en place -->
+    <div id="mini" hidden>
+      <button data-cmd="bold" title="Gras"><b>G</b></button>
+      <button data-cmd="italic" title="Italique"><i>I</i></button>
+      <button data-cmd="underline" title="Souligné"><u>S</u></button>
+      <button data-cmd="insertUnorderedList" title="Liste à puces">•≡</button>
+      <button data-cmd="insertOrderedList" title="Liste numérotée">1≡</button>
+      <button data-taille="-4" title="Réduire la taille">A−</button>
+      <button data-taille="4" title="Agrandir la taille">A+</button>
+      <input type="color" id="mini-couleur" title="Couleur du texte" value="#222222">
+      <button data-cmd="justifyLeft" title="Aligner à gauche">⇤</button>
+      <button data-cmd="justifyCenter" title="Centrer">↔</button>
+      <button data-cmd="justifyRight" title="Aligner à droite">⇥</button>
+    </div>
+  </section>
+
+  <aside id="colonne-proprietes">
+    <div id="proprietes"></div>
+  </aside>
+</main>
+
+<!-- ===== Vue « Questions » : éditeur de quiz.json ===== -->
+<main id="vue-questions" class="vue" hidden>
+  <aside id="colonne-questions">
+    <div class="outils-liste">
+      <button id="q-ajouter" title="Ajouter une question">+ Ajouter</button>
+      <button id="q-dupliquer" title="Dupliquer">⧉</button>
+      <button id="q-monter" title="Monter">↑</button>
+      <button id="q-descendre" title="Descendre">↓</button>
+      <button id="q-supprimer" title="Supprimer" class="danger">🗑</button>
+    </div>
+    <ol id="liste-questions"></ol>
+    <div class="pied">
+      <button id="q-enregistrer" class="principal">Enregistrer les questions</button>
+      <span id="q-etat" class="etat"></span>
+    </div>
+  </aside>
+  <section id="colonne-formulaire">
+    <div id="q-erreurs" class="erreurs" hidden></div>
+    <div id="formulaire-question"></div>
+  </section>
+</main>
+
+<!-- Boîte de dialogue générique (ajout d'éléments, choix de question…) -->
+<dialog id="dialogue">
+  <form method="dialog">
+    <h3 id="dialogue-titre"></h3>
+    <div id="dialogue-champs"></div>
+    <div class="actions">
+      <button value="annuler" type="button" id="dialogue-annuler">Annuler</button>
+      <button value="ok" class="principal" id="dialogue-ok">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="sonde" hidden></div>
+<script src="editeur.js"></script>
+</body>
+</html>

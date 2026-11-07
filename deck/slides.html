@@ -1,40 +1,51 @@
-<!-- Contenu du deck : une <section> par diapositive. Fichier généré par tools/pdf2reveal.py, puis retouché à la main.
-     Exemple de démonstration ; remplacer par la conversion du PDF de l'intervention. -->
+<!-- Contenu du deck : une <section> par diapositive. Produit par tools/pptx2reveal.py (sections « libres »),
+     tools/pdf2reveal.py (sections en flux) ou l'éditeur (/editeur?token=…). Format : docs/format-deck.md.
+     Deck de démonstration ; remplacer par la conversion de votre support. -->
 
-<section data-qr>
+<section data-qr data-id="s1">
   <h1>Titre de l'intervention</h1>
   <p>Formation-atelier · amphithéâtre</p>
   <p class="small">Scannez le QR code pour participer aux quiz.</p>
   <aside class="notes">Annoncer le droit à l'image : plan amphi large, replay interne. Démarrer le chronomètre. Vérifier les deux voyants scene/obs.</aside>
 </section>
 
-<section>
-  <h2>Plan de la séance</h2>
-  <ul>
-    <li class="fragment">Première partie</li>
-    <li class="fragment">Deuxième partie</li>
-    <li class="fragment">Quiz et discussion</li>
-  </ul>
-  <aside class="notes">Les puces apparaissent une à une : les fragments sont synchronisés sur les deux PC.</aside>
+<section class="libre" data-id="s2" data-transition="fade" data-background-color="#0f172a">
+  <div class="el texte" data-id="e1" style="left:120px;top:120px;width:1680px;height:140px;font-size:84px;font-weight:800;color:#f8fafc">Plan de la séance</div>
+  <div class="el texte fragment fade-up" data-fragment-index="0" data-id="e2" style="left:120px;top:320px;width:1000px;height:120px;font-size:52px;color:#e2e8f0">1. Pourquoi une captation solo</div>
+  <div class="el texte fragment fade-up" data-fragment-index="1" data-id="e3" style="left:120px;top:460px;width:1000px;height:120px;font-size:52px;color:#e2e8f0">2. La chaîne technique</div>
+  <div class="el texte fragment fade-up" data-fragment-index="2" data-id="e4" style="left:120px;top:600px;width:1000px;height:120px;font-size:52px;color:#e2e8f0">3. Quiz et discussion</div>
+  <div class="el minuteur fragment" data-fragment-index="3" data-amphi="minuteur" data-duree="90" data-id="e5" style="left:1260px;top:320px;width:540px;height:240px"></div>
+  <aside class="notes">Les lignes apparaissent une à une (fragments synchronisés sur les deux PC). Le minuteur de 90 s démarre au dernier clic.</aside>
 </section>
 
-<section>
+<section data-id="s3">
   <h2>Démonstration embarquée</h2>
   <iframe src="https://example.org" width="1600" height="700" title="Démonstration"></iframe>
   <aside class="notes">Les iframes pointent vers des URL publiques et sans état. Jamais une vue connectée.</aside>
 </section>
 
-<section data-quiz="q1"
-         data-notes="Ouvrir la question depuis la télécommande. Laisser 90 secondes. Fermer. Commenter l'histogramme.">
-  <!-- Contenu rempli au chargement depuis quiz.json. En statique, pour le secours à main levée : -->
-  <div class="quiz-statique">
-    <h2>Question 1 (voir quiz.json)</h2>
-  </div>
+<section data-quiz="q2" data-id="s4" data-notes="Nuage de mots : ouvrir, laisser 60 s, commenter les mots les plus gros."></section>
+
+<section data-quiz="q1" data-id="s5"></section>
+
+<section data-quiz="q3" data-id="s6" data-notes="Question de rapidité : 15 s, les points dépendent du temps de réponse. Révéler à la fin."></section>
+
+<section data-quiz="q5" data-id="s7"></section>
+
+<section data-quiz="q7" data-id="s8" data-notes="Buzzer : le premier gagne 1000 points, puis dégressif. Donner la parole au premier."></section>
+
+<section class="libre" data-id="s9" data-background-color="#fffbeb">
+  <div class="el texte" data-id="e1" style="left:120px;top:60px;width:1680px;height:120px;font-size:72px;font-weight:800;text-align:center">Classement provisoire</div>
+  <div class="el classement" data-amphi="classement" data-nombre="10" data-id="e2" style="left:120px;top:200px;width:1680px;height:820px"></div>
+  <aside class="notes">Podium animé. Les points sont attribués à chaque « Révéler ».</aside>
 </section>
 
-<section data-quiz="q2"></section>
+<section data-quiz="q9" data-id="s10"></section>
+<section data-quiz="q10" data-id="s11"></section>
+<section data-quiz="q11" data-id="s12"></section>
+<section data-quiz="q12" data-id="s13"></section>
 
-<section>
+<section data-id="s14">
   <h2>Merci</h2>
   <p>Questions ?</p>
   <aside class="notes">Dernier clap devant le DSLR après la dernière question. Arrêter OBS puis l'enregistreur du téléphone.</aside>

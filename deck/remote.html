@@ -28,12 +28,13 @@
   .notes p { margin: 0 0 .6em; }
   .notes:empty::before { content: 'Pas de notes pour cette diapositive.'; color: var(--sourd); }
 
-  .quiz { margin: 10px 12px 0; padding: 10px 12px; background: #1b1b1b; border-radius: 8px; display: none; gap: 8px; grid-template-columns: 1fr 1fr auto; align-items: center; }
+  .quiz { margin: 10px 12px 0; padding: 10px 12px; background: #1b1b1b; border-radius: 8px; display: none; gap: 8px; grid-template-columns: 1fr 1fr 1fr auto; align-items: center; }
   .quiz.visible { display: grid; }
   .quiz .titre { grid-column: 1 / -1; font-size: 14px; color: var(--sourd); display: flex; justify-content: space-between; }
-  .quiz .compteur { font-size: 28px; font-weight: 700; text-align: center; min-width: 64px; }
-  .quiz button { min-height: 56px; font-size: 18px; font-weight: 600; border: 0; border-radius: 10px; color: #fff; }
-  .quiz .ouvrir { background: var(--vert); } .quiz .fermer { background: var(--rouge); }
+  .quiz .compteur { font-size: 28px; font-weight: 700; text-align: center; min-width: 56px; }
+  .quiz .compteur small { display: block; font-size: 12px; font-weight: 400; color: var(--orange); }
+  .quiz button { min-height: 56px; font-size: 17px; font-weight: 600; border: 0; border-radius: 10px; color: #fff; }
+  .quiz .ouvrir { background: var(--vert); } .quiz .fermer { background: var(--rouge); } .quiz .reveler { background: var(--bleu); }
   .quiz .reinit { grid-column: 1 / -1; background: #333; color: var(--sourd); min-height: 40px; font-size: 14px; }
   .quiz button:disabled { opacity: .35; }
 
@@ -69,6 +70,7 @@
   <div class="titre"><span id="quiz-id">quiz</span><span id="quiz-etat">fermé</span></div>
   <button class="ouvrir" id="q-ouvrir">Ouvrir</button>
   <button class="fermer" id="q-fermer" disabled>Fermer</button>
+  <button class="reveler" id="q-reveler" disabled>Révéler</button>
   <div class="compteur" id="q-compteur">0</div>
   <button class="reinit" id="q-reinit">Réinitialiser les réponses</button>
 </div>
@@ -151,19 +153,31 @@
 
   $('q-ouvrir').onclick = () => questionCourante && api('/api/quiz/ouvrir', { question_id: questionCourante });
   $('q-fermer').onclick = () => api('/api/quiz/fermer');
+  $('q-reveler').onclick = () => questionCourante && api('/api/quiz/reveler', { question_id: questionCourante });
   $('q-reinit').onclick = () => {
     if (questionCourante && confirm(`Effacer toutes les réponses de ${questionCourante} ?`)) api('/api/quiz/reinitialiser', { question_id: questionCourante });
   };
 
+  let finChrono = null;
   function rendreQuiz() {
-    const ouverteIci = etatQuiz.ouverte && etatQuiz.question && etatQuiz.question.id === questionCourante;
-    const autreOuverte = etatQuiz.ouverte && etatQuiz.question && etatQuiz.question.id !== questionCourante;
-    $('quiz-etat').textContent = ouverteIci ? 'OUVERTE' : autreOuverte ? `${etatQuiz.question.id} ouverte ailleurs` : 'fermée';
-    $('quiz-etat').style.color = ouverteIci ? 'var(--vert)' : autreOuverte ? 'var(--orange)' : 'var(--sourd)';
+    const ici = etatQuiz.question && etatQuiz.question.id === questionCourante;
+    const ouverteIci = etatQuiz.ouverte && ici;
+    const autreOuverte = etatQuiz.ouverte && etatQuiz.question && !ici;
+    const q = ici ? etatQuiz.question : null;
+    $('quiz-id').textContent = `quiz ${questionCourante}${q ? ' · ' + q.type + (q.chrono ? ' · ' + q.chrono + ' s' : '') : ''}`;
+    $('quiz-etat').textContent = ouverteIci ? 'OUVERTE' : autreOuverte ? `${etatQuiz.question.id} ouverte ailleurs` : ici && etatQuiz.revele ? 'révélée' : 'fermée';
+    $('quiz-etat').style.color = ouverteIci ? 'var(--vert)' : autreOuverte ? 'var(--orange)' : ici && etatQuiz.revele ? 'var(--bleu)' : 'var(--sourd)';
     $('q-ouvrir').disabled = ouverteIci;
     $('q-fermer').disabled = !etatQuiz.ouverte;
-    $('q-compteur').textContent = (etatQuiz.question && etatQuiz.question.id === questionCourante) ? etatQuiz.total : '–';
+    $('q-reveler').disabled = !ici || !q.notee || etatQuiz.revele;
+    const total = ici ? (etatQuiz.resultat ? etatQuiz.resultat.total : 0) : '–';
+    finChrono = ouverteIci && etatQuiz.reste !== null && etatQuiz.reste !== undefined ? Date.now() + etatQuiz.reste * 1000 : null;
+    $('q-compteur').innerHTML = `${total}${finChrono ? '<small id="q-reste"></small>' : ''}`;
   }
+  setInterval(() => {
+    const el = $('q-reste'); if (!el || finChrono === null) return;
+    el.textContent = Math.max(0, Math.ceil((finChrono - Date.now()) / 1000)) + ' s';
+  }, 250);
 
   let delaiQ = 1000;
   function connecterQuiz() {
@@ -174,7 +188,7 @@
     ws.onerror = () => ws.close();
   }
   connecterQuiz();
-  // Si la question courante est fermée, son compteur vient de l'état ciblé.
+  // Si la question courante n'est pas celle du serveur, son compteur vient de l'état ciblé.
   setInterval(() => {
     if (questionCourante && !(etatQuiz.question && etatQuiz.question.id === questionCourante)) {
       fetch(`/api/quiz/etat?question_id=${encodeURIComponent(questionCourante)}`, { cache: 'no-store' })

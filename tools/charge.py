@@ -3,9 +3,11 @@
 
     python tools/charge.py https://q.exemple.fr --token JETON --question q1 --clients 300 --duree 10
 
-Ouvre la question, connecte N WebSockets /ws/quiz, fait voter N participants (cookies distincts)
-répartis sur `--duree` secondes, mesure la latence des votes et le délai de réception du dernier
-état par les WebSockets, puis ferme la question. Cible PRD : 300 + 300 en 10 s, CPU < 50 % sur 1 vCPU.
+Ouvre la question (à choix unique), lance un processus séparé qui tient N WebSockets /ws/quiz,
+fait voter N participants (cookies distincts) répartis sur `--duree` secondes, mesure la latence
+des votes et le délai entre le dernier vote et la réception de l'état complet par chaque
+WebSocket, puis ferme la question. Cible PRD : 300 + 300 en 10 s, diffusion < 1 s, CPU < 50 %
+sur 1 vCPU. Les écouteurs tournent dans un second processus pour ne pas être ralentis par les votes.
 """
 
 from __future__ import annotations
@@ -22,29 +24,46 @@ import httpx
 import websockets
 
 
-async def client_ws(url_ws: str, total_attendu: int, pret: asyncio.Event, termine: asyncio.Event, delais: list[float], t_dernier_vote: dict) -> None:
-    try:
-        async with websockets.connect(url_ws, open_timeout=20) as ws:
-            pret.set()
-            while not termine.is_set():
-                try:
-                    brut = await asyncio.wait_for(ws.recv(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
-                m = json.loads(brut)
-                if m.get("type") == "quiz" and m.get("total", 0) >= total_attendu and "t" in t_dernier_vote:
-                    delais.append(time.perf_counter() - t_dernier_vote["t"])
-                    return
-    except Exception as e:  # noqa: BLE001
-        print("ws erreur :", e, file=sys.stderr)
+# ---------------------------------------------------------------------------------
+# Processus écouteur : N WebSockets, imprime l'horodatage de réception de l'état complet
+# ---------------------------------------------------------------------------------
 
 
-async def voter(client: httpx.AsyncClient, base: str, question: str, options: int, attente: float, latences: list[float], erreurs: list[str]) -> None:
+async def ecouter(url_ws: str, n: int, total_attendu: int) -> None:
+    prets = 0
+    resultats: list[float] = []
+
+    async def un_client() -> None:
+        nonlocal prets
+        try:
+            async with websockets.connect(url_ws, open_timeout=30) as ws:
+                prets += 1
+                if prets == n:
+                    print("pret", flush=True)
+                while True:
+                    m = json.loads(await asyncio.wait_for(ws.recv(), timeout=60))
+                    if m.get("type") == "quiz" and (m.get("resultat") or {}).get("total", 0) >= total_attendu:
+                        resultats.append(time.time())
+                        return
+        except Exception as e:  # noqa: BLE001
+            print("erreur", str(e), flush=True)
+
+    await asyncio.gather(*(un_client() for _ in range(n)))
+    print("fin " + json.dumps(resultats), flush=True)
+
+
+# ---------------------------------------------------------------------------------
+# Processus principal : votes
+# ---------------------------------------------------------------------------------
+
+
+async def voter(client: httpx.AsyncClient, base: str, question: str, options: int, attente: float, latences: list[float], fins: list[float], erreurs: list[str]) -> None:
     await asyncio.sleep(attente)
     t0 = time.perf_counter()
     try:
-        r = await client.post(f"{base}/api/quiz/vote", json={"question_id": question, "option": random.randrange(options)})
+        r = await client.post(f"{base}/api/quiz/vote", json={"question_id": question, "reponse": random.randrange(options)})
         latences.append(time.perf_counter() - t0)
+        fins.append(time.time())
         if r.status_code != 200:
             erreurs.append(f"{r.status_code} {r.text[:80]}")
     except Exception as e:  # noqa: BLE001
@@ -54,62 +73,85 @@ async def voter(client: httpx.AsyncClient, base: str, question: str, options: in
 async def principal() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("base", help="URL du serveur, ex. https://q.exemple.fr")
-    p.add_argument("--token", required=True)
+    p.add_argument("--token")
     p.add_argument("--question", default="q1")
     p.add_argument("--clients", type=int, default=300)
     p.add_argument("--duree", type=float, default=10.0, help="fenêtre (s) sur laquelle répartir les votes")
+    p.add_argument("--ecoute", type=int, metavar="TOTAL", help="(interne) mode écouteur")
     args = p.parse_args()
     base = args.base.rstrip("/")
     url_ws = base.replace("https://", "wss://").replace("http://", "ws://") + "/ws/quiz"
+
+    if args.ecoute is not None:
+        await ecouter(url_ws, args.clients, args.ecoute)
+        return 0
+    if not args.token:
+        p.error("--token est obligatoire")
 
     async with httpx.AsyncClient(timeout=30) as admin:
         r = await admin.post(f"{base}/api/quiz/reinitialiser", params={"token": args.token}, json={"question_id": args.question})
         r.raise_for_status()
         r = await admin.post(f"{base}/api/quiz/ouvrir", params={"token": args.token}, json={"question_id": args.question})
         r.raise_for_status()
-        options = len(r.json()["question"]["options"])
+        question = r.json()["question"]
+        if question["type"] not in ("qcm", "emoji", "rapidite"):
+            print("le test de charge vote sur une question à choix unique (qcm, emoji, rapidite)", file=sys.stderr)
+            return 2
+        options = len(question["options"])
 
-        pret = asyncio.Event()
-        termine = asyncio.Event()
-        delais_ws: list[float] = []
-        t_dernier: dict = {}
-        taches_ws = [asyncio.create_task(client_ws(url_ws, args.clients, pret, termine, delais_ws, t_dernier)) for _ in range(args.clients)]
-        await asyncio.wait_for(pret.wait(), 30)
-        await asyncio.sleep(1.0)
+        ecouteur = await asyncio.create_subprocess_exec(
+            sys.executable, __file__, base, "--clients", str(args.clients), "--ecoute", str(args.clients),
+            stdout=asyncio.subprocess.PIPE,
+        )
+        ligne = (await ecouteur.stdout.readline()).decode().strip()
+        while ligne.startswith("erreur"):
+            print("écouteur :", ligne, file=sys.stderr)
+            ligne = (await ecouteur.stdout.readline()).decode().strip()
+        assert ligne == "pret", ligne
         print(f"{args.clients} WebSockets connectés, votes sur {args.duree:.0f} s…")
 
         latences: list[float] = []
+        fins: list[float] = []
         erreurs: list[str] = []
-        t0 = time.perf_counter()
-        attentes = sorted(random.uniform(0, args.duree) for _ in range(args.clients))
-        t_dernier["t"] = t0 + attentes[-1]
-        async with httpx.AsyncClient(timeout=30) as _:
-            clients = [httpx.AsyncClient(timeout=30) for _ in range(args.clients)]  # un cookie par participant
-            try:
-                await asyncio.gather(*(voter(c, base, args.question, options, a, latences, erreurs) for c, a in zip(clients, attentes)))
-            finally:
-                await asyncio.gather(*(c.aclose() for c in clients))
-        t_dernier["t"] = t0 + attentes[-1]
-        await asyncio.sleep(3.0)
-        termine.set()
-        await asyncio.gather(*taches_ws, return_exceptions=True)
+        attentes = [random.uniform(0, args.duree) for _ in range(args.clients)]
+        clients = [httpx.AsyncClient(timeout=30) for _ in range(args.clients)]  # un cookie par participant
+        try:
+            await asyncio.gather(*(voter(c, base, args.question, options, a, latences, fins, erreurs) for c, a in zip(clients, attentes)))
+        finally:
+            await asyncio.gather(*(c.aclose() for c in clients))
+        dernier_vote = max(fins) if fins else time.time()
+
+        recus: list[float] = []
+        try:
+            sortie = (await asyncio.wait_for(ecouteur.stdout.read(), timeout=30)).decode()
+            for ligne in sortie.splitlines():
+                if ligne.startswith("fin "):
+                    recus = json.loads(ligne[4:])
+                elif ligne.startswith("erreur"):
+                    print("écouteur :", ligne, file=sys.stderr)
+        except asyncio.TimeoutError:
+            ecouteur.kill()
+        await ecouteur.wait()
 
         etat = (await admin.get(f"{base}/api/quiz/etat")).json()
         await admin.post(f"{base}/api/quiz/fermer", params={"token": args.token})
 
-    def q(xs: list[float], p: float) -> float:
-        return sorted(xs)[min(len(xs) - 1, int(p * len(xs)))] * 1000 if xs else float("nan")
+    def q(xs: list[float], pct: float) -> float:
+        return sorted(xs)[min(len(xs) - 1, int(pct * len(xs)))] * 1000 if xs else float("nan")
 
-    print(f"votes : {len(latences)} ok, {len(erreurs)} erreurs ; total côté serveur : {etat.get('total')}")
+    total = (etat.get("resultat") or {}).get("total")
+    delais = [max(0.0, t - dernier_vote) for t in recus]
+    print(f"votes : {len(latences)} ok, {len(erreurs)} erreurs ; total côté serveur : {total}")
     if latences:
         print(f"latence vote  : médiane {statistics.median(latences) * 1000:.0f} ms, p95 {q(latences, .95):.0f} ms, max {max(latences) * 1000:.0f} ms")
-    if delais_ws:
-        print(f"diffusion WS  : {len(delais_ws)} clients ont reçu le dernier état ; p95 {q(delais_ws, .95):.0f} ms après le dernier vote (cible < 1000 ms)")
+    if delais:
+        print(f"diffusion WS  : {len(delais)}/{args.clients} clients ont reçu l'état complet ; p95 {q(delais, .95):.0f} ms, max {max(delais) * 1000:.0f} ms après le dernier vote (cible < 1000 ms)")
     else:
         print("diffusion WS  : aucun client n'a reçu l'état complet — vérifier le serveur")
     for e in erreurs[:5]:
         print("  erreur :", e)
-    return 0 if not erreurs and etat.get("total") == args.clients else 1
+    ok = not erreurs and total == args.clients and len(delais) == args.clients and q(delais, .95) < 1000
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

@@ -13,38 +13,53 @@
 
 <script src="vendor/reveal/reveal.js"></script>
 <script src="vendor/reveal/plugin/notes/notes.js"></script>
+<script src="vendor/lottie/lottie.min.js"></script>
 <script src="sync.js"></script>
 <script src="quiz-deck.js"></script>
 <script>
 (async () => {
   const role = AmphiSync.role;
   document.documentElement.dataset.role = role;
+  const slides = document.getElementById('slides');
 
-  // Le contenu du deck vit dans slides.html (généré par tools/pdf2reveal.py) : une section par page.
-  const html = await (await fetch('slides.html', { cache: 'no-store' })).text();
-  document.getElementById('slides').innerHTML = html;
-
-  // Diapositives de quiz : question + options en statique (secours à main levée),
-  // QR code, et iframe de résultats (page publique, sans état).
-  await AmphiQuizDeck.preparer(document.getElementById('slides'));
+  async function charger() {
+    // Le contenu du deck vit dans slides.html (PowerPoint converti, PDF converti ou éditeur).
+    const html = await (await fetch('slides.html', { cache: 'no-store' })).text();
+    slides.innerHTML = html;
+    // Rôle obs : aucune transition, pour un rendu simultané avec le projecteur.
+    if (role === 'obs') slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
+    await AmphiQuizDeck.preparer(slides);
+  }
+  await charger();
 
   const commun = {
     width: 1920, height: 1080, margin: 0.04,
     hash: false, history: false, center: true,
     slideNumber: role === 'scene' ? 'c/t' : false,
     plugins: [RevealNotes],
-    // Les iframes embarquées ne doivent jamais être rechargées au passage d'une diapositive.
     preloadIframes: true, autoPlayMedia: false,
   };
   const parRole = {
     // PC 1 : plein écran, contrôles masqués, clavier actif en secours.
-    scene:  { controls: false, progress: false, keyboard: true,  touch: false, transition: 'none', transitionSpeed: 'fast' },
+    scene:  { controls: false, progress: false, keyboard: true,  touch: false, transition: 'fade', transitionSpeed: 'fast' },
     // PC 2 : rien ne doit bouger ni répondre à un clavier ; fondu 0 ms pour un rendu simultané.
     obs:    { controls: false, progress: false, keyboard: false, touch: false, transition: 'none', backgroundTransition: 'none' },
     // Téléphone : miniature embarquée dans remote.html, pilotée par ses boutons.
     remote: { controls: false, progress: false, keyboard: false, touch: false, embedded: true, transition: 'none' },
   };
   await Reveal.initialize({ ...commun, ...parRole[role] });
+
+  Reveal.on('slidechanged', e => { if (e.previousSlide) AmphiQuizDeck.horsDiapositive(e.previousSlide); AmphiQuizDeck.surDiapositive(e.currentSlide); });
+  Reveal.on('fragmentshown', e => AmphiQuizDeck.surFragment(e.fragment));
+  Reveal.on('ready', e => AmphiQuizDeck.surDiapositive(e.currentSlide));
+
+  // L'éditeur a enregistré : recharger le contenu sans perdre la position (hors remote, qui garde la main).
+  AmphiSync.on('recharger', async () => {
+    const i = Reveal.getIndices();
+    await charger();
+    Reveal.sync();
+    Reveal.slide(i.h, i.v, i.f);
+  });
   AmphiSync.demarrer();
 })();
 </script>
