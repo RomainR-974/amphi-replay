@@ -11,8 +11,10 @@
 - Transitions (`p:transition`) et animations (`p:timing`) traduites en `data-transition` et en
   fragments reveal.js (`fragment fade-in`, `fade-up`, `zoom-in`…) avec `data-fragment-index`.
 - Objets complexes (groupes, SmartArt, graphiques, formes libres, flèches…) rastérisés en PNG via
-  LibreOffice (`soffice`, un seul export PDF pour toute la présentation) : `medias/s<diapo>_r<n>.png`,
-  avec le fond uni de la diapositive rendu transparent. `--sans-raster` désactive ; sans `soffice`
+  LibreOffice (`soffice`, un seul export PDF pour toute la présentation) : `medias/s<diapo>_r<n>.png`.
+  Le fond de chaque diapositive est remplacé par une couleur de chroma key dans la copie envoyée à
+  LibreOffice (deux rendus, sur #ff00fe puis #00ff01, dont la différence donne la transparence exacte de
+  chaque pixel : ombres et anticrénelage compris) ; lignes et connecteurs sont rastérisés de la même façon. `--sans-raster` désactive ; sans `soffice`
   dans le PATH, ces objets sont ignorés avec un avertissement.
 - Tout ce qui n'est pas géré devient un commentaire `<!-- non converti : … -->` et un avertissement
   sur stderr ; aucune exception n'interrompt la conversion.
@@ -62,6 +64,10 @@ EFFETS_ENTREE: dict[int, str | dict[int, str]] = {
     42: "fade-up", 47: "fade-up",
 }
 
+# Classe reveal.js pour un effet d'accentuation (presetID) ; 6 = agrandir/rétrécir, 9 = transparence.
+EFFETS_EMPH: dict[int, str] = {6: "grow", 9: "semi-fade-out"}
+EMPH_DEFAUT = "grow"
+
 TRANSITIONS = {
     "fade": "fade",
     "push": "slide", "wipe": "slide", "cover": "slide", "pull": "slide",
@@ -73,7 +79,10 @@ TAILLES_DEFAUT_PT = {"titre": 44, "corps": 24, "autre": 18}
 # Formes automatiques rendues en CSS ; toute autre forme automatique est rastérisée.
 FORMES_SIMPLES = (MSO_SHAPE.RECTANGLE, MSO_SHAPE.ROUNDED_RECTANGLE, MSO_SHAPE.OVAL)
 MARGE_RASTER = 4  # px autour de la boîte englobante d'un objet rastérisé
-SEUIL_TRANSPARENCE = 12  # distance RVB en deçà de laquelle un pixel du fond devient transparent
+TAILLE_MIN_RASTER = 8  # px : largeur/hauteur minimale de la découpe (lignes fines)
+CHROMA_KEY = (0xFF, 0x00, 0xFE)  # fond imposé aux diapositives envoyées à LibreOffice (premier rendu)
+CHROMA_KEY_2 = (0x00, 0xFF, 0x01)  # second rendu : les deux fonds donnent la transparence exacte (ombres…)
+SEUIL_TRANSPARENCE = 24  # distance RVB au chroma key en deçà de laquelle un pixel devient transparent
 
 
 # --------------------------------------------------------------------------------------------------
@@ -357,6 +366,19 @@ def alignement(chaine: list, niveau: int, pPr) -> str | None:
     return {"l": "left", "ctr": "center", "r": "right", "just": "justify", "dist": "justify"}.get(algn)
 
 
+def retraits(ctx: Contexte, chaine: list, niveau: int, pPr) -> list[str]:
+    """Retrait gauche (a:pPr/@marL → padding-left) et retrait de première ligne (@indent → text-indent)
+    d'un paragraphe sans puce, locaux ou hérités de a:lstStyle / du masque."""
+    props = []
+    marL = propriete_niveau(chaine, niveau, "@marL", pPr)
+    if marL is not None and int(marL):
+        props.append(f"padding-left:{ctx.px(Emu(int(marL)))}px")
+    indent = propriete_niveau(chaine, niveau, "@indent", pPr)
+    if indent is not None and int(indent):
+        props.append(f"text-indent:{ctx.px(Emu(int(indent)))}px")
+    return props
+
+
 def body_pr_herite(forme, chemin: str):
     """Attribut/élément de a:bodyPr sur la forme puis ses placeholders de base."""
     courant = forme
@@ -401,7 +423,9 @@ def style_run(ctx: Contexte, theme: dict[str, str], rPr, echelle: float) -> str:
     if couleur:
         props.append(f"color:{couleur}")
     latin = rPr.find("a:latin", NS)
-    if latin is not None and latin.get("typeface") and not latin.get("typeface").startswith("+"):
+    latin_nom = latin.get("typeface", "") if latin is not None else ""
+    # Un nom de police sans lettre (« 22 ») est une valeur aberrante : on ne la reprend pas.
+    if latin_nom and not latin_nom.startswith("+") and re.search(r"[A-Za-z]", latin_nom):
         props.append(f"font-family:'{latin.get('typeface')}'")
     return ";".join(props)
 
@@ -473,6 +497,8 @@ def paragraphes_html(ctx: Contexte, forme, masque, fragments_par: dict[int, tupl
         algn = alignement(chaine, niveau, pPr)
         if algn:
             props.append(f"text-align:{algn}")
+        if not puce:
+            props += retraits(ctx, chaine, niveau, pPr)
         fragment = fragments_par.get(i)
         attributs = f' style="{attr(";".join(props))}"'
         if fragment:
@@ -704,6 +730,14 @@ def forme_vers_html(ctx: Contexte, forme, masque, repere: Repere, anims: "Animat
 def _forme_vers_html(ctx, forme, masque, repere, anims, ids, indent) -> list[str]:
     genre = genre_forme(forme)
     nom = forme.name or ""
+    raster = ctx.rasters.get((ctx.diapo, forme.shape_id)) if ctx.rasters else None
+    if raster is not None:
+        chemin, (left, top, width, height), _ = raster
+        ids[0] += 1
+        style = [f"left:{left}px", f"top:{top}px", f"width:{width}px", f"height:{height}px"]
+        return [indent + f"<!-- rastérisé : {echapper_commentaire(nom)} -->",
+                indent + balise_el("img", "el image", f"e{ids[0]}", style, anims.fragment_forme(forme.shape_id),
+                                   f' data-raster="1" src="{attr(chemin)}" alt="{attr(nom)}"') + ">"]
     if genre == "groupe":
         lignes = []
         sous_repere = repere.compose(forme)
@@ -713,7 +747,7 @@ def _forme_vers_html(ctx, forme, masque, repere, anims, ids, indent) -> list[str
             lignes.extend(forme_vers_html(ctx, enfant, masque, sous_repere, anims.herite(forme.shape_id, enfant.shape_id), ids, indent))
         return lignes
     if genre in ("connecteur", "ligne"):
-        return [indent + f"<!-- ligne/connecteur « {echapper_commentaire(nom)} » ignoré -->"]
+        return [indent + ctx.avertir(f"ligne/connecteur « {nom} » non rastérisé : ignoré")]
 
     position = geometrie(ctx, forme, repere)
     if position is None:
@@ -809,6 +843,35 @@ def image_vers_html(ctx, forme, position, ident, fragment, indent) -> list[str]:
     return lignes
 
 
+def style_cellule(ctx: Contexte, theme: dict[str, str], cellule) -> str:
+    """CSS d'une cellule de tableau : fond uni explicite (a:tcPr/a:solidFill), bordures, alignement vertical."""
+    tcPr = cellule._tc.find("a:tcPr", NS)
+    props = ["padding:4px 8px"]
+    bordures = {}
+    if tcPr is not None:
+        couleur = couleur_element(ctx, theme, tcPr.find("a:solidFill", NS))
+        if couleur:
+            props.append(f"background:{couleur}")
+        for cote, css in (("lnL", "left"), ("lnR", "right"), ("lnT", "top"), ("lnB", "bottom")):
+            ln = tcPr.find(f"a:{cote}", NS)
+            if ln is None:
+                continue
+            if ln.find("a:noFill", NS) is not None:
+                bordures[css] = "none"
+            else:
+                couleur_ln = couleur_element(ctx, theme, ln.find("a:solidFill", NS)) or "#888"
+                bordures[css] = f"{max(1, ctx.px(int(ln.get('w', '9525'))))}px solid {couleur_ln}"
+        anchor = tcPr.get("anchor")
+        if anchor in ("t", "ctr", "b"):
+            props.append("vertical-align:" + {"t": "top", "ctr": "middle", "b": "bottom"}[anchor])
+    if bordures and len(set(bordures.values())) == 1 and len(bordures) == 4:
+        props.append(f"border:{next(iter(bordures.values()))}")
+    else:
+        props.append("border:1px solid #888")
+        props += [f"border-{cote}:{valeur}" for cote, valeur in bordures.items()]
+    return ";".join(props)
+
+
 def tableau_vers_html(ctx, forme, theme, position, ident, fragment, indent) -> list[str]:
     table = forme.table
     lignes = [indent + balise_el("div", "el texte", ident, position, fragment) + ">",
@@ -826,10 +889,265 @@ def tableau_vers_html(ctx, forme, theme, position, ident, fragment, indent) -> l
             contenu = []
             for p in cellule.text_frame._txBody.findall("a:p", NS):
                 contenu.append(contenu_paragraphe(ctx, theme, p, 1.0) or "")
-            lignes.append(indent + f'      <td{extras} style="border:1px solid #888;padding:4px 8px">' + "<br>".join(contenu) + "</td>")
+            lignes.append(indent + f'      <td{extras} style="{attr(style_cellule(ctx, theme, cellule))}">' + "<br>".join(contenu) + "</td>")
         lignes.append(indent + "    </tr>")
     lignes += [indent + "  </table>", indent + "</div>"]
     return lignes
+
+
+# --------------------------------------------------------------------------------------------------
+# Rastérisation des objets complexes via LibreOffice
+# --------------------------------------------------------------------------------------------------
+
+
+def forme_automatique(forme):
+    """Type MSO_SHAPE d'une forme automatique (prstGeom), ou None (forme libre, image, autre)."""
+    try:
+        return forme.auto_shape_type
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def rotation_de(forme) -> float:
+    try:
+        return float(forme.rotation or 0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def groupe_simple(groupe) -> bool:
+    """Vrai si le groupe n'est pas tourné et ne contient que des zones de texte, des images et des
+    rectangles/ovales non tournés : il reste converti forme par forme (texte éditable)."""
+    if rotation_de(groupe):
+        return False
+    for enfant in groupe.shapes:
+        nom = etree.QName(enfant._element).localname
+        if nom == "pic":
+            continue
+        if nom != "sp":
+            return False
+        if enfant._element.find("p:spPr/a:custGeom", NS) is not None:
+            return False
+        if forme_automatique(enfant) not in FORMES_SIMPLES or rotation_de(enfant):
+            return False
+    return True
+
+
+def est_ligne(forme) -> bool:
+    """Connecteur (p:cxnSp) ou forme automatique de type ligne."""
+    return genre_forme(forme) in ("connecteur", "ligne")
+
+
+def marge_raster(ctx: Contexte, forme) -> int:
+    """Marge (px) autour de la boîte englobante : élargie pour une ligne selon son épaisseur (pointes de flèche)."""
+    if not est_ligne(forme):
+        return MARGE_RASTER
+    ln = forme._element.find("p:spPr/a:ln", NS)
+    largeur = int(ln.get("w", "9525")) if ln is not None else 9525
+    return max(MARGE_RASTER, math.ceil(ctx.px(largeur) * 1.5) + 2)
+
+
+def est_complexe(forme) -> bool:
+    """Objet à rastériser : groupe (sauf groupe simple), forme libre, forme automatique non rectangle/ovale,
+    ligne ou connecteur, SmartArt, graphique, OLE et tout graphicFrame autre qu'un tableau."""
+    nom = etree.QName(forme._element).localname
+    if nom == "grpSp":
+        return not groupe_simple(forme)
+    if nom == "graphicFrame":
+        return not getattr(forme, "has_table", False)
+    if nom == "cxnSp":
+        return True
+    if nom != "sp":
+        return False
+    if genre_forme(forme) == "ligne":
+        return True
+    if forme._element.find("p:spPr/a:custGeom", NS) is not None:
+        return True
+    genre = forme_automatique(forme)
+    return genre is not None and genre not in FORMES_SIMPLES
+
+
+def points_forme(forme, repere: Repere) -> list[tuple[float, float]]:
+    """Coins (EMU, repère de la diapositive) d'une forme et de ses enfants, rotations comprises."""
+    left, top, width, height = forme.left, forme.top, forme.width, forme.height
+    if left is None or top is None:
+        return []
+    x, y = repere.point(int(left), int(top))
+    w, h = repere.taille(int(width or 0), int(height or 0))
+    points = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+    if etree.QName(forme._element).localname == "grpSp":
+        sous_repere = repere.compose(forme)
+        for enfant in forme.shapes:
+            points.extend(points_forme(enfant, sous_repere))
+    angle = math.radians(rotation_de(forme))
+    if angle:
+        cx, cy = x + w / 2, y + h / 2
+        cos_a, sin_a = math.cos(angle), math.sin(angle)
+        points = [(cx + (px - cx) * cos_a - (py - cy) * sin_a, cy + (px - cx) * sin_a + (py - cy) * cos_a)
+                  for px, py in points]
+    return points
+
+
+def boite_scene(ctx: Contexte, forme) -> tuple[int, int, int, int] | None:
+    """Boîte englobante (x0, y0, x1, y1) en px de scène, avec la marge (au moins TAILLE_MIN_RASTER de côté),
+    ou None sans position connue."""
+    points = points_forme(forme, Repere())
+    if not points:
+        return None
+    marge = marge_raster(ctx, forme)
+    xs = [p[0] * ctx.facteur + ctx.decalage_x for p in points]
+    ys = [p[1] * ctx.facteur + ctx.decalage_y for p in points]
+    x0, y0 = math.floor(min(xs)) - marge, math.floor(min(ys)) - marge
+    x1, y1 = math.ceil(max(xs)) + marge, math.ceil(max(ys)) + marge
+    if x1 - x0 < TAILLE_MIN_RASTER:
+        manque = TAILLE_MIN_RASTER - (x1 - x0)
+        x0, x1 = x0 - manque // 2, x1 + (manque - manque // 2)
+    if y1 - y0 < TAILLE_MIN_RASTER:
+        manque = TAILLE_MIN_RASTER - (y1 - y0)
+        y0, y1 = y0 - manque // 2, y1 + (manque - manque // 2)
+    return (x0, y0, x1, y1)
+
+
+def exporter_pdf(pptx: Path, dossier: Path, soffice: str) -> Path:
+    """Convertit `pptx` en PDF dans `dossier` avec LibreOffice (profil utilisateur temporaire)."""
+    profil = (dossier / "profil").resolve()
+    commande = [soffice, "--headless", "--norestore", "--nologo", f"-env:UserInstallation={profil.as_uri()}",
+                "--convert-to", "pdf", "--outdir", str(dossier), str(pptx)]
+    resultat = subprocess.run(commande, capture_output=True, text=True, timeout=600, check=False)
+    pdf = dossier / (pptx.stem + ".pdf")
+    if resultat.returncode != 0 or not pdf.exists():
+        raise RuntimeError(f"soffice a échoué (code {resultat.returncode}) : {(resultat.stderr or resultat.stdout).strip()[:300]}")
+    return pdf
+
+
+def matter(np, rvb1, rvb2):
+    """Découpe RGBA à partir de deux rendus du même objet sur les deux fonds de chroma key.
+
+    P = α·F + (1 − α)·C pour chaque fond C : α = 1 − |P₁ − P₂| / |C₁ − C₂|, F = (P₁ − (1 − α)·C₁) / α.
+    Ombres, anticrénelage et remplissages translucides deviennent de la transparence partielle. Les pixels
+    à moins de SEUIL_TRANSPARENCE du premier chroma key sont transparents dans tous les cas, et eux seuls
+    le sont quand les deux rendus ne concordent pas (rendu sur un seul fond)."""
+    rvb1 = rvb1.astype(np.float32)
+    c1 = np.array(CHROMA_KEY, dtype=np.float32)
+    distance = np.sqrt(((rvb1 - c1) ** 2).sum(axis=2))
+    transparent = distance < SEUIL_TRANSPARENCE
+    h, w = transparent.shape
+    if rvb2 is None or rvb2.shape != rvb1.shape:
+        alpha = np.where(transparent, 0.0, 1.0)
+        couleur = rvb1
+    else:
+        c2 = np.array(CHROMA_KEY_2, dtype=np.float32)
+        ecart = np.sqrt(((rvb1 - rvb2.astype(np.float32)) ** 2).sum(axis=2))
+        alpha = np.clip(1.0 - ecart / float(np.sqrt(((c1 - c2) ** 2).sum())), 0.0, 1.0)
+        alpha = np.where(alpha > 0.97, 1.0, alpha)  # bruit de rendu : pixel franchement opaque
+        alpha = np.where(transparent | (alpha < 0.03), 0.0, alpha)
+        couleur = np.where((alpha > 0)[:, :, None],
+                           np.clip((rvb1 - (1 - alpha)[:, :, None] * c1) / np.maximum(alpha, 1e-3)[:, :, None], 0, 255),
+                           rvb1)
+    decoupe = np.empty((h, w, 4), dtype=np.uint8)
+    decoupe[:, :, :3] = couleur.astype(np.uint8)
+    decoupe[:, :, 3] = np.round(alpha * 255).astype(np.uint8)
+    return decoupe
+
+
+def rasteriser(ctx: Contexte, pptx: Path, soffice: str) -> None:
+    """Deux passages LibreOffice pour toute la présentation : copies du .pptx réduites aux objets complexes
+    sur chacun des deux fonds de chroma key, export PDF, rendu de chaque page à l'échelle de la scène et
+    découpe de chaque objet en PNG avec sa transparence."""
+    try:
+        import numpy as np
+        from PIL import Image
+
+        try:
+            import pymupdf
+        except ImportError:  # noqa: SIM105
+            import fitz as pymupdf
+    except ImportError as exc:
+        ctx.avertir(f"rastérisation impossible ({exc}) : objets complexes ignorés")
+        return
+    from pptx.dml.color import RGBColor
+
+    cibles: dict[int, list[tuple[int, str, tuple[int, int, int, int]]]] = {}
+    for numero, slide in enumerate(ctx.prs.slides, start=1):
+        ctx.diapo = numero
+        for forme in slide.shapes:
+            try:
+                if not est_complexe(forme):
+                    continue
+                boite = boite_scene(ctx, forme)
+                if boite is None:
+                    continue
+                cibles.setdefault(numero, []).append((forme.shape_id, forme.name or "", boite))
+            except Exception as exc:  # noqa: BLE001
+                ctx.avertir(f"objet « {getattr(forme, 'name', '?')} » : analyse impossible ({exc})")
+    ctx.diapo = 0
+    if not cibles:
+        return
+    with tempfile.TemporaryDirectory(prefix="pptx2reveal-") as tmp:
+        dossier = Path(tmp)
+        docs = []
+        prs2 = None
+        for suffixe, chroma in (("a", CHROMA_KEY), ("b", CHROMA_KEY_2)):
+            copie = dossier / f"raster_{suffixe}.pptx"
+            prs2 = Presentation(str(pptx))
+            for numero, slide in enumerate(prs2.slides, start=1):
+                garder = {sid for sid, _, _ in cibles.get(numero, [])}
+                for forme in list(slide.shapes):
+                    if forme.shape_id not in garder:
+                        el = forme._element
+                        el.getparent().remove(el)
+                slide._element.attrib.pop("show", None)  # les diapositives masquées doivent être exportées aussi
+                # Fond de chroma key explicite (il masque aussi un fond image hérité de la disposition/du masque).
+                slide.background.fill.solid()
+                slide.background.fill.fore_color.rgb = RGBColor(*chroma)
+            prs2.save(str(copie))
+            try:
+                docs.append(pymupdf.open(str(exporter_pdf(copie, dossier, soffice))))
+            except Exception as exc:  # noqa: BLE001
+                if not docs:
+                    ctx.avertir(f"rastérisation impossible ({exc}) : objets complexes ignorés")
+                    return
+                ctx.avertir(f"second rendu LibreOffice impossible ({exc}) : transparence par simple chroma key")
+        doc = docs[0]
+        nb_pages = doc.page_count
+        nb_diapos = len(prs2.slides._sldIdLst)
+        if nb_pages != nb_diapos:
+            ctx.avertir(f"PDF LibreOffice de {nb_pages} page(s) pour {nb_diapos} diapositive(s) : rastérisation partielle")
+        largeur_scene = ctx.largeur * ctx.facteur
+        for numero, liste in sorted(cibles.items()):
+            if numero > nb_pages:
+                break
+            ctx.diapo = numero
+            page = doc[numero - 1]
+            echelle = largeur_scene / page.rect.width
+            matrice = pymupdf.Matrix(echelle, echelle)
+            pix = page.get_pixmap(matrix=matrice, alpha=False)
+            image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)[:, :, :3]
+            image2 = None
+            if len(docs) > 1 and numero <= docs[1].page_count:
+                pix2 = docs[1][numero - 1].get_pixmap(matrix=matrice, alpha=False)
+                image2 = np.frombuffer(pix2.samples, dtype=np.uint8).reshape(pix2.height, pix2.width, pix2.n)[:, :, :3]
+                if image2.shape != image.shape:
+                    image2 = None
+            for n, (sid, nom, (x0, y0, x1, y1)) in enumerate(liste, start=1):
+                x0, y0 = max(0, round(x0 - ctx.decalage_x)), max(0, round(y0 - ctx.decalage_y))
+                x1, y1 = min(pix.width, round(x1 - ctx.decalage_x)), min(pix.height, round(y1 - ctx.decalage_y))
+                if x1 - x0 < 1 or y1 - y0 < 1:
+                    ctx.avertir(f"objet « {nom} » hors de la diapositive : non rastérisé")
+                    continue
+                # Le fond réel de la diapositive, lui, est restitué par data-background-* de la section.
+                decoupe = matter(np, image[y0:y1, x0:x1], image2[y0:y1, x0:x1] if image2 is not None else None)
+                tampon = Image.fromarray(np.ascontiguousarray(decoupe), "RGBA")
+                ctx.medias.mkdir(parents=True, exist_ok=True)
+                fichier = f"s{numero}_r{n}.png"
+                tampon.save(ctx.medias / fichier)
+                chemin = f"{ctx.prefixe}/{fichier}" if ctx.prefixe else fichier
+                boite = (round(x0 + ctx.decalage_x), round(y0 + ctx.decalage_y), x1 - x0, y1 - y0)
+                ctx.rasters[(numero, sid)] = (chemin, boite, nom)
+                ctx.nb_rasters += 1
+        ctx.diapo = 0
+        for d in docs:
+            d.close()
 
 
 # --------------------------------------------------------------------------------------------------
@@ -866,7 +1184,7 @@ class Animations:
         if "sortie" in effet:
             return ("fragment fade-out", effet["sortie"])
         if "emph" in effet:
-            return ("fragment grow", effet["emph"])
+            return (f"fragment {effet.get('classe_emph', EMPH_DEFAUT)}", effet["emph"])
         return None
 
     def fragment_forme(self, spid: int) -> tuple[str, int] | None:
@@ -950,6 +1268,7 @@ def lire_animations(ctx: Contexte, slide, nb_paragraphes: dict[int, int]) -> Ani
                     if "entree" in effet or "emph" in effet:
                         continue
                     effet["emph"] = index
+                    effet["classe_emph"] = EFFETS_EMPH.get(preset_id, EMPH_DEFAUT)
                 ctx.nb_animations += 1
     return anims
 
@@ -978,8 +1297,9 @@ def transition(slide) -> str | None:
     return "fade"
 
 
-def fond(ctx: Contexte, slide, masque) -> str:
-    """Attributs data-background-* de la section (couleur de la diapositive, sinon image du layout/masque)."""
+def nature_fond(ctx: Contexte, slide, masque) -> tuple[str, object] | None:
+    """Fond de la diapositive (diapositive, puis disposition, puis masque) :
+    ("couleur", "#rrggbb"), ("image", (partie source, rId)), ("degrade", "#rrggbb") ou None."""
     theme = theme_du_masque(ctx, masque)
     for source in (slide, slide.slide_layout, masque):
         bg = source._element.find("p:cSld/p:bg", NS)
@@ -990,31 +1310,45 @@ def fond(ctx: Contexte, slide, masque) -> str:
             solid = bgPr.find("a:solidFill", NS)
             if solid is not None:
                 couleur = couleur_element(ctx, theme, solid)
-                return f' data-background-color="{couleur}"' if couleur else ""
+                return ("couleur", couleur) if couleur else None
             blip = bgPr.find("a:blipFill/a:blip", NS)
             if blip is not None and blip.get(qn("r:embed")):
-                try:
-                    part = source.part.related_part(blip.get(qn("r:embed")))
-                    ctx.compteur_fonds += 1
-                    ext = (getattr(part, "ext", None) or "png").lstrip(".")
-                    chemin = ctx.ecrire_media(f"fond_{ctx.compteur_fonds}.{ext}", part.blob)
-                    return f' data-background-image="{attr(chemin)}" data-background-size="cover"'
-                except Exception as exc:  # noqa: BLE001
-                    ctx.avertir(f"fond image non extrait ({exc})")
-                    return ""
+                return ("image", (source.part, blip.get(qn("r:embed"))))
             grad = bgPr.find("a:gradFill/a:gsLst/a:gs", NS)
             if grad is not None:
                 couleur = couleur_element(ctx, theme, grad)
                 if couleur:
-                    ctx.avertir("fond dégradé approximé par sa première couleur")
-                    return f' data-background-color="{couleur}"'
-            return ""
+                    return ("degrade", couleur)
+            return None
         bgRef = bg.find("p:bgRef", NS)
         if bgRef is not None:
             couleur = couleur_element(ctx, theme, bgRef)
             if couleur and bgRef.get("idx", "0") != "0":
-                return f' data-background-color="{couleur}"'
-    return ""
+                return ("couleur", couleur)
+    return None
+
+
+def fond(ctx: Contexte, slide, masque) -> str:
+    """Attributs data-background-* de la section (couleur de la diapositive, sinon image du layout/masque)."""
+    nature = nature_fond(ctx, slide, masque)
+    if nature is None:
+        return ""
+    genre, valeur = nature
+    if genre == "couleur":
+        return f' data-background-color="{valeur}"'
+    if genre == "degrade":
+        ctx.avertir("fond dégradé approximé par sa première couleur")
+        return f' data-background-color="{valeur}"'
+    partie, rid = valeur
+    try:
+        part = partie.related_part(rid)
+        ctx.compteur_fonds += 1
+        ext = (getattr(part, "ext", None) or "png").lstrip(".")
+        chemin = ctx.ecrire_media(f"fond_{ctx.compteur_fonds}.{ext}", part.blob)
+        return f' data-background-image="{attr(chemin)}" data-background-size="cover"'
+    except Exception as exc:  # noqa: BLE001
+        ctx.avertir(f"fond image non extrait ({exc})")
+        return ""
 
 
 def notes_html(ctx: Contexte, slide, indent: str) -> list[str]:
@@ -1084,9 +1418,20 @@ def diapositive_vers_section(ctx: Contexte, slide, numero: int, qr: bool) -> str
 # --------------------------------------------------------------------------------------------------
 
 
-def convertir(pptx: Path, sortie: Path, medias: Path, prefixe: str, qr_premiere: bool) -> Contexte:
+def convertir(pptx: Path, sortie: Path, medias: Path, prefixe: str, qr_premiere: bool,
+              raster: bool = True) -> Contexte:
     prs = Presentation(str(pptx))
     ctx = Contexte(prs, medias, prefixe)
+    if raster:
+        soffice = shutil.which("soffice")
+        if soffice:
+            try:
+                rasteriser(ctx, pptx, soffice)
+            except Exception as exc:  # noqa: BLE001
+                ctx.diapo = 0
+                ctx.avertir(f"rastérisation impossible ({type(exc).__name__} : {exc}) : objets complexes ignorés")
+        else:
+            ctx.avertir("LibreOffice (soffice) introuvable : groupes, SmartArt, graphiques et formes complexes ignorés")
     sections = []
     for numero, slide in enumerate(prs.slides, start=1):
         try:
@@ -1102,6 +1447,8 @@ def convertir(pptx: Path, sortie: Path, medias: Path, prefixe: str, qr_premiere:
         f"taille d'origine {largeur_in:.2f} × {hauteur_in:.2f} pouces ({ctx.largeur} × {ctx.hauteur} EMU),",
         f"facteur {ctx.facteur * 914400:.2f} px/pouce, 1 pt = {ctx.facteur * 12700:.2f} px.",
     ]
+    if ctx.nb_rasters:
+        entete.append(f"{ctx.nb_rasters} objet(s) rastérisé(s) via LibreOffice (medias/s<diapo>_r<n>.png).")
     if abs(ctx.decalage_y) >= 1 or abs(ctx.decalage_x) >= 1:
         entete.append(f"Ratio différent de 16:9 : contenu centré dans la scène 1920 × 1080 "
                       f"(décalage {ctx.decalage_x:+.0f} px horizontal, {ctx.decalage_y:+.0f} px vertical).")
@@ -1121,16 +1468,18 @@ def principal(argv: list[str] | None = None) -> int:
     p.add_argument("--medias", type=Path, default=None, help="dossier d'extraction des images (défaut : <sortie>/../medias)")
     p.add_argument("--prefixe-medias", default="medias", help="préfixe des src dans le HTML (défaut : medias)")
     p.add_argument("--qr-premiere", action="store_true", help="ajouter data-qr sur la première section")
+    p.add_argument("--sans-raster", action="store_true",
+                   help="ne pas rastériser les objets complexes via LibreOffice (groupes, SmartArt, graphiques…)")
     args = p.parse_args(argv)
     medias = args.medias if args.medias is not None else args.sortie.parent / "medias"
     try:
-        ctx = convertir(args.pptx, args.sortie, medias, args.prefixe_medias, args.qr_premiere)
+        ctx = convertir(args.pptx, args.sortie, medias, args.prefixe_medias, args.qr_premiere, not args.sans_raster)
     except Exception as exc:  # noqa: BLE001
         print(f"erreur : impossible de lire {args.pptx} : {exc}", file=sys.stderr)
         return 1
     nb = len(ctx.prs.slides._sldIdLst)
-    print(f"{nb} diapositive(s), {ctx.nb_images} image(s), {ctx.nb_animations} animation(s), "
-          f"{len(ctx.avertissements)} avertissement(s) → {args.sortie}")
+    print(f"{nb} diapositive(s), {ctx.nb_images} image(s), {ctx.nb_rasters} objet(s) rastérisé(s), "
+          f"{ctx.nb_animations} animation(s), {len(ctx.avertissements)} avertissement(s) → {args.sortie}")
     return 0
 
 

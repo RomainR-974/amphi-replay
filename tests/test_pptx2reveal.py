@@ -171,3 +171,184 @@ def test_images_formes_tableau_notes(conversion):
 
 def test_fichier_inexistant(tmp_path):
     assert pptx2reveal.principal([str(tmp_path / "absent.pptx"), "--sortie", str(tmp_path / "s.html")]) == 1
+
+
+def test_groupe_tourne_rasterise(tmp_path):
+    """Un groupe tourné contenant une flèche est rastérisé en PNG transparent via LibreOffice."""
+    import shutil
+
+    if not shutil.which("soffice"):
+        pytest.skip("LibreOffice (soffice) absent")
+    from PIL import Image
+
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    d = prs.slides.add_slide(prs.slide_layouts[6])
+    groupe = d.shapes.add_group_shape()
+    fleche = groupe.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(3), Inches(2), Inches(4), Inches(1.5))
+    fleche.fill.solid()
+    fleche.fill.fore_color.rgb = RGBColor(0x00, 0x60, 0xA0)
+    groupe.rotation = 30
+    chemin = tmp_path / "groupe.pptx"
+    prs.save(chemin)
+    sortie = tmp_path / "deck" / "slides.html"
+    assert pptx2reveal.principal([str(chemin), "--sortie", str(sortie)]) == 0
+    html = sortie.read_text(encoding="utf-8")
+    assert "<!-- rastérisé : " in html and "1 objet(s) rastérisé(s)" in html
+    balise = re.search(r'<img class="el image" data-raster="1" src="medias/s1_r1.png"[^>]*style="([^"]*)"', html)
+    assert balise, html
+    assert "rotate" not in balise.group(1)
+    largeur = int(re.search(r"width:(\d+)px", balise.group(1)).group(1))
+    hauteur = int(re.search(r"height:(\d+)px", balise.group(1)).group(1))
+    # Boîte tournée de 30° : plus large que haute, et plus haute que la flèche non tournée (1,5 pouce ≈ 216 px).
+    assert largeur > hauteur > 216
+    png = sortie.parent / "medias" / "s1_r1.png"
+    assert png.exists()
+    image = Image.open(png).convert("RGBA")
+    assert image.width > 20 and image.height > 20 and (image.width, image.height) == (largeur, hauteur)
+    alphas = set(image.getchannel("A").tobytes())
+    assert 0 in alphas and 255 in alphas, "le PNG doit contenir des pixels transparents et des pixels opaques"
+    assert "rotation du groupe ignorée" not in html
+    # Sans rastérisation : conversion actuelle (flèche en rectangle, avertissement de rotation).
+    sortie2 = tmp_path / "deck2" / "slides.html"
+    assert pptx2reveal.principal([str(chemin), "--sortie", str(sortie2), "--sans-raster"]) == 0
+    html2 = sortie2.read_text(encoding="utf-8")
+    assert "data-raster" not in html2 and "rotation du groupe ignorée" in html2
+
+
+def test_couleurs_cellules_tableau(tmp_path):
+    """Fond uni des cellules (a:tcPr/a:solidFill), couleur et gras des runs, repris sur les <td>."""
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    d = prs.slides.add_slide(prs.slide_layouts[6])
+    tableau = d.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(6), Inches(2)).table
+    entete = tableau.cell(0, 0)
+    entete.text = "Champ"
+    entete.fill.solid()
+    entete.fill.fore_color.rgb = RGBColor(0x2E, 0x3A, 0x7C)
+    run = entete.text_frame.paragraphs[0].runs[0]
+    run.font.bold = True
+    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    vert = tableau.cell(1, 0)
+    vert.text = "Autorisé"
+    vert.fill.solid()
+    vert.fill.fore_color.rgb = RGBColor(0xEA, 0xF4, 0xEA)
+    rose = tableau.cell(1, 1)
+    rose.text = "Interdit"
+    rose.fill.solid()
+    rose.fill.fore_color.rgb = RGBColor(0xFB, 0xEA, 0xEA)
+    chemin = tmp_path / "tableau.pptx"
+    prs.save(chemin)
+    sortie = tmp_path / "deck" / "slides.html"
+    assert pptx2reveal.principal([str(chemin), "--sortie", str(sortie), "--sans-raster"]) == 0
+    html = sortie.read_text(encoding="utf-8")
+    cellules = re.findall(r"<td[^>]*>.*?</td>", html)
+    assert len(cellules) == 4
+    assert "background:#2e3a7c" in cellules[0] and "font-weight:700" in cellules[0] and "color:#ffffff" in cellules[0]
+    assert "background:#eaf4ea" in cellules[2] and "Autorisé" in cellules[2]
+    assert "background:#fbeaea" in cellules[3] and "Interdit" in cellules[3]
+
+
+def test_retraits_paragraphe(tmp_path):
+    """a:pPr/@marL et @indent (locaux ou hérités de a:lstStyle) deviennent padding-left / text-indent."""
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    d = prs.slides.add_slide(prs.slide_layouts[6])
+    zone = d.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2))
+    zone.text_frame.text = "Retrait local"
+    pPr = zone.text_frame.paragraphs[0]._p.get_or_add_pPr()
+    pPr.set("marL", "457200")  # 0,5 pouce : 72 px à l'échelle 16:9 (144 px/pouce)
+    pPr.set("indent", "-228600")
+    zone2 = d.shapes.add_textbox(Inches(1), Inches(4), Inches(8), Inches(2))
+    zone2.text_frame.text = "Retrait hérité"
+    lst = zone2.text_frame._txBody.find(f"{{{pptx2reveal.NS['a']}}}lstStyle")
+    lst.append(etree.fromstring(f'<a:lvl1pPr xmlns:a="{pptx2reveal.NS["a"]}" marL="914400"/>'))
+    chemin = tmp_path / "retraits.pptx"
+    prs.save(chemin)
+    sortie = tmp_path / "deck" / "slides.html"
+    assert pptx2reveal.principal([str(chemin), "--sortie", str(sortie), "--sans-raster"]) == 0
+    html = sortie.read_text(encoding="utf-8")
+    local = re.search(r"<p[^>]*>Retrait local</p>", html).group(0)
+    assert "padding-left:72px" in local and "text-indent:-36px" in local
+    herite = re.search(r"<p[^>]*>Retrait hérité</p>", html).group(0)
+    assert "padding-left:144px" in herite and "text-indent" not in herite
+
+
+def test_accentuation_transparence(tmp_path):
+    """Un effet d'accentuation « transparence » (presetID 9) devient semi-fade-out, pas grow (qui agrandit)."""
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    d = prs.slides.add_slide(prs.slide_layouts[6])
+    zone = d.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2))
+    zone.text_frame.text = "Texte estompé"
+    timing = timing_xml(zone.shape_id, zone.shape_id).replace('presetID="10" presetClass="entr"', 'presetID="9" presetClass="emph"')
+    timing = re.sub(r'<p:par><p:cTn id="7".*?</p:par>\s*</p:childTnLst></p:cTn></p:seq>', "</p:childTnLst></p:cTn></p:seq>", timing, flags=re.S)
+    timing = timing.replace(f'<p:bldP spid="{zone.shape_id}" grpId="0" build="p"/>', "")
+    d._element.append(etree.fromstring(timing))
+    chemin = tmp_path / "emph.pptx"
+    prs.save(chemin)
+    sortie = tmp_path / "deck" / "slides.html"
+    assert pptx2reveal.principal([str(chemin), "--sortie", str(sortie), "--sans-raster"]) == 0
+    html = sortie.read_text(encoding="utf-8")
+    assert 'class="el texte fragment semi-fade-out" data-fragment-index="0"' in html
+    assert "grow" not in html
+
+
+def test_ligne_boite_minimale():
+    """Une ligne horizontale (hauteur 0) est un objet complexe dont la boîte fait au moins 8 px de haut."""
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    d = prs.slides.add_slide(prs.slide_layouts[6])
+    ligne = d.shapes.add_connector(1, Inches(2), Inches(3), Inches(8), Inches(3))  # MSO_CONNECTOR.STRAIGHT
+    ctx = pptx2reveal.Contexte(prs, Path("/nonexistent"), "medias")
+    assert pptx2reveal.est_complexe(ligne)
+    x0, y0, x1, y1 = pptx2reveal.boite_scene(ctx, ligne)
+    assert y1 - y0 >= pptx2reveal.TAILLE_MIN_RASTER and x1 - x0 > 800
+    assert y0 < 432 < y1  # la ligne (3 pouces → 432 px) est dans la boîte
+
+
+def test_chroma_key_et_ligne_rasterisees(tmp_path):
+    """Rastérisation par chroma key : une flèche blanche sur une diapositive blanche reste opaque (seul le
+    fond de chroma key devient transparent) ; une LINE devient un <img data-raster="1"> avec son fragment."""
+    import shutil
+
+    if not shutil.which("soffice"):
+        pytest.skip("LibreOffice (soffice) absent")
+    from PIL import Image
+
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    d = prs.slides.add_slide(prs.slide_layouts[6])
+    d.background.fill.solid()
+    d.background.fill.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    fleche = d.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(1), Inches(1), Inches(4), Inches(2))
+    fleche.fill.solid()
+    fleche.fill.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    fleche.line.fill.background()
+    ligne = d.shapes.add_connector(1, Inches(1), Inches(5), Inches(9), Inches(5))
+    ligne.line.color.rgb = RGBColor(0xFF, 0x00, 0x00)
+    ligne.line.width = Inches(0.05)
+    d._element.append(etree.fromstring(timing_xml(fleche.shape_id, ligne.shape_id).replace(
+        f'<p:bldP spid="{fleche.shape_id}" grpId="0" build="p"/>', "")))
+    chemin = tmp_path / "chroma.pptx"
+    prs.save(chemin)
+    sortie = tmp_path / "deck" / "slides.html"
+    assert pptx2reveal.principal([str(chemin), "--sortie", str(sortie)]) == 0
+    html = sortie.read_text(encoding="utf-8")
+    assert "2 objet(s) rastérisé(s)" in html
+    assert 'data-background-color="#ffffff"' in html
+    # Flèche blanche : son centre est opaque et blanc, le coin supérieur gauche (hors de la pointe) transparent.
+    png = Image.open(sortie.parent / "medias" / "s1_r1.png").convert("RGBA")
+    assert png.getpixel((png.width // 2, png.height // 2)) == (255, 255, 255, 255)
+    assert png.getpixel((png.width - 2, 1))[3] == 0  # coin : au-dessus de la pointe de la flèche
+    # Ligne : image rastérisée, fragment d'entrée, boîte d'au moins 8 px de haut, pixels rouges opaques.
+    balise = re.search(r'<img class="el image fragment fade-up" data-fragment-index="1" data-raster="1" '
+                       r'src="medias/s1_r2.png"[^>]*style="([^"]*)"', html)
+    assert balise, html
+    hauteur = int(re.search(r"height:(\d+)px", balise.group(1)).group(1))
+    assert hauteur >= 8
+    ligne_png = Image.open(sortie.parent / "medias" / "s1_r2.png").convert("RGBA")
+    r, g, b, a = ligne_png.getpixel((ligne_png.width // 2, ligne_png.height // 2))
+    assert a == 255 and r > 200 and g < 60 and b < 60
+    assert ligne_png.getpixel((ligne_png.width // 2, 0))[3] == 0
+    assert "ignoré" not in html
