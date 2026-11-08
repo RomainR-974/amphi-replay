@@ -85,9 +85,13 @@ n'est pas modifié : les deux systèmes coexistent.
 2. OBS ouvert, lancer `python obs/configurer_replay_interactif.py --tester` (mot de passe lu dans
    `lancer-seance.local.bat`) : filtre Source Record sur la source caméra, en mode « Recording » (suit F9 et les
    diapositives `data-obs`), fichier `<date> camera.mkv` dans le dossier des captations, encodeur matériel
-   (**QuickSync** sur le PC 2 : il n'a pas de carte NVIDIA, NVENC indisponible), son = **piste 2 = micro seul**
-   (le son du bureau, du navigateur et de la caméra en est retiré ; la piste 1 de l'enregistrement habituel est intacte).
-   `--tester` enregistre 6 s et vérifie que les deux fichiers sont produits ; `--retirer` enlève le filtre.
+   (**QuickSync**, Intel ; NVENC seulement si OBS l'accepte : sur le PC 2, la RTX 4070 est refusée tant que le pilote
+   NVIDIA 555.97 n'est pas mis à jour, « outdated_driver » dans le journal d'OBS), son = **le micro seul** (option
+   « Different Audio » → Mic/Aux ; pistes audio d'OBS et enregistrement habituel inchangés).
+   `--tester` enregistre 6 s, vérifie que les deux fichiers sont produits et affiche leur volume (parler pendant l'essai) ;
+   `--retirer` enlève le filtre.
+   Ne pas changer le mode de la carte graphique (Armoury Crate) pendant qu'OBS est ouvert : OBS perd son périphérique
+   Direct3D (« Device Removed 887A0005 ») et n'enregistre plus rien jusqu'à son redémarrage.
 3. Le fichier caméra démarre 0,5 à 2 s après le principal (initialisation de l'encodeur) et s'arrête ≈ 0,5 s avant :
    l'heure exacte de début de chaque fichier est dans le journal d'OBS (`Writing file`, à la milliseconde).
 

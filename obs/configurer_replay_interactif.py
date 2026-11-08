@@ -13,8 +13,9 @@ Ce que fait le script (idempotent, rien n'est créé en double) :
     data-obs) et écrit « <date> camera.mkv » dans le dossier des captations, encodé en matériel (QuickSync / NVENC) ;
   - le fichier caméra démarre 0,5 à 2 s après le principal (initialisation de l'encodeur) : le journal d'OBS
     (« Writing file », à la milliseconde) donne ce décalage à la post-production ;
-  - son de ce fichier : piste audio 2 d'OBS, réservée au micro (le son du bureau est retiré de la piste 2) ;
-    l'enregistrement habituel (mode simple : piste 1) n'est pas modifié.
+  - son de ce fichier : le micro seul (option « Different Audio » de Source Record → la source Mic/Aux), sans le
+    son du bureau ; les pistes audio d'OBS et l'enregistrement habituel ne sont pas modifiés ;
+  - le résultat de --tester mesure aussi le son des deux fichiers (le micro doit être entendu dans les deux).
 Les scènes, sources et réglages de l'enregistrement composite ne sont pas touchés. Voir obs/README.md.
 """
 
@@ -33,12 +34,11 @@ from obs_quiz_bridge import Obs  # noqa: E402
 RACINE = Path(__file__).resolve().parent.parent
 NOM_FILTRE = "Enregistrement caméra (replay interactif)"
 SUFFIXE = "camera"
-PISTE_MICRO = 2
 # Clés du filtre Source Record 0.5 (record_mode 3 = « Recording » : suit l'enregistrement principal).
 MODE_ENREGISTREMENT = 3
 
 
-def reglages_filtre(dossier: str, encodeur: str) -> dict:
+def reglages_filtre(dossier: str, encodeur: str, micro: str) -> dict:
     return {
         "record_mode": MODE_ENREGISTREMENT,
         "path": dossier,
@@ -48,7 +48,8 @@ def reglages_filtre(dossier: str, encodeur: str) -> dict:
         "rate_control": "VBR",
         "bitrate": 3000,                # caméra seule (personne qui parle) : ≈ 2,7 Go pour 2 h
         "keyint_sec": 2,
-        "audio_track": PISTE_MICRO,
+        "different_audio": True,        # son pris sur une autre source que la caméra (qui n'en a pas)
+        "audio_source": micro,
         "audio_encoder": "ffmpeg_aac",
         "audio_bitrate": 192,
         "split_file": False,
@@ -78,30 +79,50 @@ async def source_camera(o: Obs, nom: str | None) -> str:
     return cameras[0]
 
 
-async def configurer(o: Obs, camera: str, encodeur: str) -> None:
+async def source_micro(o: Obs, nom: str | None) -> str:
+    """Micro : --micro, sinon « Mic/Aux » (micro global d'OBS), sinon la seule capture d'entrée audio."""
+    entrees = (await o.requete("GetInputList"))["inputs"]
+    noms = [i["inputName"] for i in entrees]
+    if nom:
+        if nom not in noms:
+            raise SystemExit(f"source micro « {nom} » introuvable")
+        return nom
+    if "Mic/Aux" in noms:
+        return "Mic/Aux"
+    micros = [i["inputName"] for i in entrees if i["inputKind"] == "wasapi_input_capture"]
+    if len(micros) != 1:
+        raise SystemExit(f"{len(micros)} micro(s) trouvé(s) {micros} : préciser --micro")
+    return micros[0]
+
+
+async def configurer(o: Obs, camera: str, micro: str, encodeur: str) -> None:
     sortie = (await o.requete("GetRecordDirectory"))["recordDirectory"]
     filtres = (await o.requete("GetSourceFilterList", {"sourceName": camera}))["filters"]
-    reglages = reglages_filtre(sortie, encodeur)
+    reglages = reglages_filtre(sortie, encodeur, micro)
     if any(f["filterName"] == NOM_FILTRE for f in filtres):
-        await o.requete("SetSourceFilterSettings", {"sourceName": camera, "filterName": NOM_FILTRE, "filterSettings": reglages, "overlay": True})
+        await o.requete("SetSourceFilterSettings", {"sourceName": camera, "filterName": NOM_FILTRE, "filterSettings": reglages, "overlay": False})
         print(f"filtre mis à jour sur « {camera} »")
     else:
         await o.requete("CreateSourceFilter", {"sourceName": camera, "filterName": NOM_FILTRE, "filterKind": "source_record_filter", "filterSettings": reglages})
         print(f"filtre créé sur « {camera} »")
     await o.requete("SetSourceFilterIndex", {"sourceName": camera, "filterName": NOM_FILTRE, "filterIndex": 0})
     await o.requete("SetSourceFilterEnabled", {"sourceName": camera, "filterName": NOM_FILTRE, "filterEnabled": True})
-    print(f"  → « <date> {SUFFIXE}.mkv » dans {sortie}, encodeur {encodeur}, son = piste {PISTE_MICRO}")
+    print(f"  → « <date> {SUFFIXE}.mkv » dans {sortie}, encodeur {encodeur}, son = « {micro} »")
 
-    # Piste 2 = micro seul : le son du bureau (et toute autre capture de sortie) en est retiré.
-    for entree in (await o.requete("GetInputList"))["inputs"]:
-        try:
-            pistes = (await o.requete("GetInputAudioTracks", {"inputName": entree["inputName"]}))["inputAudioTracks"]
-        except RuntimeError:
-            continue  # pas de son
-        voulu = entree["inputKind"] == "wasapi_input_capture"
-        if pistes.get(str(PISTE_MICRO)) != voulu:
-            await o.requete("SetInputAudioTracks", {"inputName": entree["inputName"], "inputAudioTracks": {str(PISTE_MICRO): voulu}})
-            print(f"  piste {PISTE_MICRO} : « {entree['inputName']} » {'ajouté' if voulu else 'retiré'}")
+
+def volume(fichier: Path) -> str:
+    """Volume moyen de la piste son (ffmpeg volumedetect), pour voir d'un coup d'œil si le micro a été enregistré."""
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg") or not fichier.exists():
+        return ""
+    err = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(fichier), "-vn", "-af", "volumedetect", "-f", "null", "-"],
+                         capture_output=True, text=True, errors="replace").stderr
+    m = re.search(r"mean_volume:\s*(-?[\d.]+) dB", err)
+    if not m:
+        return "(pas de son)"
+    db = float(m.group(1))
+    return f"(son moyen {db:.0f} dB{' : SILENCE' if db < -70 else ''})"
 
 
 async def tester(o: Obs) -> int:
@@ -116,8 +137,8 @@ async def tester(o: Obs) -> int:
     principal = (await o.requete("StopRecord")).get("outputPath")
     await asyncio.sleep(2)
     cameras = [f for f in sortie.glob(f"*{SUFFIXE}.mkv") if f.stat().st_mtime >= debut - 1]
-    print("  principal :", principal)
-    print("  caméra    :", cameras[0] if cameras else "AUCUN FICHIER")
+    print("  principal :", principal, volume(Path(principal)) if principal else "")
+    print("  caméra    :", cameras[0] if cameras else "AUCUN FICHIER", volume(cameras[0]) if cameras else "")
     return 0 if cameras else 1
 
 
@@ -135,6 +156,7 @@ async def principal(argv: list[str] | None = None) -> int:
     p.add_argument("--obs", default="ws://127.0.0.1:4455")
     p.add_argument("--obs-mdp", default=None, help="défaut : OBS_MDP de lancer-seance.local.bat")
     p.add_argument("--camera", default=None, help="nom de la source caméra (défaut : la seule source dshow)")
+    p.add_argument("--micro", default=None, help="nom de la source micro (défaut : Mic/Aux)")
     p.add_argument("--encodeur", default=encodeur_par_defaut(), help="qsv (Intel QuickSync), nvenc (NVIDIA), x264 (processeur)… ; défaut : nvenc si le pilote NVIDIA l'offre, sinon qsv")
     g = p.add_mutually_exclusive_group()
     g.add_argument("--tester", action="store_true", help="enregistre 6 s pour vérifier que le fichier caméra est produit")
@@ -151,7 +173,7 @@ async def principal(argv: list[str] | None = None) -> int:
         if a.retirer:
             await retirer(o, camera)
             return 0
-        await configurer(o, camera, a.encodeur)
+        await configurer(o, camera, await source_micro(o, a.micro), a.encodeur)
         return await tester(o) if a.tester else 0
     finally:
         await o.ws.close()
