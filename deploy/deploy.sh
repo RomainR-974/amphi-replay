@@ -6,6 +6,11 @@ DEST=/opt/amphi-replay
 cd "$DEST"
 git config --global --add safe.directory "$DEST" >/dev/null 2>&1 || true
 git pull --ff-only
+# Import PowerPoint depuis la page Présentations : LibreOffice Impress (rastérisation des objets complexes).
+if ! command -v soffice >/dev/null; then
+  echo "== installation de LibreOffice Impress (import PowerPoint)"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends libreoffice-impress >/dev/null || echo "!! LibreOffice non installé : import PowerPoint sans rastérisation"
+fi
 .venv/bin/pip install -q -r requirements.txt
 bash tools/fetch_reveal.sh
 mkdir -p "$DEST/data" "$DEST/presentations"
