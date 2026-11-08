@@ -34,3 +34,21 @@ else
   echo "{\"version\": \"$LOTTIE\"}" > "$DEST_LOTTIE/VERSION"
   echo "lottie-web $LOTTIE installé dans $DEST_LOTTIE"
 fi
+
+# Polices Marianne du Système de Design de l'État (thème « dsfr », deck/themes/dsfr.css).
+# Seules les polices sont copiées : le reste du paquet @gouvfr/dsfr n'est pas utilisé.
+DSFR="${DSFR_VERSION:-1.15.4}"
+DEST_DSFR="$RACINE/deck/vendor/dsfr"
+if [ -f "$DEST_DSFR/fonts/Marianne-Regular.woff2" ] && grep -q "\"version\": \"$DSFR\"" "$DEST_DSFR/VERSION" 2>/dev/null; then
+  echo "polices Marianne (dsfr $DSFR) déjà présentes"
+else
+  echo "téléchargement des polices Marianne (@gouvfr/dsfr $DSFR)…"
+  curl -fsSL "https://registry.npmjs.org/@gouvfr/dsfr/-/dsfr-$DSFR.tgz" -o "$TMP/dsfr.tgz"
+  mkdir -p "$TMP/d" && tar -xzf "$TMP/dsfr.tgz" -C "$TMP/d" --wildcards 'package/dist/fonts/Marianne-*.woff2'
+  rm -rf "$DEST_DSFR" && mkdir -p "$DEST_DSFR/fonts"
+  for f in Regular Bold Light Medium Regular_Italic; do
+    cp "$TMP/d/package/dist/fonts/Marianne-$f.woff2" "$DEST_DSFR/fonts/"
+  done
+  echo "{\"version\": \"$DSFR\", \"paquet\": \"@gouvfr/dsfr\", \"contenu\": \"polices Marianne uniquement\"}" > "$DEST_DSFR/VERSION"
+  echo "polices Marianne installées dans $DEST_DSFR/fonts"
+fi
