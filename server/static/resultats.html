@@ -100,7 +100,7 @@
       const classe = bonne === true ? 'bonne' : bonne === false ? 'mauvaise' : '';
       return `<div class="ligne ${classe}"><div class="libelle">${q.type === 'emoji' || q.type === 'echelle' || q.type === 'vrai_faux' ? '' : `<span class="lettre">${lettre(i)}</span>`}${echap(o)}</div>
         <div class="nombre">${n} <small>(${pct} %)</small></div>
-        <div class="barre"><div style="width:${Math.round(100 * n / max)}%; background: var(${COULEURS[i % COULEURS.length]})"></div></div></div>`;
+        <div class="barre"><div style="width:${Math.round(100 * n / max)}%; background: ${classe === 'bonne' ? 'var(--ok)' : classe === 'mauvaise' ? 'color-mix(in srgb, currentColor 30%, transparent)' : 'var(' + COULEURS[i % COULEURS.length] + ')'}"></div></div></div>`;
     }).join('') + '</div>';
     if (q.type === 'echelle' && r.moyenne !== null && r.moyenne !== undefined) html += `<div class="grand">moyenne ${r.moyenne}</div>`;
     if (q.type === 'rapidite' && r.rapides && r.rapides.length && etat.revele) html += `<ol class="premiers">${r.rapides.map((p, i) => `<li><span class="rang">${medaille(i)}</span>${echap(p.pseudo)}<span class="temps">${p.temps.toFixed(2)} s</span></li>`).join('')}</ol>`;
