@@ -12,7 +12,9 @@ param(
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Reste
 )
 
-$ErrorActionPreference = "Stop"
+# "Continue" et non "Stop" : sous Windows PowerShell 5, avec "Stop", toute ligne écrite sur stderr par un programme
+# (python, pip, uvicorn qui y écrit ses journaux) devient une erreur fatale. Les échecs sont testés par $LASTEXITCODE.
+$ErrorActionPreference = "Continue"
 
 # Arguments de style GNU (--captations X --seance URL) passes en plus des parametres PowerShell.
 for ($i = 0; $i -lt $Reste.Count; $i++) {
@@ -42,11 +44,11 @@ if (-not (Test-Path $VenvPython)) {
     & $Python @PythonArgs -m venv .venv
     if ($LASTEXITCODE -ne 0) { Write-Host "!! creation du venv echouee" -ForegroundColor Red; exit 1 }
 }
-& $VenvPython -c "import fastapi, uvicorn, numpy" 2>$null
+& $VenvPython -c "import fastapi, uvicorn, numpy, multipart" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "== installation des dependances"
-    & $VenvPython -m pip install -q --upgrade pip
-    & $VenvPython -m pip install -q -r requirements.txt
+    & $VenvPython -m pip install -q --upgrade pip 2>&1 | Out-Host
+    & $VenvPython -m pip install -q -r requirements.txt 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Host "!! installation des dependances echouee" -ForegroundColor Red; exit 1 }
 }
 if (-not (Test-Path (Join-Path $Racine "deck\vendor\reveal"))) {
