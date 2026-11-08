@@ -2,7 +2,7 @@
 
 Référence commune à `tools/pptx2reveal.py`, à l'éditeur (`deck/editeur.html`) et au runtime du deck (`deck/index.html`, `deck/quiz-deck.js`). Tout ce qui est produit ou édité respecte ce format.
 
-## 1. Fichier `deck/slides.html`
+## 1. Fichier `slides.html` (dans `presentations/<slug>/`, voir docs/presentations.md)
 
 Un fragment HTML (pas de `<html>`, pas de `<head>`), une `<section>` par diapositive, dans l'ordre. Le runtime l'injecte dans `.reveal .slides`. Deux sortes de sections :
 
@@ -29,7 +29,7 @@ Règles :
 | type | balise | contenu / attributs |
 | --- | --- | --- |
 | `texte` | `div` | HTML riche : `p`, `ul/ol/li`, `b`, `i`, `u`, `span style=…`, `br`, `a` |
-| `image` | `img` | `src` relatif au dossier `deck/` (`medias/…`) ou URL absolue |
+| `image` | `img` | `src` relatif au dossier de la présentation (`medias/…`) ou URL absolue |
 | `forme` | `div` | fond/bordure/rayon en `style` (`background`, `border`, `border-radius`) ; peut contenir du texte |
 | `iframe` | `iframe` | `src` publique sans état |
 | `video` | `video` | `src`, jamais d'`autoplay` ; lancée par `data-amphi="video"` sur commande |
@@ -56,9 +56,9 @@ Sans `class="libre"`. Contenu en flux : `h1/h2`, `p`, `ul`, `img`, `iframe`. L'�
 
 ## 2. Médias
 
-Dossier `deck/medias/` (images, JSON Lottie, vidéos). Noms de fichiers : lettres, chiffres, `-`, `_`, `.`. Le serveur sert ce dossier sous `/deck/medias/`.
+Dossier `presentations/<slug>/medias/` (images, JSON Lottie, vidéos). Noms de fichiers : lettres, chiffres, `-`, `_`, `.`. Le serveur sert celui de la présentation active sous `/deck/medias/` et chacun sous `/p/<slug>/medias/`.
 
-## 3. Fichier `deck/quiz.json`
+## 3. Fichier `quiz.json` (dans `presentations/<slug>/`)
 
 Liste de questions. Champs communs : `id` (unique, `[a-z0-9_-]+`), `type`, `question`, `chrono` (secondes, optionnel, 0 = sans limite), `points` (booléen, défaut vrai si une bonne réponse est déclarée).
 
@@ -82,7 +82,7 @@ Liste de questions. Champs communs : `id` (unique, `[a-z0-9_-]+`), `type`, `ques
 | Méthode | Chemin | Rôle |
 | --- | --- | --- |
 | GET | `/api/deck/slides` | contenu de `slides.html` (texte) — public |
-| PUT | `/api/deck/slides?token=` | corps `{ "html": "…" }` ; écrit `slides.html`, sauvegarde l'ancien dans `deck/sauvegardes/slides-<horodatage>.html` |
+| PUT | `/api/deck/slides?token=` | corps `{ "html": "…" }` ; écrit `slides.html`, sauvegarde l'ancien dans `presentations/<slug>/sauvegardes/slides-<horodatage>.html` ; `?prez=<slug>` vise une présentation donnée (défaut : l'active) |
 | GET | `/api/deck/sauvegardes?token=` | liste des sauvegardes |
 | POST | `/api/deck/medias?token=` | multipart `fichier` ; renvoie `{ "chemin": "medias/nom.ext" }` |
 | GET | `/api/deck/medias?token=` | liste des médias |

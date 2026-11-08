@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 from pathlib import Path
 
 import pytest
@@ -12,18 +13,32 @@ RACINE = Path(__file__).resolve().parent.parent
 JETON = "secret-test"
 
 
+SLIDES_DEMO = """<!-- démo -->
+<section class="libre" data-id="s1" data-qr><div class="el texte" data-id="e1" style="left:100px;top:100px;width:800px;height:100px">Démo</div></section>
+<section data-quiz="a" data-id="s2"></section>
+"""
+
+
+def creer_presentation(dossier: Path, slug: str, titre: str, slides: str = SLIDES_DEMO, quiz: str | None = None) -> Path:
+    """Fabrique une présentation de test (slides minimal, questions de démonstration couvrant les 12 types)."""
+    d = dossier / slug
+    (d / "medias").mkdir(parents=True)
+    (d / "slides.html").write_text(slides, encoding="utf-8")
+    (d / "quiz.json").write_text(quiz if quiz is not None else (RACINE / "tests" / "fixtures" / "quiz_demo.json").read_text(encoding="utf-8"), encoding="utf-8")
+    (d / "presentation.json").write_text(json.dumps({"titre": titre, "description": "Présentation de test", "theme": ""}), encoding="utf-8")
+    return d
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    deck = tmp_path / "deck"
-    deck.mkdir()
-    for f in ("slides.html", "index.html", "remote.html"):
-        (deck / f).write_text((RACINE / "deck" / f).read_text(encoding="utf-8"), encoding="utf-8")
-    # Jeu de questions de démonstration couvrant les 12 types (deck/quiz.json contient la vraie séance).
-    (deck / "quiz.json").write_text((RACINE / "tests" / "fixtures" / "quiz_demo.json").read_text(encoding="utf-8"), encoding="utf-8")
+    presentations = tmp_path / "presentations"
+    creer_presentation(presentations, "demo", "Présentation de démonstration")
     monkeypatch.setenv("AMPHI_JETON", JETON)
-    monkeypatch.setenv("AMPHI_BDD", str(tmp_path / "quiz.sqlite"))
+    monkeypatch.setenv("AMPHI_BDD", str(tmp_path / "data" / "quiz.sqlite"))
     monkeypatch.setenv("AMPHI_URL_PUBLIQUE", "https://q.test")
-    monkeypatch.setenv("AMPHI_DECK", str(deck))
+    monkeypatch.setenv("AMPHI_PRESENTATIONS", str(presentations))
+    monkeypatch.delenv("AMPHI_PRESENTATION", raising=False)
+    monkeypatch.delenv("AMPHI_DECK", raising=False)
     from server import config
 
     importlib.reload(config)
@@ -31,7 +46,8 @@ def client(tmp_path, monkeypatch):
 
     importlib.reload(module_app)
     with TestClient(module_app.app) as c:
-        c.deck = deck
+        c.presentations = presentations
+        c.deck = presentations / "demo"  # la présentation active : slides.html, quiz.json, medias/
         yield c
 
 
@@ -311,4 +327,4 @@ def test_quiz_json_valide():
 
     demo = charger_questions(RACINE / "tests" / "fixtures" / "quiz_demo.json")
     assert {q.type for q in demo.values()} == set(TYPES)
-    assert len(charger_questions(RACINE / "deck" / "quiz.json")) >= 1  # la séance réelle se charge sans erreur
+    assert len(charger_questions(RACINE / "presentations" / "iag-v1" / "quiz.json")) >= 1  # la séance réelle se charge sans erreur

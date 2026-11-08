@@ -1,5 +1,9 @@
 /*
- * Éditeur du deck (deck/slides.html) et des questions (deck/quiz.json).
+ * Éditeur du deck (presentations/<slug>/slides.html) et des questions (presentations/<slug>/quiz.json).
+ *
+ * ?prez=slug désigne la présentation éditée (sinon l'active, résolue au démarrage) ; le slug est propagé à tous les
+ * appels d'API (&prez=). Les médias relatifs (src="medias/…") sont affichés via /p/<slug>/medias/ grâce à une balise
+ * <base>, mais sérialisés inchangés.
  *
  * Modèle : un tableau de <section> vivantes, parsées depuis /api/deck/slides. Toute modification
  * s'applique sur ce DOM ; la scène affiche la section courante elle-même (mise à l'échelle par
@@ -24,8 +28,11 @@
   const TYPES_QUESTION = ['qcm', 'multi', 'vrai_faux', 'emoji', 'rapidite', 'buzzer', 'nuage', 'texte_libre', 'trou', 'echelle', 'classement', 'nombre'];
   const AVEC_OPTIONS = { qcm: [2, 6], multi: [2, 6], emoji: [2, 8], rapidite: [2, 6], classement: [2, 6] };
 
-  const token = new URLSearchParams(location.search).get('token') || '';
-  const apiUrl = chemin => chemin + (chemin.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  const parametres = new URLSearchParams(location.search);
+  const token = parametres.get('token') || '';
+  const prezDemandee = /^[a-z0-9-]{1,40}$/.test(parametres.get('prez') || '') ? parametres.get('prez') : null;
+  let prez = prezDemandee; // slug de la présentation éditée (résolu au démarrage si absent)
+  const apiUrl = chemin => chemin + (chemin.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token) + (prez ? '&prez=' + encodeURIComponent(prez) : '');
   async function apiJson(chemin, options) {
     const r = await fetch(apiUrl(chemin), options);
     if (!r.ok) {
@@ -211,7 +218,32 @@
     rendreTout();
   }
 
+  /** Résout la présentation éditée (paramètre prez ou l'active), affiche son titre et fait pointer les médias relatifs vers /p/<slug>/. */
+  async function resoudrePresentation() {
+    let meta = null;
+    try {
+      if (prez) meta = (await (await fetch('/api/presentations', { cache: 'no-store' })).json()).find(p => p.slug === prez) || null;
+      else { meta = await (await fetch('/api/presentations/active', { cache: 'no-store' })).json(); prez = meta && meta.slug ? meta.slug : null; }
+    } catch (e) { console.warn('présentation indisponible', e); }
+    if (prez) {
+      const base = document.createElement('base');
+      base.href = '/p/' + prez + '/';
+      document.head.appendChild(base);
+    }
+    // Feuille de thème de la présentation (deck/themes/<theme>.css), pour un rendu identique à l'écran.
+    if (meta && meta.theme && /^[a-z0-9_-]{1,40}$/.test(meta.theme)) {
+      const lien = document.createElement('link');
+      lien.rel = 'stylesheet'; lien.href = '/deck/themes/' + meta.theme + '.css';
+      document.head.appendChild(lien);
+    }
+    $('#titre-prez').textContent = meta && meta.titre ? meta.titre : (prez || 'présentation introuvable');
+    $('#titre-prez').title = prez ? 'presentations/' + prez : '';
+    $('#lien-presentations').href = '/deck/presentations.html?token=' + encodeURIComponent(token);
+    if (prezDemandee && !meta) etatSauvegarde('présentation « ' + prezDemandee + ' » introuvable', 'erreur');
+  }
+
   async function charger() {
+    await resoudrePresentation();
     try {
       const [rSlides, rQuestions] = await Promise.allSettled([
         fetch(apiUrl('/api/deck/slides'), { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }),
@@ -1286,7 +1318,8 @@
     }
   }
   $('#b-enregistrer').onclick = enregistrer;
-  $('#b-apercu').onclick = () => window.open('/deck/?role=scene', '_blank');
+  // Aperçu : la présentation éditée en prévisualisation (sans synchronisation) si elle est désignée, sinon la scène.
+  $('#b-apercu').onclick = () => window.open(prezDemandee ? '/deck/?prez=' + encodeURIComponent(prezDemandee) + '&role=scene' : '/deck/?role=scene', '_blank');
   $('#b-annuler').onclick = annuler;
   $('#b-retablir').onclick = retablir;
   $('#b-importer').onclick = () => $('#fichier-import').click();

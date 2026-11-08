@@ -1,0 +1,92 @@
+/* Bibliothèque de présentations : même interface sombre que l'éditeur (editeur.css), cartes à vignette. */
+
+:root {
+  --fond: #1e1e22; --fond2: #27272c; --fond3: #333339; --bord: #3f3f46;
+  --texte: #e4e4e7; --sourd: #9ca3af; --accent: #3b82f6; --vert: #22c55e; --rouge: #ef4444; --orange: #f59e0b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  display: grid; grid-template-rows: 52px 1fr auto; min-height: 100vh;
+  background: var(--fond); color: var(--texte); font: 14px/1.4 system-ui, sans-serif;
+}
+/* Le thème reveal (white.css) cible .reveal ; tout ce qui suit remet l'interface au style de l'éditeur. */
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: var(--fond3); border: 1px solid var(--bord); border-radius: 6px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+button:hover { background: #3f3f47; }
+button:disabled { opacity: .4; cursor: default; }
+button.principal { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger:hover { background: var(--rouge); color: #fff; }
+input[type=text], input[type=file], select, textarea { background: #15151a; border: 1px solid var(--bord); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
+a { color: var(--accent); }
+.etat { font-size: 12px; color: var(--sourd); }
+.etat.erreur { color: var(--rouge); }
+.etat.ok { color: var(--vert); }
+
+/* ---- Barre du haut ---- */
+#barre { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 20px; background: var(--fond2); border-bottom: 1px solid var(--bord); }
+#barre .groupe { display: flex; align-items: center; gap: 10px; }
+#barre h1 { font-size: 17px; margin: 0; font-weight: 600; }
+
+/* ---- Cartes ---- */
+main { padding: 20px; }
+.vide { color: var(--sourd); text-align: center; margin: 60px 0; }
+.cartes { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+.carte { background: var(--fond2); border: 1px solid var(--bord); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.carte.active { border-color: var(--vert); box-shadow: 0 0 0 1px var(--vert); }
+.carte .corps { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.carte h2 { font-size: 16px; margin: 0; font-weight: 600; display: flex; align-items: flex-start; gap: 8px; }
+.carte h2 span { flex: 1; }
+.badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 10px; background: var(--vert); color: #052e16; white-space: nowrap; }
+.carte .description { color: var(--sourd); font-size: 13px; min-height: 1.4em; }
+.carte .infos { color: var(--sourd); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
+.carte .infos code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; background: #15151a; padding: 1px 5px; border-radius: 4px; }
+.carte .actions { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--bord); background: #232328; }
+.carte .actions .espace { flex: 1; }
+.carte .actions button.lancer { background: var(--vert); border-color: var(--vert); color: #052e16; font-weight: 600; }
+.carte .actions button.lancer:disabled { opacity: .6; }
+
+/* Vignette : rendu 1920×1080 de la première diapositive, réduit à la largeur de la carte (--echelle posée par le script) */
+.vignette { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #fff; position: relative; border-bottom: 1px solid var(--bord); }
+.vignette .reveal { width: 1920px; height: 1080px; transform: scale(var(--echelle, 0.16)); transform-origin: top left; position: absolute; left: 0; top: 0; pointer-events: none; }
+.vignette .reveal .slides { width: 1920px; height: 1080px; position: relative; }
+.vignette section { display: block; }
+.vignette section.libre { position: relative; width: 1920px; height: 1080px; }
+.vignette .reveal.flux .slides, .vignette .reveal.quiz .slides { display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 77px; }
+.vignette .reveal.flux section, .vignette .reveal.quiz section { width: 100%; }
+.vignette .reveal section.libre > .el img, .vignette .reveal section.libre > img.el { display: block; width: 100%; height: 100%; object-fit: contain; }
+.vignette .reveal section.libre > video.el, .vignette .reveal section.libre > iframe.el { display: block; border: 0; background: #000; }
+/* Blocs de substitution des éléments data-amphi (rendus seulement au runtime), comme dans l'éditeur */
+.vignette .el[data-amphi] {
+  background: repeating-linear-gradient(45deg, #e5e7eb 0 14px, #f3f4f6 14px 28px);
+  border: 3px dashed #9ca3af; color: #4b5563; display: flex; align-items: center; justify-content: center; font-size: 36px; text-align: center; overflow: hidden;
+}
+.vignette .el[data-amphi]::before { content: '⚙ ' attr(data-amphi); font-weight: 700; text-transform: uppercase; }
+.vignette .el[data-amphi="qr"]::before { content: '▦ QR'; }
+.vignette .substitut { color: #6b7280; font-size: 48px; }
+.vignette .quiz-apercu { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 1080px; gap: 24px; padding: 0 120px; }
+.vignette .quiz-apercu h2 { font-size: 64px; margin: 0; }
+.vignette .quiz-apercu ol { font-size: 40px; text-align: left; }
+
+/* ---- Pied : liens utiles ---- */
+#liens { display: flex; align-items: center; gap: 14px; padding: 10px 20px; border-top: 1px solid var(--bord); background: var(--fond2); flex-wrap: wrap; }
+#liens .libelle, #liens .sourd { color: var(--sourd); }
+#liens .espace { flex: 1; }
+#liens a { text-decoration: none; }
+#liens a:hover { text-decoration: underline; }
+
+/* ---- Dialogues ---- */
+dialog { background: var(--fond2); color: var(--texte); border: 1px solid var(--bord); border-radius: 10px; padding: 18px; min-width: 420px; max-width: 90vw; }
+dialog::backdrop { background: rgba(0,0,0,.6); }
+dialog h3 { margin: 0 0 14px; font-size: 16px; }
+dialog .champ { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 8px; margin-bottom: 10px; }
+dialog .champ > label { color: var(--sourd); font-size: 12px; }
+dialog .champ small { grid-column: 2; color: var(--sourd); font-size: 11px; margin-top: -6px; }
+dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+dialog .erreur { color: var(--rouge); font-size: 13px; margin-top: 8px; }
+.progression { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; color: var(--sourd); font-size: 12px; }
+.progression .barre { height: 6px; border-radius: 3px; background: #15151a; overflow: hidden; position: relative; }
+.progression .barre::after { content: ''; position: absolute; left: -40%; width: 40%; height: 100%; background: var(--accent); border-radius: 3px; animation: glisser 1.2s infinite ease-in-out; }
+@keyframes glisser { to { left: 100%; } }
+.avertissements { max-height: 40vh; overflow: auto; font-size: 13px; color: var(--orange); padding-left: 20px; margin: 8px 0 0; }
+.avertissements:empty::before { content: 'Aucun avertissement.'; color: var(--vert); margin-left: -20px; }

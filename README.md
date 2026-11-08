@@ -23,7 +23,8 @@ Le serveur ne transporte aucune vidéo : il relaie un état et chaque machine re
 | Dossier | Contenu |
 | --- | --- |
 | `server/` | FastAPI : `/ws/deck`, `/etat`, `/deck/`, quiz (`/q`, `/q/resultats`, API admin par jeton), `/qr.png` |
-| `deck/` | reveal.js : `index.html` (rôles `scene` / `obs` / `remote`), `sync.js`, `remote.html` (télécommande), `slides.html`, `quiz.json` |
+| `deck/` | runtime commun reveal.js : `index.html` (rôles `scene` / `obs` / `remote`), `sync.js`, `remote.html` (télécommande), `editeur.*`, `presentations.*` (accueil), `theme.css`, `themes/` |
+| `presentations/` | une présentation par dossier (`<slug>/presentation.json`, `slides.html`, `quiz.json`, `medias/`) ; `iag-v1` est la séance du 9 novembre 2026 ; voir [docs/presentations.md](docs/presentations.md) |
 | `postprod/assembler.py` | recalage audio téléphone ↔ OBS par corrélation croisée, dérive, `loudnorm`, remux MP4 |
 | `obs/` | configuration OBS (scènes, Advanced Scene Switcher, raccourcis) et pont quiz → scène forcée |
 | `tools/` | `pptx2reveal.py` (PowerPoint → sections libres, animations comprises), `pdf2reveal.py` (PDF → sections), `charge.py` (300 clients), `fetch_reveal.sh` |
@@ -44,22 +45,34 @@ AMPHI_JETON=test .venv/bin/uvicorn server.app:app --reload
 | Projecteur (PC 1) | <http://localhost:8000/deck/?role=scene> |
 | Source OBS (PC 2) | <http://localhost:8000/deck/?role=obs> |
 | Télécommande (téléphone) | <http://localhost:8000/remote?token=test> |
+| Présentations (accueil) | <http://localhost:8000/presentations?token=test> |
 | Participants | <http://localhost:8000/q> |
 | Résultats (iframe du deck) | <http://localhost:8000/q/resultats> |
 | Santé | <http://localhost:8000/sante> |
 
 Tests : `.venv/bin/python -m pytest -q` (ffmpeg requis pour le test d'assemblage complet).
 
+## Plusieurs présentations
+
+Plusieurs présentations coexistent dans `presentations/<slug>/` ; une seule est **active** : c'est elle que voient le projecteur (`/deck/?role=scene`), OBS, la télécommande et les participants. Le choix est mémorisé dans `data/active.json` (défaut : `AMPHI_PRESENTATION` ou le premier slug trié).
+
+- **Accueil** : <http://localhost:8000/presentations?token=test> — une carte par présentation (vignette de la première diapositive, titre, description, nombre de diapositives et de questions, badge « active »).
+- **Lancer** rend la présentation active : les questions du quiz sont rechargées (question ouverte fermée), l'écran, OBS et la télécommande rechargent le deck. **Éditer** ouvre l'éditeur sur cette présentation (`/deck/editeur.html?token=…&prez=<slug>`) ; la vignette ouvre une prévisualisation sans synchronisation (`/deck/?prez=<slug>&role=scene`). **Dupliquer**, **Renommer** (titre, description, thème `deck/themes/<thème>.css`) et **Supprimer** (refusé sur l'active) complètent les actions.
+- **Nouvelle** crée une présentation vide (une diapositive de titre) ; **Importer un PowerPoint** convertit un `.pptx` avec `tools/pptx2reveal.py` (QR code sur la première diapositive, médias dans `presentations/<slug>/medias/`) et affiche les avertissements de conversion. Sans LibreOffice (`soffice`), l'import se fait sans rastérisation des objets complexes ; `deploy/install.sh` installe `libreoffice-impress`.
+- Fichiers servis : `/deck/slides.html` et `/deck/medias/…` sont ceux de l'active ; `/p/<slug>/slides.html` et `/p/<slug>/medias/…` ceux d'une présentation donnée. API : `GET /api/presentations`, `POST /api/presentations/<slug>/activer`, paramètre `prez=<slug>` sur `/api/deck/slides`, `/api/deck/medias` et `/api/quiz/questions` (détails dans [docs/presentations.md](docs/presentations.md)).
+
 ## Préparer le deck
 
+En ligne de commande (l'accueil ci-dessus fait la même chose pour un PowerPoint) :
+
 1. Convertir le support :
-   - PowerPoint : `python tools/pptx2reveal.py support.pptx --sortie deck/slides.html --medias deck/medias --qr-premiere`
+   - PowerPoint : `python tools/pptx2reveal.py support.pptx --sortie presentations/ma-seance/slides.html --medias presentations/ma-seance/medias --qr-premiere`
      produit une `<section class="libre">` par diapositive (mise en page absolue dans une scène 1920 × 1080, texte riche,
-     images extraites dans `deck/medias/s<diapo>_<n>.ext`, formes, tableaux, notes, fond, `data-transition`) et traduit les
+     images extraites dans `medias/s<diapo>_<n>.ext`, formes, tableaux, notes, fond, `data-transition`) et traduit les
      animations PowerPoint en fragments reveal.js (`fade-in`, `fade-up`, `zoom-in`, `fade-in-then-out`… avec `data-fragment-index`
      dans l'ordre des clics, puce par puce). Ce qui n'est pas géré devient `<!-- non converti : … -->` + un avertissement sur stderr.
      Les objets complexes (SmartArt, groupes de formes, formes libres, flèches et autres formes automatiques non
-     rectangulaires, graphiques, objets OLE) sont rastérisés en images PNG transparentes (`deck/medias/s<diapo>_r<n>.png`)
+     rectangulaires, graphiques, objets OLE) sont rastérisés en images PNG transparentes (`medias/s<diapo>_r<n>.png`)
      via LibreOffice, en un seul export PDF : installer `apt install libreoffice-impress` (`soffice` dans le PATH) ;
      `--sans-raster` désactive, et sans `soffice` ces objets sont ignorés avec un avertissement. Les objets rastérisés ne
      sont plus éditables en texte dans l'éditeur, mais restent déplaçables/redimensionnables comme des images ; un groupe
@@ -67,28 +80,28 @@ Tests : `.venv/bin/python -m pytest -q` (ffmpeg requis pour le test d'assemblage
      Limites connues : effets d'animation non mappés (rendus en `fade-in`), déclencheurs/chemins personnalisés, dégradés
      et motifs approximés, rognage d'image ignoré, polices non embarquées (installer la police ou poser `font-family`
      dans l'éditeur).
-   - PDF : `python tools/pdf2reveal.py support.pdf --sortie deck/slides.html --quiz q1:4 --quiz q2:9 --notes notes.md`
+   - PDF : `python tools/pdf2reveal.py support.pdf --sortie presentations/ma-seance/slides.html --quiz q1:4 --quiz q2:9 --notes notes.md`
      (`--quiz ID:PAGE` insère une diapositive de quiz après la page ; `notes.md` contient des blocs `## Page N`).
-2. Déclarer les questions dans `deck/quiz.json` (ou dans l'onglet Questions de l'éditeur) : voir [docs/format-deck.md](docs/format-deck.md), section 3.
-3. Retoucher le deck dans l'éditeur (ci-dessous) ou à la main dans `deck/slides.html` : fragments, iframes vers des URL publiques sans état, Lottie, minuteurs, résultats de quiz, classement.
+2. Déclarer les questions dans `presentations/ma-seance/quiz.json` (ou dans l'onglet Questions de l'éditeur), et décrire la présentation dans `presentations/ma-seance/presentation.json` (`titre`, `description`, `theme`) : voir [docs/format-deck.md](docs/format-deck.md), section 3.
+3. Retoucher le deck dans l'éditeur (ci-dessous) ou à la main dans `slides.html` : fragments, iframes vers des URL publiques sans état, Lottie, minuteurs, résultats de quiz, classement.
 4. Vérifier le rendu dans les trois rôles ; le premier `<section data-qr>` affiche le QR code.
 
 Le format HTML du deck (sections libres 1920×1080, éléments `data-amphi`, animations) et l'API sont décrits dans [docs/format-deck.md](docs/format-deck.md).
 
 ## Éditeur
 
-Ouvrir <http://localhost:8000/deck/editeur.html?token=test> (jeton `AMPHI_JETON`). Fichiers : `deck/editeur.{html,css,js}`, JS vanilla sans dépendance.
+Ouvrir <http://localhost:8000/deck/editeur.html?token=test&prez=iag-v1> (jeton `AMPHI_JETON` ; sans `prez`, la présentation active) ou le bouton **Éditer** de l'accueil. Fichiers : `deck/editeur.{html,css,js}`, JS vanilla sans dépendance.
 
 - Colonne gauche : diapositives (vignettes, ajouter libre/titre/quiz, dupliquer, supprimer, monter/descendre, glisser-déposer). Centre : scène 1920×1080 à l'échelle, grille et règles. Droite : propriétés contextuelles.
 - Section libre : sélection, déplacement et redimensionnement à la souris (Maj : ratio), double-clic pour éditer un texte en place (gras, listes, taille, couleur, alignement), barre « Ajouter » (texte, titre, image, forme, iframe, vidéo, Lottie, minuteur, résultats, nuage, classement, QR), alignement, ordre, animations (fragment, effet, index, aperçu), HTML brut.
 - Section en flux : édition du HTML de chaque enfant, ajout/réordonnancement, conversion en section libre. Section de quiz : choix de la question, transformation en section libre (question + résultats + QR).
 - Onglet Questions : éditeur de `quiz.json` (12 types, validation des identifiants et des options, insertion d'une diapositive de quiz).
-- Enregistrer écrit `slides.html` (`PUT /api/deck/slides`, sauvegarde automatique de l'ancien) ; Aperçu ouvre `/deck/?role=scene` ; Importer charge un `.html` local.
+- Enregistrer écrit `slides.html` de la présentation (`PUT /api/deck/slides?prez=…`, sauvegarde automatique de l'ancien dans `presentations/<slug>/sauvegardes/`) ; Aperçu ouvre `/deck/?prez=<slug>&role=scene` ; Importer charge un `.html` local ; « ← Présentations » revient à l'accueil.
 - Raccourcis : Ctrl+S enregistrer, Ctrl+Z / Ctrl+Y annuler / rétablir (50 niveaux), Suppr supprimer, flèches déplacer de 1 px (Maj : 10 px), Ctrl+D dupliquer, Échap désélectionner.
 
 ## Quiz
 
-Douze types de questions, façon Kahoot / Mentimeter, déclarés dans `deck/quiz.json` :
+Douze types de questions, façon Kahoot / Mentimeter, déclarés dans `presentations/<slug>/quiz.json` :
 
 | Type | Participant | Résultat à l'écran | Points |
 | --- | --- | --- | --- |

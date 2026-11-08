@@ -5,6 +5,7 @@ __pycache__/
 data/
 deck/vendor/
 deck/images/
+presentations/*/sauvegardes/
 *.mkv
 *.mp4
 *.wav

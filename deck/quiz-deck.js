@@ -15,10 +15,11 @@ window.AmphiQuizDeck = (function () {
   let questions = {};
   let urlPublique = location.origin;
 
-  async function preparer(racine) {
+  /** `prez` : slug d'une présentation prévisualisée (ses questions, pas celles du quiz actif). */
+  async function preparer(racine, prez) {
     try {
       const [rq, re] = await Promise.all([
-        fetch('/api/quiz/questions', { cache: 'no-store' }),
+        fetch('/api/quiz/questions' + (prez ? '?prez=' + encodeURIComponent(prez) : ''), { cache: 'no-store' }),
         fetch('/api/quiz/etat', { cache: 'no-store' }),
       ]);
       if (rq.ok) questions = Object.fromEntries((await rq.json()).map(q => [q.id, q]));

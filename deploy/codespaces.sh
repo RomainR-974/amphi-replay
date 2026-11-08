@@ -8,6 +8,8 @@ cd "$RACINE"
 
 installer() {
   sudo apt-get update -q && sudo apt-get install -y -q ffmpeg >/dev/null
+  # LibreOffice Impress : import PowerPoint complet (rastérisation des objets complexes).
+  sudo apt-get install -y -q --no-install-recommends libreoffice-impress >/dev/null || echo "libreoffice-impress non installé : import PowerPoint sans rastérisation"
   python3 -m venv .venv
   .venv/bin/pip install -q --upgrade pip
   .venv/bin/pip install -q -r requirements.txt
@@ -39,6 +41,7 @@ Serveur lancé dans ce Codespace. Le port 8000 est rendu public automatiquement 
 | Projecteur (PC 1) | $URL/deck/?role=scene |
 | Source OBS (PC 2) | $URL/deck/?role=obs |
 | Télécommande (téléphone) | $URL/remote?token=$JETON |
+| Présentations | $URL/presentations?token=$JETON |
 | Éditeur | $URL/editeur?token=$JETON |
 | Participants (QR code) | $URL/q |
 | Résultats seuls | $URL/q/resultats |

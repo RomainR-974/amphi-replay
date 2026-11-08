@@ -13,12 +13,13 @@ ExecStart=/opt/amphi-replay/.venv/bin/uvicorn server.app:app --host 127.0.0.1 --
 Restart=always
 RestartSec=2
 
-# Durcissement : le service n'écrit que dans data/ (SQLite) et deck/ (éditeur : slides.html, quiz.json, médias, sauvegardes).
+# Durcissement : le service n'écrit que dans data/ (SQLite, active.json) et presentations/ (éditeur et import : slides.html,
+# quiz.json, médias, sauvegardes) ; deck/ reste en lecture seule (runtime commun).
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/opt/amphi-replay/data /opt/amphi-replay/deck
+ReadWritePaths=/opt/amphi-replay/data /opt/amphi-replay/presentations
 
 [Install]
 WantedBy=multi-user.target

@@ -20,12 +20,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
+from .presentations import Bibliotheque, valider_slug
 from .quiz import Quiz, charger_questions, questions_depuis_liste
 
 journal = logging.getLogger("amphi")
@@ -90,6 +91,7 @@ class EtatDeck:
 deck_ws = Diffuseur()
 quiz_ws = Diffuseur()
 etat_deck = EtatDeck()
+biblio = Bibliotheque(config.DOSSIER_PRESENTATIONS, config.FICHIER_ACTIVE, config.PRESENTATION_DEFAUT)
 quiz: Quiz
 _publication = asyncio.Event()  # levé par les votes : l'état est publié, regroupé, par la boucle de fond
 _fond: asyncio.Task | None = None
@@ -98,12 +100,19 @@ _fond: asyncio.Task | None = None
 @asynccontextmanager
 async def cycle_de_vie(app: FastAPI):
     global quiz
-    quiz = Quiz(charger_questions(config.FICHIER_QUIZ), config.CHEMIN_BDD)
+    active = biblio.active()
+    fichier_quiz = biblio.fichier_quiz(active) if active else None
+    quiz = Quiz(charger_questions(fichier_quiz) if fichier_quiz else {}, config.CHEMIN_BDD)
     app.state.quiz = quiz
+    app.state.biblio = biblio
     if config.JETON_GENERE:
         journal.warning("AMPHI_JETON absent : jeton de session généré = %s", config.JETON)
-    journal.info("%d question(s) de quiz chargée(s) depuis %s", len(quiz.questions), config.FICHIER_QUIZ)
-    (config.DOSSIER_DECK / "medias").mkdir(exist_ok=True)
+    if active:
+        biblio.activer(active)  # fige le choix par défaut dans active.json : créer une présentation ne change pas l'active
+        biblio.dossier_medias(active).mkdir(exist_ok=True)
+        journal.info("présentation active : %s ; %d question(s) de quiz chargée(s) depuis %s", active, len(quiz.questions), fichier_quiz)
+    else:
+        journal.warning("aucune présentation dans %s", config.DOSSIER_PRESENTATIONS)
     global _fond
     _fond = asyncio.create_task(boucle_de_fond())
     yield
@@ -111,6 +120,63 @@ async def cycle_de_vie(app: FastAPI):
 
 
 app = FastAPI(title="amphi-replay", lifespan=cycle_de_vie)
+
+
+# ---------------------------------------------------------------------------------
+# Présentations : fichiers servis (déclarés AVANT le montage statique de deck/, qui les masquerait)
+# ---------------------------------------------------------------------------------
+
+
+def slug_actif_ou_404() -> str:
+    actif = biblio.active()
+    if not actif:
+        raise HTTPException(status_code=404, detail="aucune présentation")
+    return actif
+
+
+def resoudre_prez(prez: str | None) -> str:
+    """Slug visé par un paramètre `prez` (sinon la présentation active) ; 404 s'il est inconnu."""
+    if not prez:
+        return slug_actif_ou_404()
+    if not biblio.existe(prez):
+        raise HTTPException(status_code=404, detail="présentation inconnue")
+    return prez
+
+
+def reponse_slides(slug: str) -> Response:
+    fichier = biblio.fichier_slides(slug)
+    if not fichier.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(fichier, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+
+def reponse_media(slug: str, chemin: str) -> Response:
+    fichier = biblio.media(slug, chemin)
+    if fichier is None:
+        raise HTTPException(status_code=404)
+    return FileResponse(fichier)
+
+
+@app.get("/deck/slides.html")
+async def deck_slides_actif() -> Response:
+    return reponse_slides(slug_actif_ou_404())
+
+
+@app.get("/deck/medias/{chemin:path}")
+async def deck_media_actif(chemin: str) -> Response:
+    return reponse_media(slug_actif_ou_404(), chemin)
+
+
+@app.get("/p/{slug}/slides.html")
+async def prez_slides(slug: str) -> Response:
+    return reponse_slides(resoudre_prez(slug))
+
+
+@app.get("/p/{slug}/medias/{chemin:path}")
+async def prez_media(slug: str, chemin: str) -> Response:
+    return reponse_media(resoudre_prez(slug), chemin)
+
+
 app.mount("/deck", StaticFiles(directory=config.DOSSIER_DECK, html=True), name="deck")
 app.mount("/static", StaticFiles(directory=config.DOSSIER_STATIQUE), name="static")
 
@@ -153,6 +219,7 @@ async def sante() -> dict:
         "quiz_clients": quiz_ws.compter(),
         "question_ouverte": quiz.ouverte,
         "questions": len(quiz.questions),
+        "presentation": biblio.active(),
     }
 
 
@@ -200,15 +267,16 @@ class Slides(BaseModel):
 
 
 @app.get("/api/deck/slides", response_class=PlainTextResponse)
-async def deck_slides_lire() -> str:
-    fichier = config.DOSSIER_DECK / "slides.html"
+async def deck_slides_lire(prez: str | None = None) -> str:
+    fichier = biblio.fichier_slides(resoudre_prez(prez))
     return fichier.read_text(encoding="utf-8") if fichier.exists() else ""
 
 
 @app.put("/api/deck/slides", dependencies=[Depends(verifier_jeton)])
-async def deck_slides_ecrire(slides: Slides) -> dict:
-    fichier = config.DOSSIER_DECK / "slides.html"
-    sauvegardes = config.DOSSIER_DECK / "sauvegardes"
+async def deck_slides_ecrire(slides: Slides, prez: str | None = None) -> dict:
+    slug = resoudre_prez(prez)
+    fichier = biblio.fichier_slides(slug)
+    sauvegardes = biblio.dossier_sauvegardes(slug)
     sauvegardes.mkdir(exist_ok=True)
     if fichier.exists():
         ancien = sauvegardes / f"slides-{datetime.now():%Y-%m-%d_%H%M%S}.html"
@@ -217,39 +285,41 @@ async def deck_slides_ecrire(slides: Slides) -> dict:
         for vieux in sorted(sauvegardes.glob("slides-*.html"))[:-50]:
             vieux.unlink()
     fichier.write_text(slides.html, encoding="utf-8")
-    await deck_ws.diffuser({"type": "recharger"}, roles=("scene", "obs"))
-    return {"ok": True, "taille": len(slides.html)}
+    biblio.toucher(slug)
+    if slug == biblio.active():
+        await deck_ws.diffuser({"type": "recharger"}, roles=("scene", "obs"))
+    return {"ok": True, "taille": len(slides.html), "prez": slug}
 
 
 @app.get("/api/deck/sauvegardes", dependencies=[Depends(verifier_jeton)])
-async def deck_sauvegardes() -> list[dict]:
-    dossier = config.DOSSIER_DECK / "sauvegardes"
+async def deck_sauvegardes(prez: str | None = None) -> list[dict]:
+    dossier = biblio.dossier_sauvegardes(resoudre_prez(prez))
     return [{"nom": f.name, "taille": f.stat().st_size} for f in sorted(dossier.glob("slides-*.html"), reverse=True)] if dossier.exists() else []
 
 
 @app.get("/api/deck/sauvegardes/{nom}", dependencies=[Depends(verifier_jeton)], response_class=PlainTextResponse)
-async def deck_sauvegarde_lire(nom: str) -> str:
+async def deck_sauvegarde_lire(nom: str, prez: str | None = None) -> str:
     if not re.fullmatch(r"slides-[0-9_-]+\.html", nom):
         raise HTTPException(status_code=404)
-    fichier = config.DOSSIER_DECK / "sauvegardes" / nom
+    fichier = biblio.dossier_sauvegardes(resoudre_prez(prez)) / nom
     if not fichier.exists():
         raise HTTPException(status_code=404)
     return fichier.read_text(encoding="utf-8")
 
 
 @app.get("/api/deck/medias", dependencies=[Depends(verifier_jeton)])
-async def deck_medias() -> list[dict]:
-    dossier = config.DOSSIER_DECK / "medias"
+async def deck_medias(prez: str | None = None) -> list[dict]:
+    dossier = biblio.dossier_medias(resoudre_prez(prez))
     return [{"chemin": f"medias/{f.name}", "taille": f.stat().st_size} for f in sorted(dossier.iterdir()) if f.is_file()] if dossier.exists() else []
 
 
 @app.post("/api/deck/medias", dependencies=[Depends(verifier_jeton)])
-async def deck_media_televerser(fichier: UploadFile = File(...)) -> dict:
+async def deck_media_televerser(fichier: UploadFile = File(...), prez: str | None = None) -> dict:
     nom = re.sub(r"[^A-Za-z0-9._-]+", "_", fichier.filename or "fichier").strip("._") or "fichier"
     suffixe = ("." + nom.rsplit(".", 1)[-1].lower()) if "." in nom else ""
     if suffixe not in EXTENSIONS_MEDIAS:
         raise HTTPException(status_code=415, detail=f"extension refusée ({', '.join(sorted(EXTENSIONS_MEDIAS))})")
-    dossier = config.DOSSIER_DECK / "medias"
+    dossier = biblio.dossier_medias(resoudre_prez(prez))
     dossier.mkdir(exist_ok=True)
     destination = dossier / nom
     base, n = nom[: -len(suffixe)] if suffixe else nom, 1
@@ -293,6 +363,129 @@ async def page_remote(token: str = Query(default="")) -> Response:
 async def page_editeur(token: str = Query(default="")) -> Response:
     verifier_jeton(token)
     return RedirectResponse(f"/deck/editeur.html?token={token}")
+
+
+@app.get("/presentations")
+async def page_presentations(token: str = Query(default="")) -> Response:
+    verifier_jeton(token)
+    return RedirectResponse(f"/deck/presentations.html?token={token}")
+
+
+# ---------------------------------------------------------------------------------
+# Présentations : API
+# ---------------------------------------------------------------------------------
+
+
+class NouvellePresentation(BaseModel):
+    slug: str
+    titre: str = ""
+    description: str = ""
+    theme: str = ""
+    depuis: str | None = None
+
+
+class ModificationPresentation(BaseModel):
+    titre: str | None = None
+    description: str | None = None
+    theme: str | None = None
+
+
+def slug_ou_404(slug: str) -> str:
+    if not biblio.existe(slug):
+        raise HTTPException(status_code=404, detail="présentation inconnue")
+    return slug
+
+
+@app.get("/api/presentations")
+async def presentations_lister() -> list[dict]:
+    return biblio.lister()
+
+
+@app.get("/api/presentations/active")
+async def presentations_active() -> dict:
+    actif = biblio.active()
+    if not actif:
+        return {"slug": None, "titre": "", "theme": ""}
+    meta = biblio.lire(actif)
+    return {"slug": actif, "titre": meta["titre"], "theme": meta["theme"]}
+
+
+@app.post("/api/presentations", dependencies=[Depends(verifier_jeton)])
+async def presentations_creer(corps: NouvellePresentation) -> dict:
+    try:
+        return biblio.creer(corps.slug, corps.titre, corps.description, corps.theme, corps.depuis)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail="ce slug existe déjà")
+    except KeyError:
+        raise HTTPException(status_code=404, detail="présentation source inconnue")
+
+
+@app.post("/api/presentations/importer", dependencies=[Depends(verifier_jeton)])
+async def presentations_importer(fichier: UploadFile = File(...), slug: str = Form(...), titre: str = Form(default="")) -> dict:
+    nom = fichier.filename or "presentation.pptx"
+    if not nom.lower().endswith(".pptx"):
+        raise HTTPException(status_code=415, detail="un fichier .pptx est attendu")
+    try:
+        valider_slug(slug)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if biblio.existe(slug):
+        raise HTTPException(status_code=409, detail="ce slug existe déjà")
+    contenu = await fichier.read()
+    if len(contenu) > 200 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="fichier trop volumineux (200 Mo)")
+    try:
+        # Conversion dans un fil d'exécution : LibreOffice peut prendre plusieurs dizaines de secondes.
+        resultat = await asyncio.to_thread(biblio.importer_pptx, slug, titre, contenu, nom)
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail="ce slug existe déjà")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return resultat
+
+
+@app.get("/api/presentations/{slug}")
+async def presentations_lire(slug: str) -> dict:
+    return biblio.resume(slug_ou_404(slug))
+
+
+@app.post("/api/presentations/{slug}/activer", dependencies=[Depends(verifier_jeton)])
+async def presentations_activer(slug: str) -> dict:
+    slug_ou_404(slug)
+    try:
+        questions = charger_questions(biblio.fichier_quiz(slug))
+    except (ValueError, TypeError, KeyError) as e:
+        raise HTTPException(status_code=422, detail=f"quiz.json invalide : {e}")
+    biblio.activer(slug)
+    biblio.dossier_medias(slug).mkdir(exist_ok=True)
+    quiz.remplacer_questions(questions)
+    quiz.fermer()
+    quiz.revelee = None
+    await publier_quiz()
+    # Tous les rôles rechargent le deck, télécommande comprise (sa miniature affiche la nouvelle présentation).
+    await deck_ws.diffuser({"type": "recharger", "prez": slug})
+    return biblio.resume(slug)
+
+
+@app.put("/api/presentations/{slug}", dependencies=[Depends(verifier_jeton)])
+async def presentations_modifier(slug: str, corps: ModificationPresentation) -> dict:
+    slug_ou_404(slug)
+    try:
+        return biblio.modifier(slug, corps.titre, corps.description, corps.theme)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.delete("/api/presentations/{slug}", dependencies=[Depends(verifier_jeton)])
+async def presentations_supprimer(slug: str) -> dict:
+    slug_ou_404(slug)
+    try:
+        biblio.supprimer(slug)
+    except PermissionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"ok": True}
 
 
 @app.get("/qr.png")
@@ -364,23 +557,32 @@ async def quiz_etat(request: Request, response: Response, question_id: str | Non
 
 
 @app.get("/api/quiz/questions")
-async def quiz_questions(token: str = Query(default="")) -> list[dict]:
-    """Sans jeton : vue publique (sans les bonnes réponses). Avec jeton : complète."""
+async def quiz_questions(token: str = Query(default=""), prez: str | None = None) -> list[dict]:
+    """Sans jeton : vue publique (sans les bonnes réponses). Avec jeton : complète. `prez` : celles d'une autre présentation."""
+    questions = quiz.questions
+    if prez and prez != biblio.active():
+        try:
+            questions = charger_questions(biblio.fichier_quiz(resoudre_prez(prez)))
+        except (ValueError, TypeError, KeyError) as e:
+            raise HTTPException(status_code=422, detail=f"quiz.json invalide : {e}")
     if token and jeton_valide(token):
-        return [q.complet() for q in quiz.questions.values()]
-    return [q.public() for q in quiz.questions.values()]
+        return [q.complet() for q in questions.values()]
+    return [q.public() for q in questions.values()]
 
 
 @app.put("/api/quiz/questions", dependencies=[Depends(verifier_jeton)])
-async def quiz_questions_ecrire(liste: list[dict]) -> dict:
+async def quiz_questions_ecrire(liste: list[dict], prez: str | None = None) -> dict:
+    slug = resoudre_prez(prez)
     try:
         questions = questions_depuis_liste(liste)
     except (ValueError, TypeError, KeyError) as e:
         raise HTTPException(status_code=422, detail=str(e))
-    config.FICHIER_QUIZ.write_text(json.dumps([q.complet() for q in questions.values()], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    quiz.remplacer_questions(questions)
-    await publier_quiz()
-    return {"ok": True, "questions": len(questions)}
+    biblio.fichier_quiz(slug).write_text(json.dumps([q.complet() for q in questions.values()], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    biblio.toucher(slug)
+    if slug == biblio.active():
+        quiz.remplacer_questions(questions)
+        await publier_quiz()
+    return {"ok": True, "questions": len(questions), "prez": slug}
 
 
 class Pseudo(BaseModel):

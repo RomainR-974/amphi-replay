@@ -8,7 +8,8 @@ git config --global --add safe.directory "$DEST" >/dev/null 2>&1 || true
 git pull --ff-only
 .venv/bin/pip install -q -r requirements.txt
 bash tools/fetch_reveal.sh
-mkdir -p "$DEST/data" "$DEST/deck/medias"
+mkdir -p "$DEST/data" "$DEST/presentations"
+for d in "$DEST"/presentations/*/; do [ -d "$d" ] && mkdir -p "${d}medias"; done
 chown -R amphi:amphi "$DEST"
 cp "$DEST/deploy/amphi-replay.service" /etc/systemd/system/amphi-replay.service
 systemctl daemon-reload

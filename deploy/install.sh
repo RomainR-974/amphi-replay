@@ -24,6 +24,8 @@ echo "== paquets"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q python3 python3-venv python3-pip git curl ffmpeg debian-keyring debian-archive-keyring apt-transport-https sqlite3
+# LibreOffice Impress (soffice) : rastérisation des objets complexes à l'import d'un PowerPoint (sans lui, import dégradé).
+apt-get install -y -q --no-install-recommends libreoffice-impress
 
 # Reverse proxy HTTPS : Caddy par défaut ; si Nginx tourne déjà (autres sites sur le serveur), on s'y branche
 # avec un site dédié et un certificat Let's Encrypt obtenu par certbot, sans toucher aux autres sites.
@@ -54,7 +56,9 @@ if [ -d "$DEST/.git" ]; then
 else
   git clone "$DEPOT" "$DEST"
 fi
-mkdir -p "$DEST/data" "$DEST/deck/medias"
+# Chaque présentation a son dossier de médias (presentations/<slug>/medias), écrit par l'éditeur et l'import PowerPoint.
+mkdir -p "$DEST/data" "$DEST/presentations"
+for d in "$DEST"/presentations/*/; do [ -d "$d" ] && mkdir -p "${d}medias"; done
 
 echo "== environnement python"
 python3 -m venv "$DEST/.venv"
@@ -106,5 +110,6 @@ echo "  Participants   : https://$DOMAINE/q"
 echo "  Projecteur     : https://$DOMAINE/deck/?role=scene"
 echo "  Source OBS     : https://$DOMAINE/deck/?role=obs"
 echo "  Télécommande   : https://$DOMAINE/remote?token=$JETON"
+echo "  Présentations  : https://$DOMAINE/presentations?token=$JETON"
 echo "  Santé          : https://$DOMAINE/sante"
 echo "Mettre à jour   : sudo bash $DEST/deploy/deploy.sh"

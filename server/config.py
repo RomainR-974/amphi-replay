@@ -19,9 +19,17 @@ URL_PUBLIQUE: str = os.environ.get("AMPHI_URL_PUBLIQUE", "http://localhost:8000"
 # Base SQLite des réponses au quiz.
 CHEMIN_BDD: Path = Path(os.environ.get("AMPHI_BDD", RACINE / "data" / "quiz.sqlite"))
 
-# Dossier du deck (fichiers statiques servis sous /deck/) et déclaration des questions.
+# Dossier du runtime du deck (fichiers statiques communs servis sous /deck/ : index.html, sync.js, éditeur…).
 DOSSIER_DECK: Path = Path(os.environ.get("AMPHI_DECK", RACINE / "deck"))
-FICHIER_QUIZ: Path = Path(os.environ.get("AMPHI_QUIZ", DOSSIER_DECK / "quiz.json"))
+
+# Bibliothèque de présentations : un sous-dossier par présentation (voir docs/presentations.md).
+DOSSIER_PRESENTATIONS: Path = Path(os.environ.get("AMPHI_PRESENTATIONS", RACINE / "presentations"))
+
+# Présentation active par défaut (slug) quand data/active.json n'existe pas ; sinon le premier slug trié.
+PRESENTATION_DEFAUT: str | None = os.environ.get("AMPHI_PRESENTATION") or None
+
+# État d'exécution : la présentation active, à côté de la base SQLite (pas dans git).
+FICHIER_ACTIVE: Path = CHEMIN_BDD.parent / "active.json"
 
 # Fichiers statiques du serveur (pages participant / résultats).
 DOSSIER_STATIQUE: Path = RACINE / "server" / "static"

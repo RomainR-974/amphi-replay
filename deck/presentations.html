@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Présentations</title>
+<!-- Thème du deck (mêmes règles que deck/index.html) pour des vignettes fidèles. -->
+<link rel="stylesheet" href="vendor/reveal/theme/white.css">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="presentations.css">
+</head>
+<body>
+
+<header id="barre">
+  <div class="groupe">
+    <h1>Présentations</h1>
+    <span id="etat" class="etat">chargement…</span>
+  </div>
+  <div class="groupe">
+    <button id="b-nouvelle" class="principal">+ Nouvelle</button>
+    <button id="b-importer">Importer un PowerPoint…</button>
+  </div>
+</header>
+
+<main>
+  <p id="vide" class="vide" hidden>Aucune présentation. Créez-en une ou importez un PowerPoint.</p>
+  <div id="cartes" class="cartes"></div>
+</main>
+
+<footer id="liens">
+  <span class="libelle">Présentation active :</span>
+  <a id="l-scene" href="/deck/?role=scene" target="_blank">Projecteur</a>
+  <a id="l-obs" href="/deck/?role=obs" target="_blank">Source OBS</a>
+  <a id="l-remote" href="/deck/remote.html" target="_blank">Télécommande</a>
+  <a id="l-q" href="/q" target="_blank">Participants</a>
+  <a id="l-classement" href="/q/classement" target="_blank">Classement</a>
+  <span class="espace"></span>
+  <a href="/sante" target="_blank" class="sourd">Santé</a>
+</footer>
+
+<!-- Boîte de dialogue générique : création, duplication, renommage, import -->
+<dialog id="dialogue">
+  <form method="dialog" id="dialogue-form">
+    <h3 id="dialogue-titre"></h3>
+    <div id="dialogue-champs"></div>
+    <div id="dialogue-progression" class="progression" hidden><div class="barre"></div><span>Conversion en cours (LibreOffice peut prendre une minute)…</span></div>
+    <div id="dialogue-erreur" class="erreur" hidden></div>
+    <div class="actions">
+      <button value="annuler" type="button" id="dialogue-annuler">Annuler</button>
+      <button value="ok" class="principal" id="dialogue-ok">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Résultat d'un import : avertissements de la conversion -->
+<dialog id="rapport">
+  <form method="dialog">
+    <h3>PowerPoint importé</h3>
+    <p id="rapport-resume"></p>
+    <ul id="rapport-avertissements" class="avertissements"></ul>
+    <div class="actions">
+      <button value="editer" type="button" id="rapport-editer">Ouvrir dans l'éditeur</button>
+      <button value="ok" class="principal">Fermer</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="presentations.js"></script>
+</body>
+</html>

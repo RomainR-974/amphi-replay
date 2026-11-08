@@ -34,6 +34,9 @@ textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12p
 /* ---- Barre du haut ---- */
 #barre { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px; background: var(--fond2); border-bottom: 1px solid var(--bord); }
 #barre .groupe { display: flex; align-items: center; gap: 8px; }
+#lien-presentations { color: var(--sourd); text-decoration: none; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+#lien-presentations:hover { background: var(--fond3); color: var(--texte); }
+#titre-prez { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .onglet { background: transparent; border-color: transparent; padding: 6px 14px; }
 .onglet.actif { background: var(--fond3); border-color: var(--bord); color: #fff; }
 

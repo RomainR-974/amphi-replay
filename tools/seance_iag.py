@@ -4,8 +4,8 @@
 Part d'un slides.html produit par pptx2reveal.py (41 sections) et y intègre les quiz DANS les
 diapositives, ajoute des animations et des transitions, puis insère les quiz autonomes.
 
-    python tools/pptx2reveal.py prez.pptx --sortie deck/slides.html --medias deck/medias --qr-premiere
-    python tools/seance_iag.py deck/slides.html
+    python tools/pptx2reveal.py prez.pptx --sortie presentations/iag-v1/slides.html --medias presentations/iag-v1/medias --qr-premiere
+    python tools/seance_iag.py presentations/iag-v1/slides.html
 
 Rejouable après une modification du PowerPoint. Chaque étape est une fonction courte, pour servir
 d'exemple à une autre séance (voir docs/format-deck.md pour le format).
@@ -225,7 +225,7 @@ def quiz_autonomes(d: Deck) -> None:
 
 
 def principal(argv: list[str] | None = None) -> int:
-    chemin = Path((argv or sys.argv[1:] or ["deck/slides.html"])[0])
+    chemin = Path((argv or sys.argv[1:] or ["presentations/iag-v1/slides.html"])[0])
     d = Deck(chemin)
     if 'data-quiz="sondage1"' in d.html:
         print("déjà composé : repartir d'une conversion fraîche de pptx2reveal.py", file=sys.stderr)

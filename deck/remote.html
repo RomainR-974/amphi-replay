@@ -12,7 +12,8 @@
   html, body { margin: 0; height: 100%; background: var(--fond); color: var(--texte); font-family: system-ui, sans-serif; overscroll-behavior: none; }
   body { display: grid; grid-template-rows: auto auto 1fr auto auto; height: 100dvh; }
 
-  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  #titre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sourd); text-align: center; }
   .voyants { display: flex; gap: 10px; }
   .voyant { display: flex; align-items: center; gap: 5px; }
   .voyant::before { content: ''; width: 12px; height: 12px; border-radius: 50%; background: var(--rouge); }
@@ -56,6 +57,7 @@
     <span class="voyant" id="v-scene">scene</span>
     <span class="voyant" id="v-obs">obs</span>
   </div>
+  <div id="titre" title="Présentation active"></div>
   <div id="chrono">00:00</div>
 </header>
 
@@ -93,6 +95,15 @@
 
   if (!token) afficherErreur('Jeton manquant : ouvrir /remote?token=…');
 
+  // --- Titre de la présentation active (rafraîchi quand une autre présentation est activée) ----
+  async function afficherTitre() {
+    try {
+      const m = await (await fetch('/api/presentations/active', { cache: 'no-store' })).json();
+      $('titre').textContent = m.titre || '';
+    } catch (e) { /* serveur injoignable : on garde le titre précédent */ }
+  }
+  afficherTitre();
+
   // --- Miniature : le même deck, rôle remote, mis à l'échelle de la largeur disponible ----
   deck.src = `/deck/?role=remote&token=${encodeURIComponent(token)}`;
   function redimensionner() {
@@ -110,8 +121,11 @@
         R = w.Reveal;
         ['slidechanged', 'fragmentshown', 'fragmenthidden', 'ready'].forEach(ev => R.on(ev, rafraichir));
         if (w.AmphiSync) {
-          w.AmphiSync.on('connexion', ({ connecte }) => voyant('v-serveur', connecte ? 0 : Infinity));
+          // À chaque (re)connexion, le titre est relu : l'active a pu changer pendant une coupure réseau.
+          w.AmphiSync.on('connexion', ({ connecte }) => { voyant('v-serveur', connecte ? 0 : Infinity); if (connecte) afficherTitre(); });
           w.AmphiSync.on('ack', m => { acks[m.role] = Date.now(); });
+          // Présentation activée ou deck enregistré : l'iframe recharge son contenu (index.html) ; ici, titre, notes et quiz.
+          w.AmphiSync.on('recharger', () => { afficherTitre(); setTimeout(rafraichir, 500); });
         }
         rafraichir();
       }

@@ -189,3 +189,10 @@
 .reveal section.dsfr .dsfr-tags { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .reveal section.dsfr svg.ico.ico-grand { width: 96px; height: 96px; color: var(--dsfr-bleu); }
 .reveal section.dsfr svg.ico.ico-geant { width: 380px; height: 380px; color: var(--dsfr-blanc); stroke-width: 1.4; }
+
+/* Les titres : le thème reveal (white.css) impose sa police sur h1-h6 avec une spécificité supérieure ; on reprend la main. */
+.reveal section.dsfr h1, .reveal section.dsfr h2, .reveal section.dsfr h3, .reveal section.dsfr h4,
+.reveal section.dsfr .dsfr-titre, .reveal section.dsfr .dsfr-chapitre, .reveal section.dsfr .dsfr-surtitre,
+.reveal .slides section.dsfr h1, .reveal .slides section.dsfr h2, .reveal .slides section.dsfr h3 {
+  font-family: "Marianne", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-transform: none; letter-spacing: normal;
+}

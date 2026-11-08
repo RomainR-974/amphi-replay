@@ -21,14 +21,54 @@
   const role = AmphiSync.role;
   document.documentElement.dataset.role = role;
   const slides = document.getElementById('slides');
+  // ?prez=slug : prévisualisation d'une présentation non active (pas de synchronisation) ; sinon la présentation active.
+  const params = new URLSearchParams(location.search);
+  const prez = /^[a-z0-9-]{1,40}$/.test(params.get('prez') || '') ? params.get('prez') : null;
+
+  // Métadonnées de la présentation (titre, thème) : /api/presentations/active ou l'entrée de la présentation demandée.
+  async function metadonnees() {
+    try {
+      if (!prez) return await (await fetch('/api/presentations/active', { cache: 'no-store' })).json();
+      const liste = await (await fetch('/api/presentations', { cache: 'no-store' })).json();
+      return liste.find(p => p.slug === prez) || {};
+    } catch (e) { return {}; }
+  }
+  // Feuille de thème optionnelle (deck/themes/<theme>.css), après theme.css ; remplacée à chaque changement de présentation.
+  async function appliquerTheme(meta) {
+    if (meta.titre) document.title = meta.titre;
+    const ancien = document.getElementById('theme-prez');
+    const theme = meta.theme && /^[a-z0-9_-]{1,40}$/.test(meta.theme) ? meta.theme : null;
+    if (ancien && ancien.dataset.theme === (theme || '')) return;
+    if (ancien) ancien.remove();
+    if (!theme) return;
+    const lien = document.createElement('link');
+    lien.id = 'theme-prez'; lien.dataset.theme = theme;
+    lien.rel = 'stylesheet'; lien.href = 'themes/' + theme + '.css';
+    document.head.appendChild(lien);
+    await new Promise(r => { lien.onload = lien.onerror = r; });
+  }
+  await appliquerTheme(await metadonnees());
+
+  /** En prévisualisation, les médias relatifs (medias/…) sont ceux de la présentation demandée, pas de l'active. */
+  function reecrireMedias(racine) {
+    if (!prez) return;
+    const prefixe = '/p/' + prez + '/';
+    racine.querySelectorAll('[src^="medias/"], [data-src^="medias/"], [data-background-image^="medias/"]').forEach(el => {
+      for (const attr of ['src', 'data-src', 'data-background-image']) {
+        const v = el.getAttribute(attr);
+        if (v && v.startsWith('medias/')) el.setAttribute(attr, prefixe + v);
+      }
+    });
+  }
 
   async function charger() {
     // Le contenu du deck vit dans slides.html (PowerPoint converti, PDF converti ou éditeur).
-    const html = await (await fetch('slides.html', { cache: 'no-store' })).text();
+    const html = await (await fetch(prez ? '/p/' + prez + '/slides.html' : 'slides.html', { cache: 'no-store' })).text();
     slides.innerHTML = html;
+    reecrireMedias(slides);
     // Rôle obs : aucune transition, pour un rendu simultané avec le projecteur.
     if (role === 'obs') slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
-    await AmphiQuizDeck.preparer(slides);
+    await AmphiQuizDeck.preparer(slides, prez);
   }
   await charger();
 
@@ -53,14 +93,17 @@
   Reveal.on('fragmentshown', e => AmphiQuizDeck.surFragment(e.fragment));
   Reveal.on('ready', e => AmphiQuizDeck.surDiapositive(e.currentSlide));
 
-  // L'éditeur a enregistré : recharger le contenu sans perdre la position (hors remote, qui garde la main).
-  AmphiSync.on('recharger', async () => {
+  // L'éditeur a enregistré ou une autre présentation a été activée : recharger le contenu sans perdre la position
+  // (tous les rôles, la miniature de la télécommande comprise ; à l'activation, on revient à la première diapositive).
+  AmphiSync.on('recharger', async m => {
     const i = Reveal.getIndices();
     await charger();
     Reveal.sync();
-    Reveal.slide(i.h, i.v, i.f);
+    if (m && m.prez) { await appliquerTheme(await metadonnees()); Reveal.slide(0, 0, -1); }
+    else Reveal.slide(i.h, i.v, i.f);
   });
-  AmphiSync.demarrer();
+  // Prévisualisation d'une présentation non active : pas de synchronisation avec la salle.
+  if (!prez) AmphiSync.demarrer();
 })();
 </script>
 </body>
