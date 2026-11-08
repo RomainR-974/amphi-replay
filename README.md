@@ -58,9 +58,15 @@ Tests : `.venv/bin/python -m pytest -q` (ffmpeg requis pour le test d'assemblage
      images extraites dans `deck/medias/s<diapo>_<n>.ext`, formes, tableaux, notes, fond, `data-transition`) et traduit les
      animations PowerPoint en fragments reveal.js (`fade-in`, `fade-up`, `zoom-in`, `fade-in-then-out`… avec `data-fragment-index`
      dans l'ordre des clics, puce par puce). Ce qui n'est pas géré devient `<!-- non converti : … -->` + un avertissement sur stderr.
-     Limites connues : SmartArt et objets OLE (ignorés), graphiques (zone « [graphique] » à remplacer par une image), effets
-     d'animation non mappés (rendus en `fade-in`), déclencheurs/chemins personnalisés, dégradés et motifs approximés, rognage
-     d'image ignoré, polices non embarquées (installer la police ou poser `font-family` dans l'éditeur).
+     Les objets complexes (SmartArt, groupes de formes, formes libres, flèches et autres formes automatiques non
+     rectangulaires, graphiques, objets OLE) sont rastérisés en images PNG transparentes (`deck/medias/s<diapo>_r<n>.png`)
+     via LibreOffice, en un seul export PDF : installer `apt install libreoffice-impress` (`soffice` dans le PATH) ;
+     `--sans-raster` désactive, et sans `soffice` ces objets sont ignorés avec un avertissement. Les objets rastérisés ne
+     sont plus éditables en texte dans l'éditeur, mais restent déplaçables/redimensionnables comme des images ; un groupe
+     ne contenant que du texte, des images et des rectangles/ovales reste converti forme par forme (texte éditable).
+     Limites connues : effets d'animation non mappés (rendus en `fade-in`), déclencheurs/chemins personnalisés, dégradés
+     et motifs approximés, rognage d'image ignoré, polices non embarquées (installer la police ou poser `font-family`
+     dans l'éditeur).
    - PDF : `python tools/pdf2reveal.py support.pdf --sortie deck/slides.html --quiz q1:4 --quiz q2:9 --notes notes.md`
      (`--quiz ID:PAGE` insère une diapositive de quiz après la page ; `notes.md` contient des blocs `## Page N`).
 2. Déclarer les questions dans `deck/quiz.json` (ou dans l'onglet Questions de l'éditeur) : voir [docs/format-deck.md](docs/format-deck.md), section 3.

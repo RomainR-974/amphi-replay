@@ -70,9 +70,9 @@ window.AmphiQuizDeck = (function () {
   function construireElement(el) {
     const genre = el.dataset.amphi;
     if (genre === 'resultats') {
-      el.innerHTML = `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(el.dataset.question || '')}" title="Résultats" loading="eager"></iframe>`;
+      el.innerHTML = `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(el.dataset.question || '')}&couleur=${couleurDe(el)}" title="Résultats" loading="eager"></iframe>`;
     } else if (genre === 'classement') {
-      el.innerHTML = `<iframe class="quiz-resultats" src="/q/classement?nombre=${encodeURIComponent(el.dataset.nombre || 10)}" title="Classement" loading="eager"></iframe>`;
+      el.innerHTML = `<iframe class="quiz-resultats" src="/q/classement?nombre=${encodeURIComponent(el.dataset.nombre || 10)}&couleur=${couleurDe(el)}" title="Classement" loading="eager"></iframe>`;
     } else if (genre === 'qr') {
       el.innerHTML = blocQr();
     } else if (genre === 'minuteur') {
@@ -120,6 +120,12 @@ window.AmphiQuizDeck = (function () {
   }
   function arreterMinuteur(el) { if (el._minuteur) { clearInterval(el._minuteur); el._minuteur = null; } }
   function formater(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+
+  // Couleur du texte de l'élément hôte (style inline `color`), transmise à l'iframe qui ne peut pas en hériter.
+  function couleurDe(el) {
+    const c = (el.style && el.style.color) || '';
+    return encodeURIComponent(c.replace(/^#/, ''));
+  }
 
   function blocQr() {
     const lisible = urlPublique.replace(/^https?:\/\//, '') + '/q';

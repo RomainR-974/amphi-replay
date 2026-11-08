@@ -8,7 +8,7 @@
   /* Podium + top N, lisible depuis le fond de l'amphi, aucune action possible. Mis à jour à chaque révélation. */
   :root { --or: #f59e0b; --argent: #9ca3af; --bronze: #b45309; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: transparent; color: inherit; font-family: system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; background: transparent; color: var(--texte, inherit); font-family: system-ui, sans-serif; }
   body { display: flex; flex-direction: column; padding: 2vh 3vw; gap: 2vh; overflow: hidden; }
   h1 { font-size: 44px; margin: 0; text-align: center; }
   .podium { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end; gap: 2vw; height: 38vh; }
@@ -35,6 +35,8 @@
 <div id="vue"><p class="attente">Pas encore de points…</p></div>
 <script>
 (() => {
+  // ?couleur=ffffff : couleur du texte imposée par la diapositive hôte (fond sombre).
+  { const c = new URLSearchParams(location.search).get('couleur'); if (c && /^[0-9a-fA-F]{3,8}$/.test(c)) document.documentElement.style.setProperty('--texte', '#' + c); else if (c) document.documentElement.style.setProperty('--texte', c); }
   const vue = document.getElementById('vue');
   const nombre = Math.max(3, Math.min(100, Number(new URLSearchParams(location.search).get('nombre')) || 10));
   let precedent = '';

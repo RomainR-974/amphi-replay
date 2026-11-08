@@ -8,7 +8,7 @@
   /* Lisible depuis le fond de l'amphi : 32 px minimum à 1920×1080. Page sans aucune action possible. */
   :root { --accent: #2563eb; --ok: #16a34a; --ko: #dc2626; --c1: #2563eb; --c2: #f59e0b; --c3: #10b981; --c4: #ef4444; --c5: #8b5cf6; --c6: #ec4899; --c7: #14b8a6; --c8: #f97316; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: transparent; color: inherit; font-family: system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; background: transparent; color: var(--texte, inherit); font-family: system-ui, sans-serif; }
   body { display: flex; flex-direction: column; justify-content: center; padding: 2vh 3vw; gap: 1vh; overflow: hidden; }
   h1 { font-size: 40px; margin: 0 0 1vh; line-height: 1.2; }
   .ligne { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "libelle nombre" "barre barre"; align-items: center; column-gap: 1.5vw; row-gap: .3vh; font-size: 32px; margin-bottom: 1vh; }
@@ -54,6 +54,8 @@
 <div id="vue" style="display:contents"><p class="attente">En attente d'une question…</p></div>
 <script>
 (() => {
+  // ?couleur=ffffff : couleur du texte imposée par la diapositive hôte (fond sombre).
+  { const c = new URLSearchParams(location.search).get('couleur'); if (c && /^[0-9a-fA-F]{3,8}$/.test(c)) document.documentElement.style.setProperty('--texte', '#' + c); else if (c) document.documentElement.style.setProperty('--texte', c); }
   const vue = document.getElementById('vue');
   const params = new URLSearchParams(location.search);
   const questionFixe = params.get('question'); // ?question=q1 : fige la vue sur une question donnée

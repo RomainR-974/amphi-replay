@@ -9,6 +9,7 @@
 /* Sections « libres » : positionnement absolu dans la scène 1920×1080 (PowerPoint converti, éditeur). */
 .reveal .slides section.libre { width: 1920px; height: 1080px; padding: 0; text-align: left; top: 0 !important; }
 .reveal .slides section.libre > .el { position: absolute; margin: 0; box-sizing: border-box; overflow: hidden; }
+.reveal .slides section.libre > .el.texte { overflow: visible; } /* PowerPoint laisse déborder le texte plutôt que de le couper */
 .reveal .slides section.libre > .el.texte p, .reveal .slides section.libre > .el.texte ul, .reveal .slides section.libre > .el.texte ol { margin: 0 0 .3em; }
 .reveal .slides section.libre > .el.texte ul, .reveal .slides section.libre > .el.texte ol { margin-left: 1.2em; }
 .reveal .slides section.libre > .el.texte h1, .reveal .slides section.libre > .el.texte h2, .reveal .slides section.libre > .el.texte h3 { margin: 0; text-transform: none; }
