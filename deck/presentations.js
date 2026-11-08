@@ -78,6 +78,48 @@
     presentations.forEach(p => conteneur.append(carte(p)));
     requestAnimationFrame(redimensionnerVignettes);
     presentations.forEach(p => chargerVignette(p.slug));
+    presentations.forEach(p => chargerReplays(p.slug));
+  }
+
+  // ---- Replays de la carte (docs/postprod.md §2) : Lire, Supprimer ----
+  function formaterDuree(s) {
+    s = Math.max(0, Math.round(s || 0));
+    const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return hh ? hh + ':' + pad(mm) + ':' + pad(ss) : pad(mm) + ':' + pad(ss);
+  }
+  async function chargerReplays(slug) {
+    const zone = document.querySelector('.carte[data-slug="' + slug + '"] .replays');
+    if (!zone) return;
+    let replays;
+    try {
+      replays = await (await fetch('/api/presentations/' + encodeURIComponent(slug) + '/replays', { cache: 'no-store' })).json();
+      if (!Array.isArray(replays)) throw new Error();
+    } catch (e) {
+      zone.textContent = '';
+      zone.append(h('span', { class: 'sourd' }, 'replays indisponibles'));
+      return;
+    }
+    zone.textContent = '';
+    if (!replays.length) { zone.append(h('span', { class: 'sourd' }, 'Aucun replay')); return; }
+    zone.append(h('div', { class: 'replays-titre' }, pluriel(replays.length, 'replay')));
+    replays.forEach(r => {
+      const urlLire = '/deck/replay.html?prez=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(r.id) + '&token=' + encodeURIComponent(token);
+      zone.append(h('div', { class: 'replay' },
+        h('a', { class: 'replay-titre', href: urlLire, title: r.titre }, r.titre),
+        h('span', { class: 'replay-infos' }, formaterDate(r.date), ' · ', formaterDuree(r.duree), ' · ', pluriel(r.chapitres, 'chapitre'), r.extraits ? ' · ' + pluriel(r.extraits, 'extrait') : ''),
+        h('span', { class: 'replay-actions' },
+          h('button', { onclick: () => { location.href = urlLire; } }, '▶ Lire'),
+          h('button', { class: 'danger', title: 'Supprimer le dossier du replay', onclick: () => supprimerReplay(slug, r) }, 'Supprimer'))));
+    });
+  }
+  async function supprimerReplay(slug, r) {
+    if (!confirm('Supprimer le replay « ' + r.titre + ' » (' + r.id + ') ?\nLa vidéo, les chapitres et les extraits seront effacés.')) return;
+    try {
+      await api('/api/presentations/' + encodeURIComponent(slug) + '/replays/' + encodeURIComponent(r.id), { method: 'DELETE' });
+      etat('replay « ' + r.titre + ' » supprimé', 'ok');
+    } catch (e) { etat('erreur : ' + e.message, 'erreur'); }
+    await chargerReplays(slug);
   }
 
   function carte(p) {
@@ -93,12 +135,14 @@
           h('span', {}, pluriel(p.questions, 'question')),
           p.theme ? h('span', {}, 'thème ' + p.theme) : null,
           h('code', { title: 'presentations/' + p.slug }, p.slug),
-          h('span', { title: 'Dernière modification' }, formaterDate(p.modifie)))),
+          h('span', { title: 'Dernière modification' }, formaterDate(p.modifie))),
+        h('div', { class: 'replays' }, h('span', { class: 'sourd' }, 'replays…'))),
       h('div', { class: 'actions' },
         h('button', { class: 'lancer', disabled: p.active, title: p.active ? 'Déjà active' : 'Rendre active : écran, OBS, télécommande et participants basculent dessus', onclick: () => lancer(p) }, p.active ? '✔ Active' : '▶ Lancer'),
         h('button', { onclick: () => { location.href = urlEditeur; } }, 'Éditer'),
         h('button', { onclick: () => dupliquer(p) }, 'Dupliquer'),
         h('button', { onclick: () => renommer(p) }, 'Renommer'),
+        h('button', { class: 'postprod', title: 'Assembler un replay (son du téléphone + vidéo OBS, chapitrage)', onclick: () => { location.href = '/deck/postprod.html?token=' + encodeURIComponent(token) + '&prez=' + encodeURIComponent(p.slug); } }, '🎬 Post-production…'),
         h('span', { class: 'espace' }),
         h('button', { class: 'danger', disabled: p.active, title: p.active ? 'La présentation active ne peut pas être supprimée' : 'Supprimer définitivement', onclick: () => supprimer(p) }, 'Supprimer')));
   }

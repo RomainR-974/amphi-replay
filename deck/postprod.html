@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Post-production</title>
+<link rel="stylesheet" href="postprod.css">
+</head>
+<body>
+
+<header id="barre">
+  <div class="groupe">
+    <h1>Post-production</h1>
+    <span id="etat" class="etat">chargement…</span>
+  </div>
+  <div class="groupe">
+    <a id="l-presentations" href="/deck/presentations.html">← Présentations</a>
+  </div>
+</header>
+
+<main>
+  <!-- 1. Présentation et fichiers -->
+  <section class="etape" id="etape-fichiers">
+    <h2><span class="numero">1</span> Présentation et fichiers <span class="espace"></span><small id="dossier-captations"></small></h2>
+    <div class="ligne">
+      <label for="prez">Présentation</label>
+      <div class="champ"><select id="prez"></select></div>
+      <button id="b-rafraichir" title="Relire le dossier de captations">↻ Rafraîchir les fichiers</button>
+    </div>
+    <div class="defilant">
+      <table id="captations">
+        <thead><tr><th class="choix">Vidéo</th><th class="choix">Audio</th><th>Fichier</th><th></th><th class="num">Durée</th><th class="num">Taille</th><th class="num">Modifié</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="captations-vide" class="vide" hidden></p>
+    </div>
+    <div class="ligne" style="margin-top:10px">
+      <label class="case"><input type="checkbox" id="sans-audio"> Pas de recalage audio (garder le son OBS tel quel)</label>
+    </div>
+    <p class="aide">L'<strong>enregistrement OBS</strong> est la vidéo ; l'<strong>audio du téléphone</strong> (WAV, M4A…) est recalé automatiquement dessus par les deux claps. Copier les deux fichiers dans le dossier de captations ci-dessus.</p>
+  </section>
+
+  <!-- 2. Séance -->
+  <section class="etape" id="etape-seance">
+    <h2><span class="numero">2</span> Séance et chapitres</h2>
+    <div class="ligne">
+      <label for="serveur">Serveur de la séance</label>
+      <div class="champ"><input type="url" id="serveur" placeholder="https://q.mondomaine.fr (vide = ce serveur)"></div>
+      <label for="jeton-serveur">Jeton</label>
+      <div class="champ court"><input type="password" id="jeton-serveur" autocomplete="off" style="width:160px"></div>
+      <button id="b-seances" class="principal">Charger les séances</button>
+    </div>
+    <div class="defilant">
+      <table id="seances">
+        <thead><tr><th class="choix"></th><th>Séance</th><th class="num">Durée</th><th class="num">Diapositives</th><th class="num">Événements</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="seances-vide" class="vide">Choisir une présentation puis cliquer sur « Charger les séances ».</p>
+    </div>
+    <div class="ligne" style="margin-top:10px">
+      <label>Début de l'enregistrement estimé</label>
+      <span id="debut-estime" class="sourd">—</span>
+      <span class="espace"></span>
+      <label for="decalage">Décalage manuel (s)</label>
+      <input type="number" id="decalage" value="0" step="1">
+      <span class="sourd" title="Positif : les chapitres arrivent plus tôt dans la vidéo ; négatif : plus tard">±</span>
+    </div>
+    <div class="apercu">
+      <h3>Aperçu des chapitres <span id="apercu-resume"></span></h3>
+      <table id="apercu"><tbody></tbody></table>
+      <p id="apercu-vide" class="vide">Aucun chapitre : choisir une vidéo et une séance.</p>
+    </div>
+  </section>
+
+  <!-- 3. Options -->
+  <section class="etape" id="etape-options">
+    <h2><span class="numero">3</span> Options</h2>
+    <div class="ligne">
+      <label for="titre">Titre du replay</label>
+      <div class="champ"><input type="text" id="titre" placeholder="Titre de la présentation + date de la séance"></div>
+    </div>
+    <div class="ligne">
+      <label class="case"><input type="checkbox" id="garder-reference"> Garder la piste de référence OBS (seconde piste audio)</label>
+      <label class="case"><input type="checkbox" id="extraits" checked> Générer les extraits par chapitre</label>
+    </div>
+  </section>
+
+  <!-- 4. Lancement -->
+  <section class="etape" id="etape-lancer">
+    <h2><span class="numero">4</span> Assembler</h2>
+    <div class="ligne">
+      <button id="b-assembler" class="principal grand">▶ Assembler</button>
+      <span id="lancer-aide" class="sourd"></span>
+    </div>
+    <div id="progression">
+      <div class="etapes-tache" id="etapes"></div>
+      <pre class="journal" id="journal"></pre>
+      <div class="resultat" id="resultat"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="pied">
+  <span>Post-production locale : les vidéos ne quittent pas ce PC. Le journal des diapositives vient du serveur de la séance.</span>
+  <span class="espace"></span>
+  <a href="/sante" target="_blank">Santé</a>
+</footer>
+
+<script src="postprod.js"></script>
+</body>
+</html>

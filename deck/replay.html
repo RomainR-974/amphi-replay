@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replay</title>
+<link rel="stylesheet" href="postprod.css">
+</head>
+<body>
+
+<header id="barre">
+  <div class="groupe">
+    <h1 id="titre">Replay</h1>
+    <span id="etat" class="etat"></span>
+  </div>
+  <div class="groupe">
+    <a id="l-presentations" href="/deck/presentations.html">← Présentations</a>
+  </div>
+</header>
+
+<main>
+  <div class="lecteur">
+    <div>
+      <video id="video" controls preload="metadata" playsinline>
+        <track id="piste-chapitres" kind="chapters" srclang="fr" label="Chapitres" default>
+        Votre navigateur ne lit pas les vidéos MP4.
+      </video>
+      <div class="meta" id="meta"></div>
+      <p id="erreur" class="erreur" hidden></p>
+    </div>
+    <aside>
+      <section class="panneau">
+        <h2>Chapitres <span id="nb-chapitres" class="sourd"></span></h2>
+        <ol class="chapitres" id="chapitres"></ol>
+        <p id="chapitres-vide" class="vide" hidden>Aucun chapitre.</p>
+      </section>
+      <section class="panneau">
+        <h2>Téléchargements</h2>
+        <div class="liens" id="liens"></div>
+        <details style="margin-top:10px">
+          <summary class="sourd" style="cursor:pointer">Chapitres au format YouTube (à coller dans la description)</summary>
+          <textarea class="youtube" id="youtube" readonly></textarea>
+        </details>
+      </section>
+      <section class="panneau">
+        <h2>Extraits <span id="nb-extraits" class="sourd"></span></h2>
+        <ul class="extraits" id="extraits"></ul>
+        <p id="extraits-vide" class="vide" hidden>Aucun extrait.</p>
+        <div class="ligne" style="margin-top:10px">
+          <button id="b-decouper" hidden>✂ Découper les extraits</button>
+          <span id="decoupe-etat" class="sourd"></span>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<footer id="pied">
+  <span id="pied-info"></span>
+  <span class="espace"></span>
+  <a id="l-postprod" href="/deck/postprod.html" hidden>Post-production…</a>
+</footer>
+
+<script src="replay.js"></script>
+</body>
+</html>

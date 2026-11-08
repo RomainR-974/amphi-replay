@@ -26,8 +26,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
+from .journal import Journal, titres_presentation
 from .presentations import Bibliotheque, valider_slug
 from .quiz import Quiz, charger_questions, questions_depuis_liste
+from .replays import Captations, Replays, Taches, assembler_replay, outils_presents
 
 journal = logging.getLogger("amphi")
 
@@ -93,18 +95,26 @@ quiz_ws = Diffuseur()
 etat_deck = EtatDeck()
 biblio = Bibliotheque(config.DOSSIER_PRESENTATIONS, config.FICHIER_ACTIVE, config.PRESENTATION_DEFAUT)
 quiz: Quiz
+journal_bd: Journal  # journal de séance (table `journal` de la même base SQLite ; voir docs/postprod.md)
+replays = Replays(biblio)
+captations = Captations(config.DOSSIER_CAPTATIONS)
+taches = Taches()
 _publication = asyncio.Event()  # levé par les votes : l'état est publié, regroupé, par la boucle de fond
 _fond: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def cycle_de_vie(app: FastAPI):
-    global quiz
+    global quiz, journal_bd
     active = biblio.active()
     fichier_quiz = biblio.fichier_quiz(active) if active else None
     quiz = Quiz(charger_questions(fichier_quiz) if fichier_quiz else {}, config.CHEMIN_BDD)
+    journal_bd = Journal(config.CHEMIN_BDD)
+    captations.preparer()
     app.state.quiz = quiz
     app.state.biblio = biblio
+    app.state.journal = journal_bd
+    app.state.replays = replays
     if config.JETON_GENERE:
         journal.warning("AMPHI_JETON absent : jeton de session généré = %s", config.JETON)
     if active:
@@ -242,6 +252,7 @@ async def ws_deck(ws: WebSocket, role: str = Query(default="scene"), token: str 
                 except (KeyError, TypeError, ValueError):
                     continue
                 etat_deck.appliquer(h, v, f)
+                journal_bd.ajouter(biblio.active(), "diapositive", h, v, f)
                 await deck_ws.diffuser({"type": "slide", "h": h, "v": v, "f": f}, sauf=ws)
             elif role in ("scene", "obs") and genre == "ack":
                 etat_deck.acks[role] = time.time()
@@ -463,6 +474,7 @@ async def presentations_activer(slug: str) -> dict:
     quiz.remplacer_questions(questions)
     quiz.fermer()
     quiz.revelee = None
+    journal_bd.ajouter(slug, "activation")
     await publier_quiz()
     # Tous les rôles rechargent le deck, télécommande comprise (sa miniature affiche la nouvelle présentation).
     await deck_ws.diffuser({"type": "recharger", "prez": slug})
@@ -486,6 +498,199 @@ async def presentations_supprimer(slug: str) -> dict:
     except PermissionError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------------
+# Journal de séance (docs/postprod.md §1) : CORS ouvert, la page de post-production du PC 2 l'interroge sur le VPS
+# ---------------------------------------------------------------------------------
+
+
+CORS_JOURNAL = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Max-Age": "600"}
+
+
+def reponse_cors(contenu, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(contenu, status_code=status_code, headers=CORS_JOURNAL)
+
+
+@app.options("/api/journal")
+@app.options("/api/journal/seances")
+async def journal_options() -> Response:
+    return Response(status_code=204, headers=CORS_JOURNAL)
+
+
+@app.get("/api/journal")
+async def journal_lire(prez: str, token: str = Query(default=""), depuis: float | None = None, jusqua: float | None = None) -> JSONResponse:
+    if not jeton_valide(token):
+        return reponse_cors({"detail": "jeton invalide"}, 403)
+    if not biblio.existe(prez):
+        return reponse_cors({"detail": "présentation inconnue"}, 404)
+    return reponse_cors(journal_bd.lire(prez, depuis, jusqua))
+
+
+@app.get("/api/journal/seances")
+async def journal_seances(prez: str, token: str = Query(default="")) -> JSONResponse:
+    """Séances (événements séparés de moins de 3 h), la plus récente d'abord, avec les titres des diapositives (aperçu des chapitres)."""
+    if not jeton_valide(token):
+        return reponse_cors({"detail": "jeton invalide"}, 403)
+    if not biblio.existe(prez):
+        return reponse_cors({"detail": "présentation inconnue"}, 404)
+    titres = titres_presentation(biblio.exiger(prez))
+    return reponse_cors({"prez": prez, "titre": biblio.lire(prez)["titre"], "titres": titres, "seances": journal_bd.seances(prez)})
+
+
+# ---------------------------------------------------------------------------------
+# Replays (docs/postprod.md §2)
+# ---------------------------------------------------------------------------------
+
+
+class ModificationReplay(BaseModel):
+    titre: str
+
+
+class DemandeExtraits(BaseModel):
+    chapitres: list[int] | None = None
+
+
+def replay_ou_404(slug: str, id: str) -> None:
+    slug_ou_404(slug)
+    try:
+        replays.chemin(slug, id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="replay inconnu")
+
+
+@app.get("/api/presentations/{slug}/replays")
+async def replays_lister(slug: str) -> list[dict]:
+    return await asyncio.to_thread(replays.lister, slug_ou_404(slug))
+
+
+@app.get("/api/presentations/{slug}/replays/{id}")
+async def replays_lire(slug: str, id: str) -> dict:
+    replay_ou_404(slug, id)
+    try:
+        return await asyncio.to_thread(replays.detail, slug, id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="replay inconnu")
+
+
+@app.put("/api/presentations/{slug}/replays/{id}", dependencies=[Depends(verifier_jeton)])
+async def replays_renommer(slug: str, id: str, corps: ModificationReplay) -> dict:
+    replay_ou_404(slug, id)
+    try:
+        return replays.renommer(slug, id, corps.titre)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="replay inconnu")
+
+
+@app.delete("/api/presentations/{slug}/replays/{id}", dependencies=[Depends(verifier_jeton)])
+async def replays_supprimer(slug: str, id: str) -> dict:
+    replay_ou_404(slug, id)
+    replays.supprimer(slug, id)
+    return {"ok": True}
+
+
+@app.post("/api/presentations/{slug}/replays/{id}/extraits", dependencies=[Depends(verifier_jeton)])
+async def replays_extraits(slug: str, id: str, corps: DemandeExtraits | None = None) -> dict:
+    """Découpe a posteriori : tâche d'arrière-plan `{tache}`, à suivre sur /api/postprod/taches/{id}."""
+    replay_ou_404(slug, id)
+    if not outils_presents():
+        raise HTTPException(status_code=503, detail="ffmpeg introuvable sur ce serveur")
+    indices = corps.chapitres if corps else None
+
+    def travail(tache):
+        tache.etape("extraits")
+        noms = replays.decouper(slug, id, indices, consigner=tache.consigner)
+        tache.consigner(f"{len(noms)} extrait(s)")
+        return {"slug": slug, "id": id, "extraits": noms}
+
+    return {"tache": taches.lancer(["extraits"], travail).id}
+
+
+TYPES_REPLAY = {".mp4": "video/mp4", ".vtt": "text/vtt; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json"}
+
+
+@app.get("/p/{slug}/replays/{id}/{chemin:path}")
+async def replay_fichier(slug: str, id: str, chemin: str) -> Response:
+    """replay.mp4 (Range géré par FileResponse), chapitres.vtt, chapitres.txt, journal.json, extraits/<nom>.mp4."""
+    if not biblio.existe(slug):
+        raise HTTPException(status_code=404)
+    if chemin == "journal.json":
+        try:
+            replays.lire_journal(slug, id)  # reconstitue le journal si seul replay.mp4 existe
+        except KeyError:
+            raise HTTPException(status_code=404)
+    fichier = replays.fichier(slug, id, chemin)
+    if fichier is None:
+        raise HTTPException(status_code=404)
+    entetes = {"Accept-Ranges": "bytes", "Cache-Control": "no-cache"}
+    if chemin.startswith("extraits/") or chemin == "chapitres.txt":
+        entetes["Content-Disposition"] = f'attachment; filename="{fichier.name}"'
+    return FileResponse(fichier, media_type=TYPES_REPLAY.get(fichier.suffix.lower(), "application/octet-stream"), headers=entetes)
+
+
+# ---------------------------------------------------------------------------------
+# Post-production (docs/postprod.md §3) : sur le PC 2, serveur local
+# ---------------------------------------------------------------------------------
+
+
+class DemandeAssemblage(BaseModel):
+    prez: str
+    video: str
+    audio: str | None = None
+    seance_debut: float | None = None
+    seance_fin: float | None = None
+    decalage: float = 0.0
+    titre: str | None = None
+    garder_reference: bool = False
+    extraits: bool = False
+    serveur: str | None = None
+    jeton_serveur: str | None = None
+
+
+@app.get("/api/postprod/configuration", dependencies=[Depends(verifier_jeton)])
+async def postprod_configuration() -> dict:
+    """Ce que la page de post-production préremplit : dossier de captations, URL du serveur de séance, présence de ffmpeg."""
+    return {"captations": str(config.DOSSIER_CAPTATIONS), "seance_url": config.SEANCE_URL, "ffmpeg": outils_presents()}
+
+
+@app.get("/api/postprod/captations", dependencies=[Depends(verifier_jeton)])
+async def postprod_captations() -> list[dict]:
+    return await asyncio.to_thread(captations.lister)
+
+
+@app.post("/api/postprod/assembler", dependencies=[Depends(verifier_jeton)])
+async def postprod_assembler(corps: DemandeAssemblage) -> dict:
+    slug_ou_404(corps.prez)
+    if not outils_presents():
+        raise HTTPException(status_code=503, detail="ffmpeg / ffprobe introuvables : installer ffmpeg et l'ajouter au PATH")
+    try:
+        captations.fichier(corps.video)
+        if corps.audio:
+            captations.fichier(corps.audio)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    etapes = ["préparation", "assemblage", "chapitrage"] + (["extraits"] if corps.extraits else [])
+    serveur = (corps.serveur or "").strip() or None
+
+    def travail(tache):
+        return assembler_replay(
+            tache, replays, captations, journal_bd.lire,
+            prez=corps.prez, video=corps.video, audio=corps.audio or None, seance_debut=corps.seance_debut, seance_fin=corps.seance_fin,
+            decalage=corps.decalage or 0.0, titre=corps.titre, garder_reference=corps.garder_reference, extraits=corps.extraits,
+            serveur=serveur, jeton_serveur=corps.jeton_serveur,
+        )
+
+    return {"tache": taches.lancer(etapes, travail).id}
+
+
+@app.get("/api/postprod/taches/{id}", dependencies=[Depends(verifier_jeton)])
+async def postprod_tache(id: str) -> dict:
+    tache = taches.lire(id)
+    if tache is None:
+        raise HTTPException(status_code=404, detail="tâche inconnue")
+    return tache.public()
 
 
 @app.get("/qr.png")
@@ -624,6 +829,7 @@ async def quiz_ouvrir(cible: Cible) -> dict:
         quiz.ouvrir(cible.question_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="question inconnue")
+    journal_bd.ajouter(biblio.active(), "quiz_ouvrir", question=cible.question_id)
     await publier_quiz()
     return quiz.etat()
 
@@ -631,6 +837,8 @@ async def quiz_ouvrir(cible: Cible) -> dict:
 @app.post("/api/quiz/fermer", dependencies=[Depends(verifier_jeton)])
 async def quiz_fermer() -> dict:
     derniere = quiz.fermer()
+    if derniere:
+        journal_bd.ajouter(biblio.active(), "quiz_fermer", question=derniere)
     await publier_quiz(derniere)
     return quiz.etat(derniere)
 
@@ -641,6 +849,7 @@ async def quiz_reveler(cible: Cible) -> dict:
         quiz.reveler(cible.question_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="question inconnue")
+    journal_bd.ajouter(biblio.active(), "quiz_reveler", question=cible.question_id)
     await publier_quiz(cible.question_id)
     return quiz.etat(cible.question_id)
 

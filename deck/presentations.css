@@ -46,6 +46,18 @@ main { padding: 20px; }
 .carte .actions button.lancer { background: var(--vert); border-color: var(--vert); color: #052e16; font-weight: 600; }
 .carte .actions button.lancer:disabled { opacity: .6; }
 
+/* Replays de la présentation (docs/postprod.md §2) */
+.carte .replays { border-top: 1px dashed var(--bord); margin-top: 4px; padding-top: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+.carte .replays .sourd { color: var(--sourd); }
+.carte .replays-titre { color: var(--sourd); text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+.carte .replay { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.carte .replay-titre { color: var(--texte); text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte .replay-titre:hover { text-decoration: underline; }
+.carte .replay-infos { grid-column: 1; color: var(--sourd); }
+.carte .replay-actions { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 4px; }
+.carte .replay-actions button { padding: 3px 8px; font-size: 12px; }
+.carte .actions button.postprod { border-color: #6366f1; }
+
 /* Vignette : rendu 1920×1080 de la première diapositive, réduit à la largeur de la carte (--echelle posée par le script) */
 .vignette { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #fff; position: relative; border-bottom: 1px solid var(--bord); }
 .vignette .reveal { width: 1920px; height: 1080px; transform: scale(var(--echelle, 0.16)); transform-origin: top left; position: absolute; left: 0; top: 0; pointer-events: none; }

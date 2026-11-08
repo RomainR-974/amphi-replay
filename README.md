@@ -23,14 +23,14 @@ Le serveur ne transporte aucune vidéo : il relaie un état et chaque machine re
 | Dossier | Contenu |
 | --- | --- |
 | `server/` | FastAPI : `/ws/deck`, `/etat`, `/deck/`, quiz (`/q`, `/q/resultats`, API admin par jeton), `/qr.png` |
-| `deck/` | runtime commun reveal.js : `index.html` (rôles `scene` / `obs` / `remote`), `sync.js`, `remote.html` (télécommande), `editeur.*`, `presentations.*` (accueil), `theme.css`, `themes/` |
+| `deck/` | runtime commun reveal.js : `index.html` (rôles `scene` / `obs` / `remote`), `sync.js`, `remote.html` (télécommande), `editeur.*`, `presentations.*` (accueil), `postprod.*` et `replay.*` (post-production, lecteur de replay), `theme.css`, `themes/` |
 | `presentations/` | une présentation par dossier (`<slug>/presentation.json`, `slides.html`, `quiz.json`, `medias/`) ; `iag-v1` est la séance du 9 novembre 2026 ; voir [docs/presentations.md](docs/presentations.md) |
 | `postprod/assembler.py` | recalage audio téléphone ↔ OBS par corrélation croisée, dérive, `loudnorm`, remux MP4 |
 | `obs/` | configuration OBS (scènes, Advanced Scene Switcher, raccourcis) et pont quiz → scène forcée |
 | `tools/` | `pptx2reveal.py` (PowerPoint → sections libres, animations comprises), `pdf2reveal.py` (PDF → sections), `charge.py` (300 clients), `fetch_reveal.sh` |
-| `deploy/` | `install.sh` (VPS Infomaniak), `deploy.sh`, `sauvegarde.sh`, `Caddyfile`, unité systemd, `env.example` |
+| `deploy/` | `install.sh` (VPS Infomaniak), `deploy.sh`, `sauvegarde.sh`, `postprod.sh` / `postprod.ps1` (post-production sur le PC 2), `Caddyfile`, unité systemd, `env.example` |
 | `docs/fiche-mise-en-route.md` | fiche imprimée pour le pupitre : branchements, séquence, gestes de secours |
-| `tests/` | pytest : synchronisation, quiz, jeton, recalage audio (avec ffmpeg) |
+| `tests/` | pytest : synchronisation, quiz, jeton, présentations, journal et post-production, recalage audio (avec ffmpeg) |
 
 ## Démarrage en local
 
@@ -153,6 +153,14 @@ python postprod/assembler.py enregistrement_obs.mkv telephone.wav --sortie repla
 ```
 
 Le script extrait la piste de référence d'OBS (piste 2 : micro DSLR), mesure le décalage sur les 60 premières secondes et la dérive sur les 60 dernières (les deux claps), corrige la dérive au-delà de 40 ms par rééchantillonnage, normalise à −16 LUFS avec passe-haut 80 Hz, et remuxe la vidéo sans réencodage. Un fichier `.json` à côté de la sortie consigne décalage, dérive et confiance. `--mesurer-seulement` pour vérifier avant d'écrire.
+
+## Replays et post-production
+
+Pendant la séance, le serveur tient un **journal** (table `journal` de la base SQLite) : chaque changement de diapositive envoyé par la télécommande, chaque ouverture / fermeture / révélation de question, chaque activation de présentation, avec son horodatage. `GET /api/journal?prez=slug` et `GET /api/journal/seances?prez=slug` (jeton, CORS ouvert) le renvoient ; une séance = une suite d'événements séparés de moins de 3 h.
+
+Après la séance, la post-production tourne **en local sur le PC 2** (les vidéos ne montent jamais sur le VPS) : `bash deploy/postprod.sh --captations ~/Vidéos/Captations --seance https://q.mondomaine.fr` (Linux/macOS) ou `powershell -ExecutionPolicy Bypass -File deploy\postprod.ps1 -Captations "D:\Captations" -Seance https://q.mondomaine.fr` (Windows). Le script crée le venv, vérifie ffmpeg, lance le serveur sur `127.0.0.1:8000` (jeton `local`) et ouvre `/deck/postprod.html`. On y choisit la présentation, l'enregistrement OBS et l'audio du téléphone dans le dossier de captations, on charge les séances du journal depuis le serveur de la séance, on vérifie l'aperçu des chapitres (décalage manuel si besoin), puis **Assembler** : recalage audio (`postprod/assembler.py`), chapitres MP4 embarqués, `chapitres.txt` (format YouTube, à coller dans la description) et `chapitres.vtt`, extraits par chapitre en option.
+
+Les replays sont rangés dans `presentations/<slug>/replays/<AAAA-MM-JJ_HHMM>/` (`replay.mp4`, `journal.json`, `chapitres.txt`, `chapitres.vtt`, `extraits/`), hors git. La page **Présentations** les liste sur chaque carte (**Lire**, **Supprimer**, **Post-production…**) ; `/deck/replay.html?prez=slug&id=…` est le lecteur (piste de chapitres, liste cliquable, téléchargements, extraits). Déposer un `replay.mp4` à la main dans un dossier suffit : le journal est reconstitué par ffprobe. Détails : [docs/postprod.md](docs/postprod.md).
 
 ## OBS
 
