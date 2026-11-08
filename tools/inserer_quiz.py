@@ -20,7 +20,7 @@ from pathlib import Path
 SECTION = re.compile(r"<section\b[^>]*>.*?</section>", re.S)
 CLASSEMENT = """<section class="libre" data-id="{id}" data-background-color="#2e3e7a">
   <div class="el texte" data-id="e1" style="left:120px;top:50px;width:1680px;height:110px;font-size:64px;font-weight:800;color:#ffffff;text-align:center">Classement</div>
-  <div class="el classement" data-amphi="classement" data-nombre="10" data-id="e2" style="left:120px;top:180px;width:1680px;height:860px;color:#ffffff"></div>
+  <div class="el classement" data-amphi="classement" data-sans-titre="1" data-nombre="10" data-id="e2" style="left:120px;top:180px;width:1680px;height:860px;color:#ffffff"></div>
   <aside class="notes">Podium animé : mis à jour à chaque « Révéler ».</aside>
 </section>"""
 

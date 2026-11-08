@@ -48,6 +48,8 @@
   .histo .val { margin-bottom: 4px; font-weight: 700; }
   .histo > div.bonne .col { background: var(--ok); }
   .bonne-reponse { font-size: 30px; color: var(--ok); font-weight: 700; margin-top: 1vh; }
+  html.sans-titre h1 { display: none; }
+  html.sans-titre body { justify-content: flex-start; padding-top: 1vh; }
 </style>
 </head>
 <body>
@@ -55,6 +57,7 @@
 <script>
 (() => {
   // ?couleur=ffffff : couleur du texte imposée par la diapositive hôte (fond sombre).
+  if (new URLSearchParams(location.search).get('sans_titre')) document.documentElement.classList.add('sans-titre');
   { const c = new URLSearchParams(location.search).get('couleur'); if (c && /^[0-9a-fA-F]{3,8}$/.test(c)) document.documentElement.style.setProperty('--texte', '#' + c); else if (c) document.documentElement.style.setProperty('--texte', c); }
   const vue = document.getElementById('vue');
   const params = new URLSearchParams(location.search);

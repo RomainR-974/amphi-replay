@@ -70,28 +70,67 @@ window.AmphiQuizDeck = (function () {
   function construireElement(el) {
     const genre = el.dataset.amphi;
     if (genre === 'resultats') {
-      el.innerHTML = `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(el.dataset.question || '')}&couleur=${couleurDe(el)}" title="Résultats" loading="eager"></iframe>`;
+      el.innerHTML = `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(el.dataset.question || '')}&couleur=${couleurDe(el)}${el.dataset.sansTitre ? '&sans_titre=1' : ''}" title="Résultats" loading="eager"></iframe>`;
     } else if (genre === 'classement') {
-      el.innerHTML = `<iframe class="quiz-resultats" src="/q/classement?nombre=${encodeURIComponent(el.dataset.nombre || 10)}&couleur=${couleurDe(el)}" title="Classement" loading="eager"></iframe>`;
+      el.innerHTML = `<iframe class="quiz-resultats" src="/q/classement?nombre=${encodeURIComponent(el.dataset.nombre || 10)}&couleur=${couleurDe(el)}${el.dataset.sansTitre ? '&sans_titre=1' : ''}" title="Classement" loading="eager"></iframe>`;
     } else if (genre === 'qr') {
       el.innerHTML = blocQr();
     } else if (genre === 'minuteur') {
       el.classList.add('minuteur');
+      if (el.dataset.question) {
+        // Minuteur lié à une question : affiche son chrono, démarre à l'ouverture, se fige à la fermeture.
+        el.classList.add('lie');
+        const q = questions[el.dataset.question];
+        if (q && q.chrono) el.dataset.duree = q.chrono;
+        minuteursLies.push(el);
+      }
       el.textContent = formater(Number(el.dataset.duree) || 60);
     } else if (genre === 'lottie') {
       el.classList.add('lottie');
     }
   }
 
+  // ----- Minuteurs liés au quiz : suivent l'état du serveur (/ws/quiz) -----------------------
+  const minuteursLies = [];
+  function appliquerEtatQuiz(etat) {
+    const id = etat.question && etat.question.id;
+    minuteursLies.forEach(el => {
+      if (el.dataset.question !== id) return;
+      if (etat.ouverte && etat.reste !== null && etat.reste !== undefined) {
+        demarrerMinuteur(el, etat.reste);
+        el.classList.add('actif');
+      } else if (etat.ouverte) {
+        el.classList.add('actif');
+      } else {
+        arreterMinuteur(el);
+        el.classList.remove('actif');
+        if (etat.revele) { el.classList.add('fini'); el.textContent = '✔'; }
+        else if (etat.resultat && etat.resultat.total > 0) { el.textContent = '0:00'; el.classList.add('fini'); }
+      }
+    });
+  }
+  (function ecouterQuiz() {
+    let delai = 1000;
+    function connecter() {
+      const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
+      ws.onopen = () => { delai = 1000; };
+      ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') appliquerEtatQuiz(m); };
+      ws.onclose = () => { setTimeout(connecter, delai); delai = Math.min(delai * 2, 10000); };
+      ws.onerror = () => ws.close();
+    }
+    if (AmphiSyncRoleUtile()) connecter();
+  })();
+  function AmphiSyncRoleUtile() { return !(window.AmphiSync && window.AmphiSync.role === 'remote'); }
+
   // Lancements à l'affichage d'une diapositive : Lottie, minuteurs, vidéos.
   function surDiapositive(section) {
     section.querySelectorAll('[data-amphi="lottie"]').forEach(jouerLottie);
-    section.querySelectorAll('[data-amphi="minuteur"]').forEach(el => { if (el.dataset.auto !== '0' && !el.classList.contains('fragment')) demarrerMinuteur(el); });
+    section.querySelectorAll('[data-amphi="minuteur"]:not([data-question])').forEach(el => { if (el.dataset.auto !== '0' && !el.classList.contains('fragment')) demarrerMinuteur(el); });
     section.querySelectorAll('[data-amphi="video"] video, video[data-amphi="video"]').forEach(v => { v.currentTime = 0; v.play().catch(() => {}); });
   }
   function horsDiapositive(section) {
     section.querySelectorAll('video').forEach(v => v.pause());
-    section.querySelectorAll('[data-amphi="minuteur"]').forEach(arreterMinuteur);
+    section.querySelectorAll('[data-amphi="minuteur"]:not([data-question])').forEach(arreterMinuteur);
     section.querySelectorAll('[data-amphi="lottie"]').forEach(el => { if (el._lottie) el._lottie.stop(); });
   }
   function surFragment(fragment) {
@@ -105,9 +144,9 @@ window.AmphiQuizDeck = (function () {
     el._lottie = window.lottie.loadAnimation({ container: el, renderer: 'svg', loop: el.dataset.boucle !== '0', autoplay: true, path: el.dataset.src });
   }
 
-  function demarrerMinuteur(el) {
+  function demarrerMinuteur(el, reste) {
     arreterMinuteur(el);
-    const duree = Number(el.dataset.duree) || 60;
+    const duree = reste !== undefined ? reste : (Number(el.dataset.duree) || 60);
     const fin = Date.now() + duree * 1000;
     el.classList.remove('fini');
     const tic = () => {
