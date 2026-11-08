@@ -66,3 +66,19 @@ Configuration : `AMPHI_CAPTATIONS` = dossier où OBS enregistre et où l'on copi
 Chapitrage : chapitres = événements `diapositive` de la séance ramenés en secondes depuis le début de l'enregistrement, filtrés aux instants dans `[0, durée]`, fusionnés si deux changements sont à moins de 20 s (on garde le dernier titre), premier chapitre forcé à 00:00. Les diapositives de quiz donnent des chapitres « Quiz : <question> ». Les `fragmentshown` (même `h`) ne créent pas de chapitre.
 
 Lancement local : `deploy/postprod.sh` (Linux/macOS) et `deploy/postprod.ps1` (Windows) : créent le venv si besoin, installent les dépendances, vérifient ffmpeg, lancent uvicorn sur 127.0.0.1:8000 avec `AMPHI_JETON=local`, `AMPHI_BDD=data/local.sqlite`, `AMPHI_CAPTATIONS`, `AMPHI_SEANCE_URL` passés en argument, et ouvrent `http://127.0.0.1:8000/deck/postprod.html?token=local` dans le navigateur. Le dépôt sur le PC 2 est un simple `git clone` ; `git pull` pour mettre à jour.
+
+## 4. Traitement de la voix (`postprod/voix.py`)
+
+Rend la voix « podcast » ou « radio » sur un fichier audio ou vidéo, ou sur tout un dossier :
+
+    python postprod/voix.py "<captation.mkv | son.wav | dossier>" --preset podcast|radio [--sans-debruitage] [--sortie <dossier>]
+
+Chaîne : débruitage IA DeepFilterNet (commande `deepFilter`, `pip install deepfilternet` ; absente → étape sautée avec un
+avertissement) → coupe-bas 80 Hz → égalisation (chaleur, moins de « boue », présence, air) → de-esser → compression
+(deux étages en `radio`) → gain fixe jusqu'à **-16 LUFS** intégrés et limiteur de crêtes à -2 dBFS.
+
+- Le volume est mesuré par `ebur128` (EBU R128, comme `loudnorm`, mais sans suréchantillonnage à 192 kHz : ≈ 10× plus rapide),
+  puis contrôlé après le limiteur ; si un son saturé à l'origine perd du volume au limiteur, le gain est corrigé une fois.
+- Vidéo : image copiée sans réencodage, son en AAC 192 kb/s par `aac_mf` (Media Foundation, Windows, ≈ 5× plus rapide que
+  l'encodeur `aac` de ffmpeg ; `aac` ailleurs). Sortie : `<dossier>/traite_<preset>/<nom>.mp4` (audio seul : `.wav` 48 kHz).
+- Mesuré sur une captation de 7 min 50 (PC 2) : 35 s, -16,7 LUFS, crête -1,7 dBFS (sans débruitage) ; ≈ 9 min pour 2 h.

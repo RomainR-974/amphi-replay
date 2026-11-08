@@ -12,8 +12,8 @@ Tout est en **français** : code, noms, commentaires, messages, commits.
 | `server/static/` | pages publiques : `participant.html` (/q), `resultats.html`, `classement.html` (dont la cérémonie) |
 | `deck/` | runtime commun du deck : `index.html` (rôles scene/obs/remote), `sync.js`, `quiz-deck.js`, `camera.js`, `remote.html`, `editeur.*`, `presentations.*`, `postprod.*`, `replay.*`, `theme.css`, `themes/dsfr.css` |
 | `presentations/<slug>/` | une présentation : `presentation.json`, `slides.html`, `quiz.json`, `medias/`, `replays/` (hors git) |
-| `tools/` | `pptx2reveal.py` (import PowerPoint), `pdf2reveal.py`, `inserer_quiz.py`, `seance_iag.py`, `reserver_camera.py`, `exporter_scorm.py`, `charge.py`, `fetch_reveal.sh` |
-| `postprod/assembler.py` | recalage son téléphone ↔ vidéo OBS |
+| `tools/` | `lanceur_seance.py` (fenêtre de lancement PC 2, via `lancer-seance.bat`), `pptx2reveal.py` (import PowerPoint), `pdf2reveal.py`, `inserer_quiz.py`, `seance_iag.py`, `reserver_camera.py`, `exporter_scorm.py`, `charge.py`, `fetch_reveal.sh` |
+| `postprod/assembler.py` | recalage son téléphone ↔ vidéo OBS ; `postprod/voix.py` : voix podcast/radio (débruitage, EQ, compression, -16 LUFS) |
 | `obs/` | config OBS (`README.md`) et pont `obs_quiz_bridge.py` |
 | `deploy/` | VPS : `install.sh`, `deploy.sh`, `sauvegarde.sh`, unité systemd, Nginx/Caddy ; PC 2 : `postprod.sh`, `postprod.ps1` |
 | `docs/` | spécifications : `format-deck.md` (format HTML des diapos, API), `presentations.md`, `postprod.md`, `questions.md`, `scorm.md`, `seance.md`, `zone-camera.md`, `fiche-mise-en-route.md` |
