@@ -42,6 +42,27 @@
           <textarea class="youtube" id="youtube" readonly></textarea>
         </details>
       </section>
+      <section class="panneau" id="panneau-scorm">
+        <h2>Export SCORM</h2>
+        <div id="scorm-existant" hidden>
+          <div class="liens"><a id="scorm-lien" href="#">⬇ Paquet SCORM (zip)</a></div>
+          <p id="scorm-infos" class="sourd" style="margin:6px 0 0;font-size:12px"></p>
+          <div class="ligne" style="margin-top:8px">
+            <button id="b-scorm-supprimer" class="danger" hidden>Supprimer le paquet</button>
+          </div>
+        </div>
+        <p id="scorm-vide" class="vide">Aucun paquet SCORM.</p>
+        <div id="scorm-options" hidden>
+          <div class="ligne"><label class="case"><input type="checkbox" id="scorm-quiz" checked> Inclure les questions des quiz</label></div>
+          <div class="ligne"><label class="case"><input type="checkbox" id="scorm-video-unique"> Vidéo unique (sinon une vidéo par chapitre)</label></div>
+          <div class="ligne"><input type="text" id="scorm-titre" placeholder="Titre du module (défaut : titre du replay)"></div>
+          <div class="ligne">
+            <button id="b-scorm" class="principal">⚙ Générer</button>
+            <span id="scorm-etat" class="sourd"></span>
+          </div>
+        </div>
+        <p class="aide" style="margin-top:8px">Moodle : <em>Ajouter une activité → Paquet SCORM</em> → déposer le zip. Fonctionne aussi hors LMS (décompresser et ouvrir <code>index.html</code>).</p>
+      </section>
       <section class="panneau">
         <h2>Extraits <span id="nb-extraits" class="sourd"></span></h2>
         <ul class="extraits" id="extraits"></ul>

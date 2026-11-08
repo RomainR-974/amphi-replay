@@ -235,7 +235,8 @@ def test_cycle_complet_postprod(client, tmp_path, monkeypatch):
     assert r.status_code == 200, r.text
     tache = attendre_tache(client, r.json()["tache"])
     assert tache["etat"] == "terminee", "\n".join(tache["journal"])
-    assert [e["etat"] for e in tache["etapes"]] == ["terminee"] * 5  # préparation, assemblage, coupe (sans effet ici), chapitrage, extraits
+    assert [e["etat"] for e in tache["etapes"]] == ["terminee"] * 6  # préparation, assemblage, coupe (sans effet ici), chapitrage, extraits, scorm (défaut)
+    assert tache["replay"]["scorm"] == "demo-" + tache["replay"]["id"].lower() + "-scorm.zip"
     assert "pas de questions-réponses dans la séance" in "\n".join(tache["journal"])
     assert tache["replay"]["slug"] == "demo"
     id = tache["replay"]["id"]
@@ -249,6 +250,7 @@ def test_cycle_complet_postprod(client, tmp_path, monkeypatch):
     assert detail["chapitres"][0]["debut"] == 0.0 and detail["chapitres"][1]["debut"] == pytest.approx(26.0, abs=0.2)
     assert detail["journal"]["mesures"]["decalage_debut_s"] == pytest.approx(0.8, abs=0.05)
     assert detail["journal"]["source_video"] == "obs.mkv" and detail["journal"]["coupe_qr_s"] is None
+    assert detail["scorm"]["chapitres"] == 2 and detail["scorm"]["fichier"] == tache["replay"]["scorm"]  # paquet SCORM généré par défaut (docs/scorm.md)
 
     dossier = client.presentations / "demo" / "replays" / id
     assert (dossier / "replay.mp4").is_file() and (dossier / "journal.json").is_file()
@@ -366,7 +368,7 @@ def test_coupe_avant_questions_reponses(client, tmp_path):
     assert [e["type"] for e in seance["evenements"]] == ["diapositive", "qr_ouvrir", "diapositive", "qr_fermer"]
     assert seance["evenements"][1]["horodatage"] == pytest.approx(t0 + 20)
 
-    r = client.post(jeton("/api/postprod/assembler"), json={"prez": "demo", "video": "obs.mkv", "seance_debut": seance["debut"], "seance_fin": seance["fin"], "titre": "Coupé"})
+    r = client.post(jeton("/api/postprod/assembler"), json={"prez": "demo", "video": "obs.mkv", "seance_debut": seance["debut"], "seance_fin": seance["fin"], "titre": "Coupé", "scorm": False})
     assert r.status_code == 200, r.text
     tache = attendre_tache(client, r.json()["tache"])
     assert tache["etat"] == "terminee", "\n".join(tache["journal"])
@@ -382,7 +384,7 @@ def test_coupe_avant_questions_reponses(client, tmp_path):
     assert not (dossier / "questions.csv").exists()  # pas de serveur de séance distant
 
     # Sans coupe : vidéo complète, chapitre du saut conservé.
-    r = client.post(jeton("/api/postprod/assembler"), json={"prez": "demo", "video": "obs.mkv", "seance_debut": seance["debut"], "seance_fin": seance["fin"], "couper_qr": False})
+    r = client.post(jeton("/api/postprod/assembler"), json={"prez": "demo", "video": "obs.mkv", "seance_debut": seance["debut"], "seance_fin": seance["fin"], "couper_qr": False, "scorm": False})
     tache = attendre_tache(client, r.json()["tache"])
     assert tache["etat"] == "terminee" and [e["nom"] for e in tache["etapes"]] == ["préparation", "assemblage", "chapitrage"]
     detail = client.get(f"/api/presentations/demo/replays/{tache['replay']['id']}").json()

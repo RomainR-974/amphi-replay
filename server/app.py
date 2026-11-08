@@ -31,6 +31,7 @@ from .presentations import Bibliotheque, valider_slug
 from .questions import Questions, SequenceQR, question_publique
 from .quiz import Quiz, charger_questions, questions_depuis_liste
 from .replays import Captations, Replays, Taches, assembler_replay, outils_presents
+from .scorm import construire_scorm
 
 journal = logging.getLogger("amphi")
 
@@ -559,6 +560,12 @@ class DemandeExtraits(BaseModel):
     chapitres: list[int] | None = None
 
 
+class DemandeScorm(BaseModel):
+    titre: str | None = None
+    inclure_quiz: bool = True
+    video_unique: bool = False
+
+
 def replay_ou_404(slug: str, id: str) -> None:
     slug_ou_404(slug)
     try:
@@ -616,12 +623,37 @@ async def replays_extraits(slug: str, id: str, corps: DemandeExtraits | None = N
     return {"tache": taches.lancer(["extraits"], travail).id}
 
 
-TYPES_REPLAY = {".mp4": "video/mp4", ".vtt": "text/vtt; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json"}
+@app.post("/api/presentations/{slug}/replays/{id}/scorm", dependencies=[Depends(verifier_jeton)])
+async def replays_scorm_construire(slug: str, id: str, corps: DemandeScorm | None = None) -> dict:
+    """Paquet SCORM 1.2 (docs/scorm.md) : tâche d'arrière-plan `{tache}` (extraits si besoin, affiche, zip), à suivre sur /api/postprod/taches/{id}."""
+    replay_ou_404(slug, id)
+    if not outils_presents():
+        raise HTTPException(status_code=503, detail="ffmpeg introuvable sur ce serveur")
+    options = corps or DemandeScorm()
+    etapes = ([] if options.video_unique else ["extraits"]) + ["scorm"]
+
+    def travail(tache):
+        zip_path = construire_scorm(biblio.exiger(slug), replays.chemin(slug, id), titre=options.titre, inclure_quiz=options.inclure_quiz,
+                                    video_unique=options.video_unique, journal=tache.consigner, etape=tache.etape)
+        return {"slug": slug, "id": id, "scorm": replays.scorm(slug, id), "fichier": zip_path.name}
+
+    return {"tache": taches.lancer(etapes, travail).id}
+
+
+@app.delete("/api/presentations/{slug}/replays/{id}/scorm", dependencies=[Depends(verifier_jeton)])
+async def replays_scorm_supprimer(slug: str, id: str) -> dict:
+    replay_ou_404(slug, id)
+    if not replays.supprimer_scorm(slug, id):
+        raise HTTPException(status_code=404, detail="pas de paquet SCORM pour ce replay")
+    return {"ok": True}
+
+
+TYPES_REPLAY = {".mp4": "video/mp4", ".vtt": "text/vtt; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json", ".zip": "application/zip"}
 
 
 @app.get("/p/{slug}/replays/{id}/{chemin:path}")
 async def replay_fichier(slug: str, id: str, chemin: str) -> Response:
-    """replay.mp4 (Range géré par FileResponse), chapitres.vtt, chapitres.txt, journal.json, extraits/<nom>.mp4."""
+    """replay.mp4 (Range géré par FileResponse), chapitres.vtt, chapitres.txt, journal.json, extraits/<nom>.mp4, scorm/<nom>.zip (attachment)."""
     if not biblio.existe(slug):
         raise HTTPException(status_code=404)
     if chemin == "journal.json":
@@ -633,7 +665,7 @@ async def replay_fichier(slug: str, id: str, chemin: str) -> Response:
     if fichier is None:
         raise HTTPException(status_code=404)
     entetes = {"Accept-Ranges": "bytes", "Cache-Control": "no-cache"}
-    if chemin.startswith("extraits/") or chemin == "chapitres.txt":
+    if chemin.startswith(("extraits/", "scorm/")) or chemin == "chapitres.txt":
         entetes["Content-Disposition"] = f'attachment; filename="{fichier.name}"'
     return FileResponse(fichier, media_type=TYPES_REPLAY.get(fichier.suffix.lower(), "application/octet-stream"), headers=entetes)
 
@@ -656,6 +688,7 @@ class DemandeAssemblage(BaseModel):
     serveur: str | None = None
     jeton_serveur: str | None = None
     couper_qr: bool = True  # tronquer la vidéo au `qr_ouvrir` de la séance (séquence questions-réponses hors replay)
+    scorm: bool = True  # paquet SCORM 1.2 après les extraits (docs/scorm.md) ; les extraits sont alors découpés même si `extraits` est faux
 
 
 @app.get("/api/postprod/configuration", dependencies=[Depends(verifier_jeton)])
@@ -680,7 +713,7 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             captations.fichier(corps.audio)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    etapes = ["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + ["chapitrage"] + (["extraits"] if corps.extraits else [])
+    etapes = ["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + ["chapitrage"] + (["extraits"] if corps.extraits or corps.scorm else []) + (["scorm"] if corps.scorm else [])
     serveur = (corps.serveur or "").strip() or None
 
     def travail(tache):
@@ -688,7 +721,7 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             tache, replays, captations, journal_bd.lire,
             prez=corps.prez, video=corps.video, audio=corps.audio or None, seance_debut=corps.seance_debut, seance_fin=corps.seance_fin,
             decalage=corps.decalage or 0.0, titre=corps.titre, garder_reference=corps.garder_reference, extraits=corps.extraits,
-            serveur=serveur, jeton_serveur=corps.jeton_serveur, couper_qr=corps.couper_qr,
+            serveur=serveur, jeton_serveur=corps.jeton_serveur, couper_qr=corps.couper_qr, scorm=corps.scorm,
         )
 
     return {"tache": taches.lancer(etapes, travail).id}

@@ -32,6 +32,7 @@ presentations/<slug>/replays/<AAAA-MM-JJ_HHMM>/
   chapitres.txt       format YouTube : « 00:00 Titre »
   chapitres.vtt       WebVTT (pistes de chapitres pour le lecteur)
   extraits/NN-titre.mp4   capsules découpées par chapitre (optionnel)
+  scorm/<slug>-<id>-scorm.zip + scorm.json   paquet SCORM 1.2 (optionnel, voir scorm.md)
 ```
 
 `presentations/*/replays/` est ignoré par git. Un dossier de replay peut aussi être créé à la main (déposer `replay.mp4` suffit : le journal est reconstitué par ffprobe).
@@ -42,7 +43,7 @@ API (jeton requis sauf lecture) :
 | --- | --- | --- |
 | GET | `/api/presentations/{slug}/replays` | `[{id, titre, date, duree, chapitres, extraits, taille}]` — public |
 | GET | `/p/{slug}/replays/{id}/replay.mp4` | flux vidéo avec gestion de `Range` (FileResponse de Starlette la gère) — public |
-| GET | `/p/{slug}/replays/{id}/chapitres.vtt` · `chapitres.txt` · `journal.json` · `extraits/<nom>.mp4` | public |
+| GET | `/p/{slug}/replays/{id}/chapitres.vtt` · `chapitres.txt` · `journal.json` · `extraits/<nom>.mp4` · `scorm/<nom>.zip` | public |
 | PUT | `/api/presentations/{slug}/replays/{id}` | `{titre}` |
 | DELETE | `/api/presentations/{slug}/replays/{id}` | supprime le dossier |
 
@@ -57,7 +58,7 @@ Configuration : `AMPHI_CAPTATIONS` = dossier où OBS enregistre et où l'on copi
 `/deck/postprod.html?token=&prez=slug` :
 1. Présentation (liste déroulante), **enregistrement OBS** et **audio du téléphone** choisis parmi les fichiers du dossier de captations (nom, taille, durée par ffprobe, date), ou uniquement la vidéo si le son OBS suffit (case « pas de recalage audio »).
 2. Serveur de la séance (URL + jeton, préremplis depuis `AMPHI_SEANCE_URL` / le jeton courant) → bouton **Charger les séances** → liste des séances du journal ; sélection d'une séance. Le début de l'enregistrement est estimé = `mtime(fichier) − durée` et peut être corrigé par un **décalage manuel** (secondes, ±) ; un aperçu des chapitres calculés s'affiche avant lancement.
-3. Options : titre du replay (défaut : titre de la présentation + date de la séance), garder la piste de référence OBS, générer les extraits par chapitre.
+3. Options : titre du replay (défaut : titre de la présentation + date de la séance), garder la piste de référence OBS, générer les extraits par chapitre, générer le paquet SCORM (cochée ; étape « scorm » après les extraits, qui sont alors découpés dans tous les cas ; voir [scorm.md](scorm.md)).
 4. **Assembler** → `POST /api/postprod/assembler` `{prez, video, audio?, seance_debut?, seance_fin?, decalage?, titre?, garder_reference?, extraits?, serveur?, jeton_serveur?}` → `{tache}` ; la tâche tourne en arrière-plan (thread + sous-processus) : `postprod/assembler.py` (ou remux simple sans audio) → chapitrage (ffmpeg `-i replay.mp4 -i ffmetadata -map_metadata 1 -c copy`) → VTT/TXT → extraits (`ffmpeg -ss -to -c copy`). `GET /api/postprod/taches/{id}` renvoie `{etat: en_cours|terminee|erreur, etapes: [...], journal: [lignes], replay?: {slug, id}}` ; la page interroge toutes les 2 s et affiche la progression (étapes et lignes du journal) puis un lien **Lire le replay**.
 5. `GET /api/postprod/captations` (jeton) liste les fichiers du dossier (`{nom, taille, modifie, duree, genre: video|audio}`), triés du plus récent au plus ancien.
 6. `POST /api/presentations/{slug}/replays/{id}/extraits` `{chapitres: [indices]}` découpe a posteriori.

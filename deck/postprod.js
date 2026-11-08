@@ -330,6 +330,7 @@
       titre: $('#titre').value.trim() || $('#titre').placeholder,
       garder_reference: $('#garder-reference').checked,
       extraits: $('#extraits').checked,
+      scorm: $('#scorm').checked,
       couper_qr: $('#couper-qr').checked && !$('#couper-qr').disabled,
       serveur: seance && serveur ? serveur : null,
       jeton_serveur: seance && serveur ? ($('#jeton-serveur').value || token) : null,
@@ -363,7 +364,7 @@
     if (t.etat === 'en_cours') { etatPage.minuteur = setTimeout(suivre, 2000); return; }
     $('#b-assembler').disabled = false;
     if (t.etat === 'terminee') {
-      afficherResultat(true, 'Replay prêt' + (t.replay && t.replay.chapitres !== undefined ? ' : ' + t.replay.chapitres + ' chapitre' + (t.replay.chapitres > 1 ? 's' : '') : ''), t.replay);
+      afficherResultat(true, 'Replay prêt' + (t.replay && t.replay.chapitres !== undefined ? ' : ' + t.replay.chapitres + ' chapitre' + (t.replay.chapitres > 1 ? 's' : '') : '') + (t.replay && t.replay.scorm ? ', paquet SCORM généré' : ''), t.replay);
       etat('replay assemblé', 'ok');
     } else {
       afficherResultat(false, t.erreur || 'erreur inconnue');

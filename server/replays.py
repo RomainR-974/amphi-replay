@@ -7,6 +7,7 @@
       chapitres.txt         format YouTube « 00:00 Titre »
       chapitres.vtt         WebVTT (piste de chapitres du lecteur)
       extraits/NN-titre.mp4 capsules par chapitre (optionnel)
+      scorm/<slug>-<id>-scorm.zip + scorm.json   paquet SCORM 1.2 (optionnel ; voir docs/scorm.md et server/scorm.py)
 
 Tout chemin manipulé est résolu et confiné au dossier de la présentation (anti-traversée). Les traitements
 longs (assemblage, chapitrage, extraits) tournent dans une tâche d'arrière-plan : un fil d'exécution qui
@@ -45,6 +46,7 @@ RACINE = Path(__file__).resolve().parent.parent
 ASSEMBLEUR = RACINE / "postprod" / "assembler.py"
 ID_REPLAY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 NOM_EXTRAIT = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}\.mp4$")
+NOM_SCORM = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,120}\.zip$")
 EXTENSIONS_VIDEO = {".mkv", ".mp4", ".mov", ".webm", ".m4v", ".ts", ".avi"}
 EXTENSIONS_AUDIO = {".wav", ".m4a", ".mp3", ".aac", ".flac", ".ogg", ".opus", ".aiff"}
 FUSION_CHAPITRES_S = 20.0
@@ -294,13 +296,15 @@ class Replays:
         return d
 
     def fichier(self, slug: str, id: str, chemin: str) -> Path | None:
-        """Fichier public d'un replay (replay.mp4, chapitres.vtt/txt, journal.json, extraits/<nom>.mp4) ou None."""
+        """Fichier public d'un replay (replay.mp4, chapitres.vtt/txt, journal.json, extraits/<nom>.mp4, scorm/<nom>.zip) ou None."""
         try:
             d = self.chemin(slug, id)
         except KeyError:
             return None
         if chemin not in ("replay.mp4", "chapitres.vtt", "chapitres.txt", "journal.json"):
-            if not chemin.startswith("extraits/") or not NOM_EXTRAIT.match(chemin[len("extraits/") :]):
+            extrait = chemin.startswith("extraits/") and NOM_EXTRAIT.match(chemin[len("extraits/") :])
+            paquet = chemin.startswith("scorm/") and NOM_SCORM.match(chemin[len("scorm/") :])
+            if not extrait and not paquet:
                 return None
         f = _confiner(d, chemin)
         return f if f is not None and f.is_file() else None
@@ -370,10 +374,22 @@ class Replays:
             return []
         return [{"nom": f.name, "taille": f.stat().st_size} for f in sorted(d.iterdir()) if f.is_file() and NOM_EXTRAIT.match(f.name)]
 
+    def scorm(self, slug: str, id: str) -> dict | None:
+        """Métadonnées du paquet SCORM ({fichier, taille, genere, chapitres, questions, inclure_quiz, video_unique}) ou None."""
+        from .scorm import lire_scorm
+
+        return lire_scorm(self.chemin(slug, id))
+
+    def supprimer_scorm(self, slug: str, id: str) -> bool:
+        from .scorm import supprimer_scorm
+
+        return supprimer_scorm(self.chemin(slug, id))
+
     def resume(self, slug: str, id: str) -> dict:
         d = self.chemin(slug, id)
         donnees = self.lire_journal(slug, id)
         video = d / "replay.mp4"
+        paquet = self.scorm(slug, id)
         return {
             "id": id,
             "titre": str(donnees.get("titre") or id),
@@ -382,11 +398,12 @@ class Replays:
             "chapitres": len(donnees.get("chapitres") or []),
             "extraits": len(self.extraits(slug, id)),
             "taille": video.stat().st_size if video.is_file() else 0,
+            "scorm": paquet["fichier"] if paquet else None,
         }
 
     def detail(self, slug: str, id: str) -> dict:
         donnees = self.lire_journal(slug, id)
-        return {**self.resume(slug, id), "chapitres": donnees.get("chapitres") or [], "extraits": self.extraits(slug, id), "journal": donnees}
+        return {**self.resume(slug, id), "chapitres": donnees.get("chapitres") or [], "extraits": self.extraits(slug, id), "scorm": self.scorm(slug, id), "journal": donnees}
 
     def lister(self, slug: str) -> list[dict]:
         racine = self.dossier(slug)
@@ -610,8 +627,10 @@ def telecharger_questions(serveur: str, jeton: str, destination: Path, consigner
 def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lire_journal_local: Callable[[str, float | None, float | None], list[dict]],
                      *, prez: str, video: str, audio: str | None = None, seance_debut: float | None = None, seance_fin: float | None = None,
                      decalage: float = 0.0, titre: str | None = None, garder_reference: bool = False, extraits: bool = False,
-                     serveur: str | None = None, jeton_serveur: str | None = None, couper_qr: bool = True) -> dict:
-    """Corps d'une tâche : assemblage (ou remux), coupe avant les questions-réponses, chapitrage, VTT/TXT, extraits. Renvoie {slug, id}.
+                     serveur: str | None = None, jeton_serveur: str | None = None, couper_qr: bool = True, scorm: bool = False) -> dict:
+    """Corps d'une tâche : assemblage (ou remux), coupe avant les questions-réponses, chapitrage, VTT/TXT, extraits, paquet SCORM. Renvoie {slug, id}.
+
+    `scorm` : construit le paquet SCORM 1.2 (docs/scorm.md) après les extraits ; ceux-ci sont alors découpés même si `extraits` est faux.
 
     `couper_qr` : si la séance contient un événement `qr_ouvrir` qui tombe dans la vidéo, celle-ci est tronquée à cet instant
     (la séquence questions-réponses n'est pas dans le replay) ; journal.json porte alors `coupe_qr_s`.
@@ -719,11 +738,17 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
         if serveur:
             telecharger_questions(serveur, jeton_serveur or "", dossier / "questions.csv", consigner=tache.consigner)
 
-        if extraits:
+        if extraits or scorm:
             tache.etape("extraits")
             noms = decouper_extraits(dossier, chapitres, duree_sortie, consigner=tache.consigner)
             tache.consigner(f"{len(noms)} extrait(s)")
+        paquet = None
+        if scorm:
+            from .scorm import construire_scorm
+
+            tache.etape("scorm")
+            paquet = construire_scorm(replays.biblio.exiger(prez), dossier, titre=titre_final, journal=tache.consigner).name
     except Exception:
         shutil.rmtree(dossier, ignore_errors=True)
         raise
-    return {"slug": prez, "id": id, "titre": titre_final, "chapitres": len(chapitres)}
+    return {"slug": prez, "id": id, "titre": titre_final, "chapitres": len(chapitres), "scorm": paquet}

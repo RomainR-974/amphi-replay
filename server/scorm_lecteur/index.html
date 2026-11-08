@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect width=%2716%27 height=%2716%27 rx=%273%27 fill=%27%231d4ed8%27/%3E%3Cpath d=%27M6 4.5v7l5.5-3.5z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+<title>{{TITRE}}</title>
+<style>
+  :root { --fond: #f4f5f7; --fond2: #ffffff; --bord: #d5d9e0; --texte: #1b1f27; --sourd: #5b6472; --accent: #1d4ed8; --accent2: #dbe4ff; --vert: #15803d; --vert2: #dcfce7; --rouge: #b91c1c; --rouge2: #fee2e2; --orange: #b45309; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: var(--fond); color: var(--texte); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--fond2); border-bottom: 1px solid var(--bord); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; flex: 1; min-width: 0; }
+  .bandeau { font-size: 12px; color: var(--orange); background: #fef3c7; border: 1px solid #fcd34d; border-radius: 12px; padding: 2px 10px; }
+  .bandeau[hidden] { display: none; }
+  .progression { font-size: 13px; color: var(--sourd); white-space: nowrap; }
+  main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 18px; padding: 18px; max-width: 1280px; margin: 0 auto; align-items: start; }
+  aside h2, .quiz h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--sourd); margin: 0 0 8px; font-weight: 600; }
+  .chapitres { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .chapitres button { width: 100%; text-align: left; background: var(--fond2); border: 1px solid var(--bord); border-radius: 10px; padding: 8px 10px; display: grid; grid-template-columns: 26px 1fr auto; gap: 2px 8px; align-items: center; }
+  .chapitres button:hover { border-color: var(--accent); }
+  .chapitres button.courant { border-color: var(--accent); background: var(--accent2); }
+  .chapitres .numero { font-weight: 700; color: var(--sourd); font-size: 13px; }
+  .chapitres .titre { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chapitres .etat { font-size: 12px; color: var(--sourd); white-space: nowrap; }
+  .chapitres .etat.vu { color: var(--vert); font-weight: 600; }
+  .chapitres .etat.en-cours { color: var(--accent); }
+  .chapitres .detail { grid-column: 2 / span 2; font-size: 12px; color: var(--sourd); display: flex; gap: 10px; flex-wrap: wrap; }
+  .chapitres .detail .score.ok { color: var(--vert); }
+  .chapitres .detail .score.ko { color: var(--rouge); }
+  section.chapitre { background: var(--fond2); border: 1px solid var(--bord); border-radius: 12px; padding: 16px 18px 18px; min-width: 0; }
+  .entete-chapitre { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .entete-chapitre h2 { font-size: 20px; margin: 0; flex: 1; min-width: 0; }
+  .entete-chapitre .sourd { color: var(--sourd); font-size: 13px; }
+  video { width: 100%; max-height: 70vh; background: #000; border-radius: 10px; aspect-ratio: 16 / 9; display: block; }
+  .aide-video { font-size: 13px; color: var(--sourd); margin: 8px 0 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .aide-video .ok { color: var(--vert); font-weight: 600; }
+  .quiz { margin-top: 18px; border-top: 1px solid var(--bord); padding-top: 14px; }
+  .quiz[hidden] { display: none; }
+  .question { font-size: 17px; font-weight: 600; margin: 4px 0 12px; }
+  .compteur { font-size: 12px; color: var(--sourd); margin-bottom: 4px; }
+  .options { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+  .options label { display: flex; align-items: center; gap: 10px; border: 1px solid var(--bord); border-radius: 10px; padding: 9px 12px; cursor: pointer; background: var(--fond); }
+  .options label:hover { border-color: var(--accent); }
+  .options input { width: 18px; height: 18px; margin: 0; flex: none; }
+  .options.vrai-faux { flex-direction: row; }
+  .options.vrai-faux li { flex: 1; }
+  .options.vrai-faux label { justify-content: center; font-size: 17px; font-weight: 600; padding: 14px; }
+  .options label.bonne { border-color: var(--vert); background: var(--vert2); }
+  .options label.mauvaise { border-color: var(--rouge); background: var(--rouge2); }
+  .trou { font-size: 17px; line-height: 2; }
+  input[type=text], input[type=number] { font: inherit; padding: 6px 10px; border: 1px solid var(--bord); border-radius: 8px; min-width: 120px; max-width: 100%; }
+  .ligne-saisie { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .bouton { border: 1px solid var(--bord); background: var(--fond2); border-radius: 8px; padding: 8px 16px; font-weight: 600; }
+  .bouton.principal { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .bouton:disabled { opacity: .45; cursor: default; }
+  .retour { border-radius: 10px; padding: 10px 14px; margin-top: 8px; font-weight: 600; }
+  .retour.ok { background: var(--vert2); color: var(--vert); border: 1px solid #86efac; }
+  .retour.ko { background: var(--rouge2); color: var(--rouge); border: 1px solid #fca5a5; }
+  .retour small { display: block; font-weight: 400; color: var(--texte); margin-top: 2px; }
+  .recap { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .recap li { display: flex; gap: 8px; align-items: baseline; font-size: 14px; }
+  .recap .marque { font-weight: 700; flex: none; }
+  .recap .marque.ok { color: var(--vert); }
+  .recap .marque.ko { color: var(--rouge); }
+  .recap small { color: var(--sourd); }
+  .fin { margin-top: 14px; border-radius: 12px; padding: 14px 16px; border: 1px solid var(--bord); background: var(--fond); }
+  .fin[hidden] { display: none; }
+  .fin h3 { margin: 0 0 4px; font-size: 17px; }
+  .fin.ok { border-color: #86efac; background: var(--vert2); }
+  .fin.ko { border-color: #fca5a5; background: var(--rouge2); }
+  footer { text-align: center; color: var(--sourd); font-size: 12px; padding: 10px 18px 18px; }
+  .visuellement-cache { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+    aside { order: 2; }
+    section.chapitre { padding: 12px; }
+    header { padding: 8px 12px; }
+    .entete-chapitre h2 { font-size: 17px; }
+    .options.vrai-faux { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="titre">{{TITRE}}</h1>
+  <span id="bandeau" class="bandeau" hidden>mode autonome : progression enregistrée dans ce navigateur</span>
+  <span id="progression" class="progression" aria-live="polite"></span>
+</header>
+
+<main>
+  <aside aria-label="Chapitres">
+    <h2>Chapitres</h2>
+    <ol id="chapitres" class="chapitres"></ol>
+  </aside>
+
+  <section class="chapitre" aria-live="polite">
+    <div class="entete-chapitre">
+      <h2 id="titre-chapitre">Chargement…</h2>
+      <span id="duree-chapitre" class="sourd"></span>
+    </div>
+    <video id="video" playsinline controls preload="metadata" poster="medias/affiche.jpg">
+      Votre navigateur ne lit pas les vidéos MP4.
+    </video>
+    <p id="aide-video" class="aide-video"></p>
+
+    <div id="quiz" class="quiz" hidden>
+      <h2>Vérifiez vos connaissances</h2>
+      <div id="quiz-corps"></div>
+    </div>
+
+    <div class="actions" id="navigation">
+      <button type="button" class="bouton" id="b-precedent">← Chapitre précédent</button>
+      <span style="flex:1"></span>
+      <span id="aide-suivant" class="sourd" style="font-size:13px"></span>
+      <button type="button" class="bouton principal" id="b-suivant">Chapitre suivant →</button>
+    </div>
+
+    <div id="fin" class="fin" hidden></div>
+  </section>
+</main>
+
+<footer id="pied"></footer>
+
+<script id="module" type="application/json">{{MODULE_JSON}}</script>
+<script src="scorm.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (s) { return document.querySelector(s); };
+  var module = null;
+  var etat = { courant: 0, lus: {}, reponses: {} }; // lus[numero] = true ; reponses[id] = {r, ok}
+  var termine = false;      // tous les chapitres vus (statut final envoyé)
+  var sessionClose = false;
+
+  // ----------------------------------------------------------------------
+  // Utilitaires
+  // ----------------------------------------------------------------------
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    var a = attrs || {};
+    Object.keys(a).forEach(function (k) {
+      var v = a[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k.indexOf('on') === 0) el[k] = v;
+      else if (k === 'class') el.className = v;
+      else if (k === 'hidden' || k === 'disabled' || k === 'checked') el[k] = !!v;
+      else el.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var e = arguments[i];
+      if (e === null || e === undefined || e === false) continue;
+      if (Array.isArray(e)) e.forEach(function (x) { if (x !== null && x !== undefined && x !== false) el.appendChild(x instanceof Node ? x : document.createTextNode(String(x))); });
+      else el.appendChild(e instanceof Node ? e : document.createTextNode(String(e)));
+    }
+    return el;
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function formaterDuree(s) {
+    s = Math.max(0, Math.round(s || 0));
+    var hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+    return hh ? hh + ':' + pad(mm) + ':' + pad(ss) : pad(mm) + ':' + pad(ss);
+  }
+  function normaliser(texte) {
+    return String(texte || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  // ----------------------------------------------------------------------
+  // Module et état
+  // ----------------------------------------------------------------------
+  function chargerModule() {
+    var brut = (document.getElementById('module') || {}).textContent || '';
+    if (brut.trim()) {
+      try { return Promise.resolve(JSON.parse(brut)); } catch (e) { /* JSON embarqué invalide : on tente le fichier */ }
+    }
+    return fetch('module.json', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  }
+
+  function questionsDe(c) { return c.questions || []; }
+  function toutesQuestions() { var l = []; module.chapitres.forEach(function (c) { l = l.concat(questionsDe(c)); }); return l; }
+  function repondu(q) { return !!etat.reponses[q.id]; }
+  function estLu(c) { return !!etat.lus[c.numero]; }
+  function estVu(c) { return estLu(c) && questionsDe(c).every(repondu); }
+  function tousVus() { return module.chapitres.every(estVu); }
+  function score() {
+    var total = toutesQuestions().length;
+    if (!total) return null;
+    var bonnes = 0;
+    Object.keys(etat.reponses).forEach(function (id) { if (etat.reponses[id].ok) bonnes++; });
+    return Math.round(100 * bonnes / total);
+  }
+  function scoreChapitre(c) {
+    var qs = questionsDe(c);
+    if (!qs.length) return null;
+    var repondues = qs.filter(repondu);
+    if (!repondues.length) return null;
+    var bonnes = repondues.filter(function (q) { return etat.reponses[q.id].ok; }).length;
+    return { bonnes: bonnes, total: qs.length, repondues: repondues.length };
+  }
+
+  function serialiser() {
+    var r = {};
+    Object.keys(etat.reponses).forEach(function (id) { r[id] = [etat.reponses[id].r, etat.reponses[id].ok ? 1 : 0]; });
+    var donnees = { c: module.chapitres[etat.courant].numero, l: Object.keys(etat.lus).map(Number).filter(function (n) { return etat.lus[n]; }), r: r };
+    var texte = JSON.stringify(donnees);
+    if (texte.length > 4000) { // limite SCORM 1.2 de suspend_data : on ne garde que la justesse
+      Object.keys(r).forEach(function (id) { r[id] = [null, r[id][1]]; });
+      texte = JSON.stringify(donnees);
+    }
+    return texte;
+  }
+  function restaurer() {
+    var brut = SCORM.lire('cmi.suspend_data');
+    if (brut) {
+      try {
+        var d = JSON.parse(brut);
+        (d.l || []).forEach(function (n) { etat.lus[n] = true; });
+        var ids = {};
+        toutesQuestions().forEach(function (q) { ids[q.id] = true; });
+        Object.keys(d.r || {}).forEach(function (id) { if (ids[id]) etat.reponses[id] = { r: d.r[id][0], ok: d.r[id][1] === 1 }; });
+        if (d.c) etat.courant = Math.max(0, module.chapitres.findIndex(function (c) { return c.numero === d.c; }));
+      } catch (e) { /* données illisibles : on repart de zéro */ }
+    }
+    var lieu = parseInt(SCORM.lire('cmi.core.lesson_location'), 10);
+    if (lieu > 0) { var i = module.chapitres.findIndex(function (c) { return c.numero === lieu; }); if (i >= 0) etat.courant = i; }
+    if (etat.courant < 0 || etat.courant >= module.chapitres.length) etat.courant = 0;
+  }
+
+  function sauvegarder() {
+    SCORM.ecrire('cmi.suspend_data', serialiser());
+    SCORM.ecrire('cmi.core.lesson_location', String(module.chapitres[etat.courant].numero));
+    var s = score();
+    if (s !== null && Object.keys(etat.reponses).length) SCORM.ecrire('cmi.core.score.raw', String(s));
+    if (tousVus()) {
+      var statut = s === null ? 'completed' : (s >= (module.seuil || 50) ? 'passed' : 'failed');
+      SCORM.ecrire('cmi.core.lesson_status', statut);
+      SCORM.ecrire('cmi.core.exit', '');
+      termine = true;
+    } else {
+      SCORM.ecrire('cmi.core.exit', 'suspend');
+    }
+    SCORM.valider();
+  }
+
+  // ----------------------------------------------------------------------
+  // Rendu : liste des chapitres, en-tête, progression
+  // ----------------------------------------------------------------------
+  function rendreListe() {
+    var ol = $('#chapitres');
+    ol.textContent = '';
+    module.chapitres.forEach(function (c, i) {
+      var vu = estVu(c), courant = i === etat.courant;
+      var etiquette = vu ? 'vu ✔' : (courant || estLu(c) || scoreChapitre(c)) ? 'en cours' : 'à voir';
+      var sc = scoreChapitre(c);
+      ol.appendChild(h('li', {}, h('button', { type: 'button', class: courant ? 'courant' : '', 'aria-current': courant ? 'true' : null, onclick: function () { allerAu(i); } },
+        h('span', { class: 'numero' }, c.numero),
+        h('span', { class: 'titre' }, c.titre),
+        h('span', { class: 'etat ' + (vu ? 'vu' : etiquette === 'en cours' ? 'en-cours' : '') }, etiquette),
+        h('span', { class: 'detail' },
+          h('span', {}, formaterDuree(c.duree)),
+          questionsDe(c).length ? h('span', { class: 'score ' + (sc ? (sc.bonnes * 2 >= sc.total ? 'ok' : 'ko') : '') }, sc ? 'quiz ' + sc.bonnes + '/' + sc.total : 'quiz ' + questionsDe(c).length + ' question' + (questionsDe(c).length > 1 ? 's' : '')) : null))));
+    });
+    var nbVus = module.chapitres.filter(estVu).length;
+    var s = score();
+    $('#progression').textContent = nbVus + '/' + module.chapitres.length + ' chapitre' + (module.chapitres.length > 1 ? 's' : '') + ' vu' + (module.chapitres.length > 1 ? 's' : '') + (s !== null ? ' · score ' + s + ' %' : '');
+  }
+
+  function rendreFin() {
+    var zone = $('#fin');
+    if (!tousVus()) { zone.hidden = true; zone.className = 'fin'; return; }
+    var s = score();
+    zone.textContent = '';
+    var reussi = s === null || s >= (module.seuil || 50);
+    zone.className = 'fin ' + (reussi ? 'ok' : 'ko');
+    zone.appendChild(h('h3', {}, s === null ? 'Module terminé' : (reussi ? 'Module réussi' : 'Module terminé, seuil non atteint')));
+    zone.appendChild(h('div', {}, 'Tous les chapitres ont été vus.' + (s !== null ? ' Score : ' + s + ' % de bonnes réponses (seuil ' + (module.seuil || 50) + ' %).' : '')));
+    zone.hidden = false;
+  }
+
+  // ----------------------------------------------------------------------
+  // Vidéo
+  // ----------------------------------------------------------------------
+  var video = $('#video');
+  var chapitreVideo = null; // chapitre dont la vidéo est chargée
+
+  function chargerVideo(c) {
+    if (module.video_unique) {
+      if (!video.getAttribute('src')) video.src = c.video;
+      var aller = function () { try { video.currentTime = c.debut || 0; } catch (e) { /* métadonnées pas encore là */ } };
+      if (video.readyState >= 1) aller(); else video.addEventListener('loadedmetadata', aller, { once: true });
+    } else if (chapitreVideo !== c.numero) {
+      video.src = c.video;
+      video.load();
+    }
+    chapitreVideo = c.numero;
+    rendreAideVideo(c);
+  }
+  function ratioLu(c) {
+    var duree = module.video_unique ? (c.fin - c.debut) : (isFinite(video.duration) && video.duration > 0 ? video.duration : c.duree);
+    var t = module.video_unique ? video.currentTime - c.debut : video.currentTime;
+    return duree > 0 ? t / duree : 0;
+  }
+  function rendreAideVideo(c) {
+    var p = $('#aide-video');
+    p.textContent = '';
+    if (estLu(c)) p.appendChild(h('span', { class: 'ok' }, '✔ Vidéo vue'));
+    else p.appendChild(h('span', {}, 'Regardez la vidéo (au moins 90 %) pour valider ce chapitre.'));
+    if (module.video_unique) p.appendChild(h('span', {}, formaterDuree(c.debut) + ' → ' + formaterDuree(c.fin) + ' dans le replay'));
+  }
+  function marquerLu(c) {
+    if (estLu(c)) return;
+    etat.lus[c.numero] = true;
+    sauvegarder();
+    rendreAideVideo(c);
+    rendreListe();
+    rendreNavigation();
+    rendreFin();
+  }
+  video.addEventListener('timeupdate', function () {
+    var c = module && module.chapitres[etat.courant];
+    if (!c) return;
+    if (module.video_unique && c.fin && video.currentTime >= c.fin - 0.05 && !video.paused) {
+      video.pause();
+      try { video.currentTime = c.fin; } catch (e) { /* ignoré */ }
+      marquerLu(c);
+      return;
+    }
+    if (ratioLu(c) >= 0.9) marquerLu(c);
+  });
+  video.addEventListener('ended', function () { var c = module && module.chapitres[etat.courant]; if (c) marquerLu(c); });
+  video.addEventListener('error', function () { var p = $('#aide-video'); p.textContent = 'La vidéo ne peut pas être lue (fichier absent ou format non pris en charge).'; });
+
+  // ----------------------------------------------------------------------
+  // Quiz
+  // ----------------------------------------------------------------------
+  function libelleBonne(q) {
+    if (q.type === 'qcm') return q.options[q.bonne];
+    if (q.type === 'multi') return q.bonnes.map(function (i) { return q.options[i]; }).join(', ');
+    if (q.type === 'vrai_faux') return q.bonne ? 'Vrai' : 'Faux';
+    if (q.type === 'trou') return q.bonnes[0];
+    if (q.type === 'nombre') return String(q.bonne) + (q.unite ? ' ' + q.unite : '') + ' (±5 %)';
+    return '';
+  }
+  function corriger(q, r) {
+    if (q.type === 'qcm') return r === q.bonne;
+    if (q.type === 'vrai_faux') return r === q.bonne;
+    if (q.type === 'multi') { var a = (r || []).slice().sort(function (x, y) { return x - y; }); return a.length === q.bonnes.length && a.every(function (v, i) { return v === q.bonnes[i]; }); }
+    if (q.type === 'trou') { var n = normaliser(r); return !!n && q.bonnes.some(function (b) { return normaliser(b) === n; }); }
+    if (q.type === 'nombre') { if (typeof r !== 'number' || isNaN(r)) return false; return q.bonne === 0 ? r === 0 : Math.abs(r - q.bonne) <= 0.05 * Math.abs(q.bonne); }
+    return false;
+  }
+  function libelleReponse(q, r) {
+    if (r === null || r === undefined) return '';
+    if (q.type === 'qcm') return q.options[r] || '';
+    if (q.type === 'multi') return (r || []).map(function (i) { return q.options[i]; }).join(', ');
+    if (q.type === 'vrai_faux') return r ? 'Vrai' : 'Faux';
+    if (q.type === 'nombre') return String(r) + (q.unite ? ' ' + q.unite : '');
+    return String(r);
+  }
+
+  function rendreQuiz(c) {
+    var zone = $('#quiz'), corps = $('#quiz-corps');
+    var qs = questionsDe(c);
+    corps.textContent = '';
+    if (!qs.length) { zone.hidden = true; return; }
+    zone.hidden = false;
+    var restantes = qs.filter(function (q) { return !repondu(q); });
+    if (!restantes.length) { rendreRecap(c, qs); return; }
+    var q = restantes[0];
+    var index = qs.indexOf(q);
+    corps.appendChild(h('div', { class: 'compteur' }, 'Question ' + (index + 1) + ' sur ' + qs.length));
+    var form = h('form', { onsubmit: function (e) { e.preventDefault(); valider(c, q, form); } });
+    var nom = 'q-' + q.id;
+    if (q.type === 'trou') {
+      var morceaux = String(q.texte || '').split('___');
+      var saisie = h('input', { type: 'text', name: nom, autocomplete: 'off', 'aria-label': 'Mot manquant', required: true });
+      var p = h('p', { class: 'trou' });
+      if (q.question) form.appendChild(h('p', { class: 'question' }, q.question));
+      morceaux.forEach(function (m, i) { p.appendChild(document.createTextNode(m)); if (i < morceaux.length - 1) p.appendChild(i === 0 ? saisie : document.createTextNode('___')); });
+      form.appendChild(p);
+    } else {
+      form.appendChild(h('p', { class: 'question' }, q.question));
+      if (q.type === 'qcm' || q.type === 'multi') {
+        var ul = h('ul', { class: 'options', role: q.type === 'qcm' ? 'radiogroup' : 'group' });
+        q.options.forEach(function (o, i) { ul.appendChild(h('li', {}, h('label', {}, h('input', { type: q.type === 'qcm' ? 'radio' : 'checkbox', name: nom, value: String(i) }), o))); });
+        form.appendChild(ul);
+        if (q.type === 'multi') form.appendChild(h('p', { class: 'compteur' }, 'Plusieurs réponses possibles.'));
+      } else if (q.type === 'vrai_faux') {
+        form.appendChild(h('ul', { class: 'options vrai-faux', role: 'radiogroup' },
+          h('li', {}, h('label', {}, h('input', { type: 'radio', name: nom, value: 'true' }), 'Vrai')),
+          h('li', {}, h('label', {}, h('input', { type: 'radio', name: nom, value: 'false' }), 'Faux'))));
+      } else if (q.type === 'nombre') {
+        form.appendChild(h('div', { class: 'ligne-saisie' }, h('input', { type: 'number', step: 'any', name: nom, inputmode: 'decimal', 'aria-label': 'Votre estimation', required: true }), q.unite ? h('span', {}, q.unite) : null));
+      }
+    }
+    form.appendChild(h('div', { class: 'actions' }, h('button', { type: 'submit', class: 'bouton principal', id: 'b-valider' }, 'Valider')));
+    form.appendChild(h('div', { id: 'retour', 'aria-live': 'assertive' }));
+    corps.appendChild(form);
+  }
+
+  function lireReponse(q, form) {
+    var nom = 'q-' + q.id;
+    if (q.type === 'qcm') { var r = form.querySelector('input[name="' + nom + '"]:checked'); return r ? parseInt(r.value, 10) : null; }
+    if (q.type === 'multi') { var l = Array.prototype.map.call(form.querySelectorAll('input[name="' + nom + '"]:checked'), function (i) { return parseInt(i.value, 10); }); return l.length ? l : null; }
+    if (q.type === 'vrai_faux') { var v = form.querySelector('input[name="' + nom + '"]:checked'); return v ? v.value === 'true' : null; }
+    if (q.type === 'trou') { var t = form.querySelector('input[name="' + nom + '"]').value.trim(); return t || null; }
+    if (q.type === 'nombre') { var n = parseFloat(String(form.querySelector('input[name="' + nom + '"]').value).replace(',', '.')); return isNaN(n) ? null : n; }
+    return null;
+  }
+
+  function valider(c, q, form) {
+    var r = lireReponse(q, form);
+    var retour = form.querySelector('#retour');
+    if (r === null) { retour.textContent = ''; retour.appendChild(h('div', { class: 'retour ko' }, 'Choisissez une réponse avant de valider.')); return; }
+    var ok = corriger(q, r);
+    etat.reponses[q.id] = { r: r, ok: ok };
+    sauvegarder();
+    // Verrouillage et retour visuel.
+    Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = true; });
+    Array.prototype.forEach.call(form.querySelectorAll('.options label'), function (label) {
+      var input = label.querySelector('input');
+      var val = input.type === 'radio' && q.type === 'vrai_faux' ? input.value === 'true' : parseInt(input.value, 10);
+      var estBonne = q.type === 'qcm' ? val === q.bonne : q.type === 'vrai_faux' ? val === q.bonne : q.bonnes.indexOf(val) >= 0;
+      if (estBonne) label.classList.add('bonne');
+      else if (input.checked) label.classList.add('mauvaise');
+    });
+    retour.textContent = '';
+    retour.appendChild(h('div', { class: 'retour ' + (ok ? 'ok' : 'ko') }, ok ? '✔ Bonne réponse' : '✘ Mauvaise réponse', ok ? null : h('small', {}, 'Bonne réponse : ' + libelleBonne(q))));
+    var restantes = questionsDe(c).filter(function (x) { return !repondu(x); });
+    var suite = h('div', { class: 'actions' });
+    if (restantes.length) suite.appendChild(h('button', { type: 'button', class: 'bouton principal', id: 'b-question-suivante', onclick: function () { rendreQuiz(c); } }, 'Question suivante →'));
+    else { var sc = scoreChapitre(c); suite.appendChild(h('span', { class: 'compteur' }, 'Quiz terminé : ' + sc.bonnes + '/' + sc.total + ' bonne' + (sc.bonnes > 1 ? 's' : '') + ' réponse' + (sc.bonnes > 1 ? 's' : '') + (estLu(c) ? '' : ' — regardez la vidéo pour valider le chapitre'))); }
+    retour.appendChild(suite);
+    rendreListe();
+    rendreNavigation();
+    rendreFin();
+  }
+
+  function rendreRecap(c, qs) {
+    var corps = $('#quiz-corps');
+    var sc = scoreChapitre(c);
+    corps.appendChild(h('p', { class: 'compteur' }, 'Quiz terminé : ' + sc.bonnes + '/' + sc.total + ' bonne' + (sc.bonnes > 1 ? 's' : '') + ' réponse' + (sc.bonnes > 1 ? 's' : '')));
+    var ul = h('ul', { class: 'recap' });
+    qs.forEach(function (q) {
+      var rep = etat.reponses[q.id];
+      ul.appendChild(h('li', {}, h('span', { class: 'marque ' + (rep.ok ? 'ok' : 'ko') }, rep.ok ? '✔' : '✘'),
+        h('span', {}, q.question || q.texte, ' ', h('small', {}, rep.ok ? '' : (rep.r !== null && rep.r !== undefined ? '(votre réponse : ' + libelleReponse(q, rep.r) + ' ; ' : '(') + 'bonne réponse : ' + libelleBonne(q) + ')'))));
+    });
+    corps.appendChild(ul);
+  }
+
+  // ----------------------------------------------------------------------
+  // Navigation
+  // ----------------------------------------------------------------------
+  function rendreNavigation() {
+    var c = module.chapitres[etat.courant];
+    var dernier = etat.courant === module.chapitres.length - 1;
+    $('#b-precedent').disabled = etat.courant === 0;
+    var suivant = $('#b-suivant');
+    suivant.textContent = dernier ? 'Terminer' : 'Chapitre suivant →';
+    var vu = estVu(c);
+    suivant.disabled = !vu;
+    suivant.hidden = dernier && tousVus();
+    $('#aide-suivant').textContent = vu ? '' : !estLu(c) ? 'Regardez la vidéo jusqu\'au bout' + (questionsDe(c).length ? ' puis répondez au quiz' : '') + ' pour continuer.' : 'Répondez aux questions pour continuer.';
+  }
+
+  function allerAu(i) {
+    if (i < 0 || i >= module.chapitres.length) return;
+    etat.courant = i;
+    var c = module.chapitres[i];
+    $('#titre-chapitre').textContent = c.numero + '. ' + c.titre;
+    $('#duree-chapitre').textContent = formaterDuree(c.duree);
+    chargerVideo(c);
+    rendreQuiz(c);
+    rendreListe();
+    rendreNavigation();
+    rendreFin();
+    sauvegarder();
+    try { if (window.scrollY > 0 && window.innerWidth < 860) window.scrollTo(0, 0); } catch (e) { /* ignoré */ }
+  }
+
+  $('#b-precedent').onclick = function () { allerAu(etat.courant - 1); };
+  $('#b-suivant').onclick = function () {
+    if (etat.courant < module.chapitres.length - 1) allerAu(etat.courant + 1);
+    else { sauvegarder(); rendreNavigation(); rendreFin(); }
+  };
+
+  function clore() {
+    if (sessionClose) return;
+    sessionClose = true;
+    SCORM.terminer(termine ? '' : 'suspend');
+  }
+  window.addEventListener('beforeunload', clore);
+  window.addEventListener('pagehide', clore);
+
+  // ----------------------------------------------------------------------
+  // Démarrage
+  // ----------------------------------------------------------------------
+  chargerModule().then(function (m) {
+    module = m;
+    document.title = m.titre;
+    $('#titre').textContent = m.titre;
+    if (m.affiche) video.poster = m.affiche; else video.removeAttribute('poster');
+    var lms = SCORM.initialiser(m.identifiant);
+    $('#bandeau').hidden = lms;
+    $('#pied').textContent = (m.source ? 'Replay ' + m.source.presentation + ' / ' + m.source.replay + ' · ' : '') + 'généré le ' + (m.genere || '').replace('T', ' à ') + (lms ? ' · SCORM 1.2' : ' · hors LMS');
+    SCORM.ecrire('cmi.core.score.min', '0');
+    SCORM.ecrire('cmi.core.score.max', '100');
+    var statut = SCORM.lire('cmi.core.lesson_status');
+    if (!statut || statut === 'not attempted') SCORM.ecrire('cmi.core.lesson_status', 'incomplete');
+    restaurer();
+    termine = tousVus();
+    allerAu(etat.courant);
+    window.__lecteur = { etat: etat, module: module, allerAu: allerAu };
+  }).catch(function (e) {
+    $('#titre-chapitre').textContent = 'Module illisible';
+    $('#aide-video').textContent = 'module.json introuvable ou invalide (' + e.message + ').';
+  });
+})();
+</script>
+</body>
+</html>

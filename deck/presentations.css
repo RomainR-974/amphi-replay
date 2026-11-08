@@ -54,6 +54,8 @@ main { padding: 20px; }
 .carte .replay-titre { color: var(--texte); text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .carte .replay-titre:hover { text-decoration: underline; }
 .carte .replay-infos { grid-column: 1; color: var(--sourd); }
+.carte .replay-scorm { color: var(--accent); font-weight: 600; text-decoration: none; }
+.carte .replay-scorm:hover { text-decoration: underline; }
 .carte .replay-actions { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 4px; }
 .carte .replay-actions button { padding: 3px 8px; font-size: 12px; }
 .carte .actions button.postprod { border-color: #6366f1; }

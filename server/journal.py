@@ -210,6 +210,19 @@ def titres_diapositives(html: str, questions: dict[str, str] | None = None) -> l
     return titres
 
 
+def questions_diapositives(html: str) -> list[str | None]:
+    """Identifiant de la question (`data-quiz`) de chaque diapositive de premier niveau (index `h`), None sinon.
+
+    Même découpage en sections que `titres_diapositives` : l'export SCORM s'en sert pour rattacher les questions aux chapitres.
+    """
+    identifiants: list[str | None] = []
+    for section in _sections_premier_niveau(html):
+        ouvrante = section[: section.find(">") + 1]
+        quiz = DATA_QUIZ.search(ouvrante)
+        identifiants.append(quiz.group(1).strip() or None if quiz else None)
+    return identifiants
+
+
 def libelles_questions(fichier_quiz: Path) -> dict[str, str]:
     """{id: libellé} depuis un quiz.json (tolérant : fichier absent ou invalide → {})."""
     try:

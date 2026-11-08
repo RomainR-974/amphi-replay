@@ -107,7 +107,8 @@
       const urlLire = '/deck/replay.html?prez=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(r.id) + '&token=' + encodeURIComponent(token);
       zone.append(h('div', { class: 'replay' },
         h('a', { class: 'replay-titre', href: urlLire, title: r.titre }, r.titre),
-        h('span', { class: 'replay-infos' }, formaterDate(r.date), ' · ', formaterDuree(r.duree), ' · ', pluriel(r.chapitres, 'chapitre'), r.extraits ? ' · ' + pluriel(r.extraits, 'extrait') : ''),
+        h('span', { class: 'replay-infos' }, formaterDate(r.date), ' · ', formaterDuree(r.duree), ' · ', pluriel(r.chapitres, 'chapitre'), r.extraits ? ' · ' + pluriel(r.extraits, 'extrait') : '',
+          r.scorm ? [' · ', h('a', { class: 'replay-scorm', href: '/p/' + encodeURIComponent(slug) + '/replays/' + encodeURIComponent(r.id) + '/scorm/' + encodeURIComponent(r.scorm), download: r.scorm, title: 'Télécharger le paquet SCORM (' + r.scorm + ')' }, 'SCORM')] : null),
         h('span', { class: 'replay-actions' },
           h('button', { onclick: () => { location.href = urlLire; } }, '▶ Lire'),
           h('button', { class: 'danger', title: 'Supprimer le dossier du replay', onclick: () => supprimerReplay(slug, r) }, 'Supprimer'))));

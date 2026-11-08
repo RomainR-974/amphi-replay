@@ -1,6 +1,6 @@
 /*
  * Lecteur de replay (voir docs/postprod.md §2) : vidéo avec piste de chapitres VTT, liste des chapitres cliquables,
- * téléchargements (MP4, chapitres YouTube, VTT), extraits ; découpe a posteriori si le jeton est fourni.
+ * téléchargements (MP4, chapitres YouTube, VTT), extraits ; découpe a posteriori et export SCORM si le jeton est fourni.
  * URL : /deck/replay.html?prez=slug&id=…[&token=…]. JS vanilla, aucune dépendance.
  */
 (() => {
@@ -110,6 +110,75 @@
     liens.append(h('a', { href: base + 'journal.json', target: '_blank' }, 'Journal de l\'assemblage (JSON)'));
 
     rendreExtraits(detail.extraits || []);
+    rendreScorm(detail.scorm || null, detail);
+  }
+
+  // Carte « Export SCORM » (docs/scorm.md) : paquet existant (lien, taille, date, chapitres, questions), options et génération.
+  function rendreScorm(scorm, detail) {
+    const existant = $('#scorm-existant');
+    existant.hidden = !scorm;
+    $('#scorm-vide').hidden = !!scorm;
+    $('#scorm-options').hidden = !token;
+    $('#b-scorm-supprimer').hidden = !(token && scorm);
+    if (scorm) {
+      const lien = $('#scorm-lien');
+      lien.href = base + 'scorm/' + encodeURIComponent(scorm.fichier);
+      lien.download = scorm.fichier;
+      lien.textContent = '⬇ ' + scorm.fichier + ' (' + formaterTaille(scorm.taille) + ')';
+      $('#scorm-infos').textContent = 'généré le ' + formaterDate(scorm.genere) + ' · ' + scorm.chapitres + ' chapitre' + (scorm.chapitres > 1 ? 's' : '') + ' · ' + scorm.questions + ' question' + (scorm.questions > 1 ? 's' : '') + (scorm.video_unique ? ' · vidéo unique' : ' · une vidéo par chapitre') + (scorm.inclure_quiz ? '' : ' · sans quiz');
+    }
+    if (token && detail && !$('#scorm-titre').value) $('#scorm-titre').placeholder = detail.titre || 'Titre du module';
+    $('#b-scorm').disabled = !chapitres.length && !(detail && detail.duree);
+  }
+
+  async function genererScorm() {
+    const bouton = $('#b-scorm');
+    bouton.disabled = true;
+    $('#scorm-etat').textContent = 'génération en cours…';
+    const corps = { titre: $('#scorm-titre').value.trim() || null, inclure_quiz: $('#scorm-quiz').checked, video_unique: $('#scorm-video-unique').checked };
+    try {
+      const r = await api('/api/presentations/' + encodeURIComponent(prez) + '/replays/' + encodeURIComponent(id) + '/scorm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps) });
+      suivreScorm(r.tache);
+    } catch (e) {
+      bouton.disabled = false;
+      $('#scorm-etat').textContent = 'erreur : ' + e.message;
+    }
+  }
+
+  async function suivreScorm(tache) {
+    let t;
+    try {
+      t = await api('/api/postprod/taches/' + encodeURIComponent(tache));
+    } catch (e) {
+      $('#scorm-etat').textContent = 'serveur injoignable, nouvel essai…';
+      setTimeout(() => suivreScorm(tache), 2000);
+      return;
+    }
+    if (t.etat === 'en_cours') {
+      const etape = (t.etapes || []).filter(e => e.etat === 'en_cours').map(e => e.nom)[0] || '';
+      const derniere = (t.journal || []).filter(l => !l.startsWith('$')).slice(-1)[0] || '';
+      $('#scorm-etat').textContent = 'génération en cours… ' + (etape ? '[' + etape + '] ' : '') + derniere;
+      setTimeout(() => suivreScorm(tache), 2000);
+      return;
+    }
+    $('#b-scorm').disabled = false;
+    if (t.etat === 'terminee') {
+      $('#scorm-etat').textContent = 'paquet prêt';
+      await charger();
+    } else {
+      $('#scorm-etat').textContent = 'erreur : ' + (t.erreur || 'échec');
+    }
+  }
+
+  async function supprimerScorm() {
+    if (!confirm('Supprimer le paquet SCORM de ce replay ?')) return;
+    try {
+      await api('/api/presentations/' + encodeURIComponent(prez) + '/replays/' + encodeURIComponent(id) + '/scorm', { method: 'DELETE' });
+      $('#scorm-etat').textContent = 'paquet supprimé';
+      await charger();
+    } catch (e) {
+      $('#scorm-etat').textContent = 'erreur : ' + e.message;
+    }
   }
 
   function rendreExtraits(extraits) {
@@ -208,5 +277,7 @@
   }
 
   $('#b-decouper').onclick = decouper;
+  $('#b-scorm').onclick = genererScorm;
+  $('#b-scorm-supprimer').onclick = supprimerScorm;
   demarrer();
 })();

@@ -162,6 +162,14 @@ Après la séance, la post-production tourne **en local sur le PC 2** (les vidé
 
 Les replays sont rangés dans `presentations/<slug>/replays/<AAAA-MM-JJ_HHMM>/` (`replay.mp4`, `journal.json`, `chapitres.txt`, `chapitres.vtt`, `extraits/`), hors git. La page **Présentations** les liste sur chaque carte (**Lire**, **Supprimer**, **Post-production…**) ; `/deck/replay.html?prez=slug&id=…` est le lecteur (piste de chapitres, liste cliquable, téléchargements, extraits). Déposer un `replay.mp4` à la main dans un dossier suffit : le journal est reconstitué par ffprobe. Détails : [docs/postprod.md](docs/postprod.md).
 
+## Export SCORM
+
+Depuis le lecteur d'un replay (`/deck/replay.html?prez=slug&id=…&token=…`, carte **Export SCORM**), depuis la post-production (case « Générer le paquet SCORM », cochée par défaut) ou en ligne de commande (`python tools/exporter_scorm.py presentations/iag-v1/replays/2026-11-10_0902 [--sans-quiz] [--video-unique] [--titre …]`), un replay chapitré devient un paquet **SCORM 1.2** : `presentations/<slug>/replays/<id>/scorm/<slug>-<id>-scorm.zip`.
+
+Le paquet contient `imsmanifest.xml` (un seul SCO, masteryscore 50), un lecteur autonome (`index.html` + `scorm.js`, JS vanilla, fonctionne aussi hors LMS en décompressant le zip), `module.json`, une vidéo par chapitre (`chapitres/NN-titre.mp4`, les extraits du replay copiés sans réencodage ; ou `video/replay.mp4` avec l'option « vidéo unique ») et l'affiche `medias/affiche.jpg`. Chaque chapitre est une étape : vidéo à regarder à 90 % puis, si le chapitre couvre une diapositive de quiz à bonne réponse (`qcm`, `multi`, `vrai_faux`, `trou`, `nombre`), ses questions en auto-évaluation avec correction immédiate.
+
+Le LMS reçoit la progression (`cmi.suspend_data`, `lesson_location`), le score (% de bonnes réponses) et le statut final (`passed` ≥ 50 %, `failed`, ou `completed` sans quiz). **Moodle** : *Ajouter une activité → Paquet SCORM* → déposer le zip. Détails : [docs/scorm.md](docs/scorm.md).
+
 ## OBS
 
 Voir [obs/README.md](obs/README.md) : trois scènes (Intervenant 45 s, Diapositives + vignette 120 s, Amphithéâtre 15 s) enchaînées par Advanced Scene Switcher, raccourcis F1–F4, enregistrement MKV avec piste de référence séparée, et pont `obs/obs_quiz_bridge.py` qui force la scène des diapositives pendant une question ouverte.
