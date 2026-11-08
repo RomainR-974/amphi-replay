@@ -75,6 +75,22 @@ Paramètres → Sortie, mode avancé, onglet Enregistrement :
 
 Démarrer l'enregistrement **avant** le premier clap, l'arrêter **après** le dernier.
 
+## Enregistrement caméra seule (replay interactif)
+
+En plus de l'enregistrement habituel, un second fichier **caméra + micro seuls** est produit à chaque enregistrement,
+pour le replay interactif (diapositives redessinées en HTML à partir du journal ; docs/seance.md §E). Le composite
+n'est pas modifié : les deux systèmes coexistent.
+
+1. Installer le plugin **Source Record** (Exeldro) : https://obsproject.com/forum/resources/source-record.1285/
+2. OBS ouvert, lancer `python obs/configurer_replay_interactif.py --tester` (mot de passe lu dans
+   `lancer-seance.local.bat`) : filtre Source Record sur la source caméra, en mode « Recording » (suit F9 et les
+   diapositives `data-obs`), fichier `<date> camera.mkv` dans le dossier des captations, encodeur matériel
+   (**QuickSync** sur le PC 2 : il n'a pas de carte NVIDIA, NVENC indisponible), son = **piste 2 = micro seul**
+   (le son du bureau, du navigateur et de la caméra en est retiré ; la piste 1 de l'enregistrement habituel est intacte).
+   `--tester` enregistre 6 s et vérifie que les deux fichiers sont produits ; `--retirer` enlève le filtre.
+3. Le fichier caméra démarre 0,5 à 2 s après le principal (initialisation de l'encodeur) et s'arrête ≈ 0,5 s avant :
+   l'heure exacte de début de chaque fichier est dans le journal d'OBS (`Writing file`, à la milliseconde).
+
 ## Hygiène du PC 2
 
 Pas de navigateur ouvert, mises à jour et veille désactivées, alimentation secteur, 50 Go libres. Surveiller dans la barre d'état d'OBS : images perdues (doit rester à 0) et charge CPU (< 70 %).
