@@ -154,6 +154,19 @@ async def cycle_de_vie(app: FastAPI):
 app = FastAPI(title="amphi-replay", lifespan=cycle_de_vie)
 
 
+@app.middleware("http")
+async def sans_cache_pour_les_pages(request: Request, call_next):
+    """Pages et scripts de l'application : toujours revalidés (ETag), pour qu'un téléphone ou OBS
+    ne garde jamais une ancienne télécommande ou un ancien deck après un déploiement."""
+    reponse = await call_next(request)
+    chemin = request.url.path
+    if (chemin.startswith(("/deck/", "/q", "/static/", "/remote", "/editeur", "/presentations"))
+            and not chemin.startswith(("/deck/vendor/", "/deck/medias/"))
+            and "cache-control" not in reponse.headers):
+        reponse.headers["Cache-Control"] = "no-cache"
+    return reponse
+
+
 # ---------------------------------------------------------------------------------
 # Présentations : fichiers servis (déclarés AVANT le montage statique de deck/, qui les masquerait)
 # ---------------------------------------------------------------------------------
