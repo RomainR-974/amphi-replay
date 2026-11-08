@@ -10,7 +10,7 @@
   :root { --fond: #111; --texte: #eee; --sourd: #888; --vert: #22c55e; --rouge: #ef4444; --bleu: #3b82f6; --orange: #f59e0b; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--fond); color: var(--texte); font-family: system-ui, sans-serif; overscroll-behavior: none; }
-  body { display: grid; grid-template-rows: auto auto 1fr auto auto; height: 100dvh; }
+  body { display: grid; grid-template-rows: auto auto 1fr auto auto; grid-template-columns: minmax(0, 1fr); height: 100dvh; } /* minmax(0, …) : un long titre ne doit pas élargir la page */
 
   header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
   #titre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sourd); text-align: center; }
@@ -39,10 +39,60 @@
   .quiz .reinit { grid-column: 1 / -1; background: #333; color: var(--sourd); min-height: 40px; font-size: 14px; }
   .quiz button:disabled { opacity: .35; }
 
-  nav { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; padding: 12px; }
+  nav { display: grid; grid-template-columns: 1fr .72fr 1.6fr; gap: 10px; padding: 12px; }
   nav button { min-height: 88px; font-size: 24px; font-weight: 700; border: 0; border-radius: 14px; color: #fff; background: #2a2a2a; }
   nav .suivant { background: var(--bleu); }
+  nav .qr-bouton { position: relative; font-size: 20px; background: #3a2d05; color: var(--orange); }
+  nav .qr-bouton small { display: block; font-size: 12px; font-weight: 500; color: #c9a23a; margin-top: 2px; }
+  nav .qr-bouton .nb { position: absolute; top: 8px; right: 8px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: var(--orange); color: #111; font-size: 14px; font-weight: 800; display: none; align-items: center; justify-content: center; }
+  nav .qr-bouton .nb.visible { display: inline-flex; }
+  nav .qr-bouton.en-cours { background: #0b3a1c; color: var(--vert); }
   nav button:active { filter: brightness(1.3); }
+
+  /* Badge « ? n » : questions des participants en attente (docs/questions.md) */
+  .badge-q { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 12px; background: #2a2a2a; color: var(--sourd); font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .badge-q.actif { background: var(--orange); color: #111; }
+
+  /* Mode questions-réponses : plein écran dans la télécommande */
+  .qr { display: none; position: fixed; inset: 0; z-index: 30; background: var(--fond); flex-direction: column; }
+  .qr.visible { display: flex; }
+  .qr-tete { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #222; }
+  .qr-tete h2 { flex: 1; margin: 0; font-size: 18px; font-weight: 700; }
+  .qr-tete button { min-height: 42px; padding: 0 14px; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; color: #fff; background: #2a2a2a; }
+  .qr-tete .terminer { background: var(--rouge); }
+  .qr-corps { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .rappel { background: #1b1b1b; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .rappel .obs { display: flex; gap: 10px; align-items: flex-start; font-size: 16px; line-height: 1.4; }
+  .rappel .obs::before { content: '⏺'; color: var(--rouge); font-size: 22px; line-height: 1; }
+  .rappel .obs small { display: block; color: var(--sourd); margin-top: 4px; font-size: 13px; }
+  .rappel .commencer { min-height: 64px; font-size: 20px; font-weight: 700; border: 0; border-radius: 12px; background: var(--vert); color: #fff; }
+  .tri { display: flex; gap: 8px; align-items: center; }
+  .tri span { color: var(--sourd); font-size: 13px; }
+  .tri button { flex: 1; min-height: 40px; border: 0; border-radius: 10px; background: #2a2a2a; color: var(--sourd); font-weight: 600; font-size: 14px; }
+  .tri button.actif { background: #333; color: var(--texte); }
+  .liste-q { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .liste-q li { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; background: #1b1b1b; border-radius: 12px; padding: 10px 12px; }
+  .liste-q .corps { min-width: 0; cursor: pointer; }
+  .liste-q .diapo { font-size: 13px; color: var(--bleu); font-weight: 700; display: flex; gap: 6px; min-width: 0; }
+  .liste-q .diapo small { color: var(--sourd); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .liste-q .texte { font-size: 17px; line-height: 1.35; margin: 4px 0; overflow-wrap: anywhere; }
+  .liste-q .pseudo { font-size: 13px; color: var(--sourd); }
+  .liste-q .actions { display: flex; flex-direction: column; gap: 4px; }
+  .liste-q .actions button { width: 42px; height: 36px; border: 0; border-radius: 8px; background: #2a2a2a; color: var(--texte); font-size: 15px; }
+  .liste-q .actions button:disabled { opacity: .3; }
+  .liste-q .actions .ecarter { color: var(--rouge); }
+  .vide-q, .fini-q { text-align: center; padding: 30px 10px; font-size: 18px; color: var(--sourd); line-height: 1.4; }
+  .fini-q { color: var(--vert); font-weight: 600; }
+  .vue-q { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+  .vue-q .diapo { color: var(--bleu); font-weight: 700; font-size: 15px; }
+  .vue-q .diapo small { color: var(--sourd); font-weight: 400; }
+  .vue-q .texte { font-size: 24px; line-height: 1.35; font-weight: 600; flex: 1; overflow: auto; overflow-wrap: anywhere; }
+  .vue-q .pseudo { color: var(--sourd); font-size: 14px; }
+  .vue-q .deck-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vue-q .deck-nav button { min-height: 52px; border: 0; border-radius: 10px; background: #2a2a2a; color: #fff; font-size: 17px; font-weight: 600; }
+  .vue-q .actions-q { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+  .vue-q .actions-q button { min-height: 76px; border: 0; border-radius: 14px; font-size: 20px; font-weight: 700; color: #fff; background: #2a2a2a; }
+  .vue-q .actions-q .suivante { background: var(--bleu); }
 
   .barre-erreur { display: none; position: fixed; top: 0; left: 0; right: 0; background: var(--rouge); color: #fff; text-align: center; padding: 6px; font-size: 14px; }
   .barre-erreur.visible { display: block; }
@@ -58,6 +108,7 @@
     <span class="voyant" id="v-obs">obs</span>
   </div>
   <div id="titre" title="Présentation active"></div>
+  <span class="badge-q" id="badge-q" title="Questions des participants en attente">? 0</span>
   <div id="chrono">00:00</div>
 </header>
 
@@ -79,8 +130,19 @@
 
 <nav>
   <button id="prec">◀ Précédent</button>
+  <button class="qr-bouton" id="b-qr" title="Questions-réponses">Q/R<small>questions</small><span class="nb" id="b-qr-nb"></span></button>
   <button class="suivant" id="suiv">Suivant ▶</button>
 </nav>
+
+<div class="qr" id="qr" role="dialog" aria-label="Questions-réponses">
+  <div class="qr-tete">
+    <h2>Questions-réponses</h2>
+    <span class="badge-q" id="qr-badge">? 0</span>
+    <button id="qr-reduire" title="Revenir à la télécommande">✕</button>
+    <button class="terminer" id="qr-terminer" hidden>Terminer</button>
+  </div>
+  <div class="qr-corps" id="qr-corps"></div>
+</div>
 
 <script>
 (() => {
@@ -193,11 +255,142 @@
     el.textContent = Math.max(0, Math.ceil((finChrono - Date.now()) / 1000)) + ' s';
   }, 250);
 
+
+  // --- Questions des participants et séquence questions-réponses (docs/questions.md) ----
+  let listeQ = [];                                   // GET /api/questions (avec pseudos), triée par ordre
+  let etatQR = { actif: false, question_id: null, question: null, restantes: 0 };
+  let modeQR = false;                                // le mode Q/R plein écran est affiché
+  let triQ = 'ordre';                                // dernier tri appliqué : ordre (manuel), diapo, arrivee
+  const apiGet = chemin => fetch(`${chemin}${chemin.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`, { cache: 'no-store' })
+    .then(async r => { if (!r.ok) throw new Error((await r.json()).detail || r.status); return r.json(); });
+  const apiDelete = chemin => fetch(`${chemin}?token=${encodeURIComponent(token)}`, { method: 'DELETE' })
+    .then(async r => { if (!r.ok) throw new Error((await r.json()).detail || r.status); return r.json(); });
+  const enAttente = () => listeQ.filter(q => q.etat === 'en_attente');
+
+  async function chargerQuestions() {
+    try { listeQ = await apiGet('/api/questions'); } catch (e) { afficherErreur('Questions : ' + e.message); return; }
+    rendreBadgeQ();
+    if (modeQR) rendreQR();
+  }
+  async function chargerQR() {
+    try { appliquerQR(await apiGet('/api/qr')); } catch (e) { /* serveur injoignable : état inchangé */ }
+  }
+  function appliquerQR(m) {
+    etatQR = { actif: !!m.actif, question_id: m.question ? m.question.id : null, question: m.question || null, restantes: Number(m.restantes) || 0 };
+    // Télécommande rechargée pendant une séquence : le mode Q/R se rouvre à l'état courant.
+    if (etatQR.actif && !modeQR) ouvrirModeQR();
+    rendreBadgeQ();
+    if (modeQR) rendreQR();
+  }
+  function rendreBadgeQ() {
+    const n = enAttente().length;
+    for (const id of ['badge-q', 'qr-badge']) { $(id).textContent = `? ${n}`; $(id).classList.toggle('actif', n > 0); }
+    $('b-qr-nb').textContent = n; $('b-qr-nb').classList.toggle('visible', n > 0);
+    $('b-qr').classList.toggle('en-cours', etatQR.actif);
+  }
+  function ouvrirModeQR() { modeQR = true; $('qr').classList.add('visible'); chargerQuestions(); rendreQR(); }
+  function fermerModeQR() { modeQR = false; $('qr').classList.remove('visible'); }
+  $('b-qr').onclick = ouvrirModeQR;
+  $('qr-reduire').onclick = fermerModeQR;
+  $('qr-terminer').onclick = async () => {
+    if (!confirm('Terminer la séquence questions-réponses ? Le deck revient à la diapositive de départ.')) return;
+    const r = await api('/api/qr/fermer'); if (r) { appliquerQR(r); fermerModeQR(); }
+  };
+
+  function titreCourt(t, n = 38) { t = String(t || ''); return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t; }
+  function el(tag, attrs, ...enfants) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k.startsWith('on')) e[k] = v; else if (k === 'class') e.className = v; else if (k === 'disabled' || k === 'hidden') e[k] = !!v; else e.setAttribute(k, v);
+    }
+    enfants.flat().forEach(x => { if (x !== null && x !== undefined && x !== false) e.append(x instanceof Node ? x : document.createTextNode(String(x))); });
+    return e;
+  }
+
+  function rendreQR() {
+    const corps = $('qr-corps');
+    corps.textContent = '';
+    $('qr-terminer').hidden = !etatQR.actif;
+    const attente = enAttente();
+    if (etatQR.actif && etatQR.question) { corps.append(vueQuestion(etatQR.question)); return; }
+    if (!etatQR.actif) {
+      corps.append(el('div', { class: 'rappel' },
+        el('div', { class: 'obs' }, el('div', {}, 'Arrête l\'enregistrement OBS avant de commencer (F9).',
+          el('small', {}, 'Si le pont OBS (obs_quiz_bridge.py) tourne sur le PC 2, il arrête l\'enregistrement tout seul 2 s après « Commencer ». La séquence questions-réponses n\'est pas dans le replay.'))),
+        el('button', { class: 'commencer', id: 'qr-commencer', onclick: async () => { const r = await api('/api/qr/ouvrir'); if (r) appliquerQR(r); } }, '▶ Commencer')));
+    }
+    if (!attente.length) {
+      corps.append(el('div', { class: etatQR.actif ? 'fini-q' : 'vide-q' }, etatQR.actif ? 'Toutes les questions ont été traitées.' : 'Aucune question en attente pour l\'instant.'));
+      if (etatQR.actif) corps.append(el('div', { class: 'vue-q' }, navDeck()));
+      return;
+    }
+    corps.append(el('div', { class: 'tri' }, el('span', {}, 'Trier :'),
+      el('button', { class: triQ === 'diapo' ? 'actif' : '', onclick: () => trier('diapo') }, 'par diapositive'),
+      el('button', { class: triQ === 'arrivee' ? 'actif' : '', onclick: () => trier('arrivee') }, 'par arrivée')));
+    const ul = el('ul', { class: 'liste-q' });
+    attente.forEach((q, i) => {
+      ul.append(el('li', { 'data-id': q.id },
+        el('div', { class: 'corps', onclick: () => { if (etatQR.actif) traiter(q.id); else afficherErreur('Appuyer d\'abord sur « Commencer »'); } },
+          el('div', { class: 'diapo' }, q.generale ? 'Générale' : `Diapo ${q.numero}`, el('small', {}, titreCourt(q.titre))),
+          el('div', { class: 'texte' }, q.texte),
+          el('div', { class: 'pseudo' }, '👤 ' + (q.pseudo || 'anonyme'))),
+        el('div', { class: 'actions' },
+          el('button', { title: 'Monter', disabled: i === 0, onclick: () => deplacer(i, -1) }, '▲'),
+          el('button', { title: 'Descendre', disabled: i === attente.length - 1, onclick: () => deplacer(i, 1) }, '▼'),
+          el('button', { class: 'ecarter', title: 'Écarter', onclick: () => ecarter(q) }, '✕'))));
+    });
+    corps.append(ul);
+    if (etatQR.actif) corps.append(el('div', { class: 'vue-q' }, navDeck()));
+  }
+  function navDeck() {
+    return el('div', { class: 'deck-nav' },
+      el('button', { onclick: () => R && R.prev() }, '◀ Précédent'),
+      el('button', { onclick: () => R && R.next() }, 'Suivant ▶'));
+  }
+  function vueQuestion(q) {
+    const complete = listeQ.find(x => x.id === q.id) || q;
+    const reste = etatQR.restantes;
+    return el('div', { class: 'vue-q' },
+      el('div', { class: 'diapo' }, q.generale ? 'Question générale' : `Diapositive ${q.numero}`, ' ', el('small', {}, `· ${titreCourt(q.titre, 60)} · ${reste} restante${reste > 1 ? 's' : ''}`)),
+      el('div', { class: 'texte' }, q.texte),
+      el('div', { class: 'pseudo' }, '👤 ' + (complete.pseudo || 'anonyme')),
+      navDeck(),
+      el('div', { class: 'actions-q' },
+        el('button', { onclick: async () => { const r = await api('/api/qr/liste'); if (r) appliquerQR(r); } }, '✕ Liste'),
+        el('button', { class: 'suivante', onclick: async () => { const r = await api('/api/qr/suivante'); if (r) appliquerQR(r); } }, '→ Suivante')));
+  }
+  async function traiter(id) { const r = await api('/api/qr/question', { id }); if (r) appliquerQR(r); }
+  async function ecarter(q) {
+    if (!confirm(`Écarter cette question ?\n« ${q.texte.slice(0, 80)} »`)) return;
+    await api(`/api/questions/${q.id}/etat`, { etat: 'ecartee' });
+    chargerQuestions();
+  }
+  async function envoyerOrdre(ids) { await api('/api/questions/ordre', { ids }); await chargerQuestions(); }
+  function trier(mode) {
+    triQ = mode;
+    const ids = enAttente().sort((a, b) => mode === 'diapo' ? (a.h - b.h) || (a.id - b.id) : a.id - b.id).map(q => q.id);
+    envoyerOrdre(ids);
+  }
+  function deplacer(i, sens) {
+    triQ = 'ordre';
+    const ids = enAttente().map(q => q.id);
+    const j = i + sens; if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    envoyerOrdre(ids);
+  }
+  chargerQuestions(); chargerQR();
+
   let delaiQ = 1000;
   function connecterQuiz() {
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
-    ws.onopen = () => { delaiQ = 1000; };
-    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') { etatQuiz = m; rendreQuiz(); } };
+    ws.onopen = () => { delaiQ = 1000; chargerQuestions(); chargerQR(); };
+    ws.onmessage = e => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'quiz') { etatQuiz = m; rendreQuiz(); }
+      else if (m.type === 'questions') chargerQuestions();
+      else if (m.type === 'qr') { appliquerQR(m); chargerQuestions(); }
+    };
     ws.onclose = () => { setTimeout(connecterQuiz, delaiQ); delaiQ = Math.min(delaiQ * 2, 10000); };
     ws.onerror = () => ws.close();
   }

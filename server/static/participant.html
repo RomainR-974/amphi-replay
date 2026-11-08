@@ -58,9 +58,35 @@
   dialog .boutons { display: flex; gap: 8px; margin-top: 12px; }
   dialog .boutons button { flex: 1; min-height: 48px; border-radius: 12px; border: 2px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; font-weight: 600; }
   dialog .boutons .primaire { border: 0; }
+  /* Espace questions (docs/questions.md) : bouton rond fixe, popup de saisie, bandeau de la question en cours. */
+  .bouton-q { position: fixed; right: 18px; bottom: 18px; z-index: 20; width: 64px; height: 64px; min-width: 56px; min-height: 56px; border-radius: 50%; border: 0;
+    background: var(--accent); color: #fff; font-size: 2rem; font-weight: 800; line-height: 1; box-shadow: 0 8px 24px rgba(37, 99, 235, .45), 0 2px 6px rgba(0,0,0,.25); }
+  .bouton-q:active { transform: scale(.94); }
+  .bouton-q .nb { position: absolute; top: -4px; right: -4px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: var(--ok); color: #fff; font-size: .8rem; font-weight: 700; display: none; align-items: center; justify-content: center; box-sizing: border-box; }
+  .bouton-q .nb.visible { display: inline-flex; }
+  main { padding-bottom: 96px; }
+  #dlg-question { width: min(94vw, 440px); }
+  #dlg-question .contexte { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--fond-carte); margin-bottom: 12px; font-size: .95rem; }
+  #dlg-question .contexte .num { flex: none; font-weight: 800; color: var(--accent); white-space: nowrap; }
+  #dlg-question .contexte .titre-diapo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #dlg-question textarea { min-height: 120px; }
+  #dlg-question .compteur { text-align: right; font-size: .8rem; opacity: .6; margin-top: 4px; }
+  #dlg-question .compteur.limite { color: var(--ko); opacity: 1; }
+  #dlg-question label.case { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .9rem; }
+  #dlg-question label.case input { width: 20px; height: 20px; }
+  #dlg-question .erreur { color: var(--ko); font-size: .9rem; min-height: 1.2em; margin-top: 6px; }
+  #dlg-question .merci { text-align: center; padding: 18px 0 6px; }
+  #dlg-question .merci .coche { font-size: 2.6rem; color: var(--ok); }
+  #dlg-question .merci p { opacity: 1; }
+  .bandeau-qr { background: #0f172a; color: #f8fafc; padding: 12px 16px; border-bottom: 4px solid var(--accent); }
+  .bandeau-qr .sur { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: #93c5fd; display: flex; justify-content: space-between; gap: 8px; }
+  .bandeau-qr .texte { font-size: 1.1rem; line-height: 1.35; font-weight: 600; margin-top: 4px; }
+  .bandeau-qr .mienne { display: inline-block; margin-top: 6px; padding: 2px 10px; border-radius: 10px; background: var(--ok); color: #fff; font-size: .8rem; font-weight: 700; }
+  .bandeau-qr.attente .texte { font-weight: 400; opacity: .85; }
 </style>
 </head>
 <body>
+<div class="bandeau-qr" id="bandeau-qr" hidden></div>
 <header><span>Quiz</span><span class="pseudo" id="pseudo" title="Changer de pseudo"></span></header>
 <main id="vue"><p class="attente">Connexion…</p></main>
 <div class="etat" id="etat"></div>
@@ -72,6 +98,27 @@
   <div class="boutons">
     <button id="pseudo-hasard">Au hasard</button>
     <button class="primaire" id="pseudo-ok">C'est parti</button>
+  </div>
+</dialog>
+
+<button class="bouton-q" id="bouton-q" aria-label="Poser une question" title="Poser une question">?<span class="nb" id="q-nb"></span></button>
+
+<dialog id="dlg-question">
+  <div id="q-formulaire">
+    <h2>Poser une question</h2>
+    <div class="contexte"><span class="num" id="q-num">Diapositive –</span><span class="titre-diapo" id="q-titre"></span></div>
+    <textarea id="q-texte" maxlength="280" placeholder="Votre question (280 caractères max). Elle sera lue à la fin de l'exposé, avec votre pseudo." autocomplete="off"></textarea>
+    <div class="compteur" id="q-compteur">0 / 280</div>
+    <label class="case"><input type="checkbox" id="q-generale"> Cette question ne concerne pas la diapositive en cours</label>
+    <div class="erreur" id="q-erreur"></div>
+    <div class="boutons">
+      <button id="q-annuler" type="button">Annuler</button>
+      <button class="primaire" id="q-envoyer" type="button">Envoyer</button>
+    </div>
+  </div>
+  <div id="q-merci" hidden>
+    <div class="merci"><div class="coche">✔</div><h2>Question envoyée</h2><p id="q-merci-detail"></p></div>
+    <div class="boutons"><button class="primaire" id="q-fermer" type="button">Fermer</button></div>
   </div>
 </dialog>
 
@@ -248,11 +295,80 @@
     appliquer(etat, true);
   }
 
+  // ----- Questions des participants et séquence questions-réponses (docs/questions.md) -----------------
+  const dlgQ = $('dlg-question');
+  const LIMITE_Q = 280;
+  let mesQuestions = [];
+  try { mesQuestions = JSON.parse(localStorage.getItem('amphi_questions') || '[]'); if (!Array.isArray(mesQuestions)) mesQuestions = []; } catch { mesQuestions = []; }
+  function majCompteurQ() {
+    const nb = $('q-nb'); nb.textContent = mesQuestions.length; nb.classList.toggle('visible', mesQuestions.length > 0);
+    $('bouton-q').title = mesQuestions.length ? `Poser une question (${mesQuestions.length} envoyée${mesQuestions.length > 1 ? 's' : ''})` : 'Poser une question';
+  }
+  majCompteurQ();
+  async function ouvrirQuestion() {
+    $('q-formulaire').hidden = false; $('q-merci').hidden = true; $('q-erreur').textContent = '';
+    $('q-generale').checked = false; $('q-envoyer').disabled = false;
+    $('q-num').textContent = 'Diapositive …'; $('q-titre').textContent = '';
+    dlgQ.showModal();
+    try {
+      const c = await (await fetch('/api/questions/contexte', { cache: 'no-store' })).json();
+      $('q-num').textContent = `Diapositive ${c.numero}${c.total ? ' / ' + c.total : ''}`;
+      $('q-titre').textContent = c.titre || '';
+      $('q-titre').title = c.titre || '';
+    } catch { $('q-num').textContent = 'Diapositive en cours'; }
+    $('q-texte').focus();
+  }
+  $('bouton-q').onclick = ouvrirQuestion;
+  $('q-annuler').onclick = () => dlgQ.close();
+  $('q-fermer').onclick = () => dlgQ.close();
+  $('q-texte').oninput = () => {
+    const n = $('q-texte').value.length; const c = $('q-compteur');
+    c.textContent = `${n} / ${LIMITE_Q}`; c.classList.toggle('limite', n >= LIMITE_Q);
+  };
+  $('q-envoyer').onclick = async () => {
+    const texte = $('q-texte').value.trim();
+    if (!texte) { $('q-erreur').textContent = 'Écrivez votre question avant d\'envoyer.'; return; }
+    $('q-envoyer').disabled = true; $('q-erreur').textContent = '';
+    try {
+      const r = await fetch('/api/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texte, generale: $('q-generale').checked }) });
+      const corps = await r.json().catch(() => ({}));
+      if (!r.ok) { $('q-erreur').textContent = corps.detail || `Envoi refusé (${r.status})`; $('q-envoyer').disabled = false; return; }
+      mesQuestions.push(corps.id);
+      try { localStorage.setItem('amphi_questions', JSON.stringify(mesQuestions)); } catch {}
+      majCompteurQ();
+      $('q-texte').value = ''; $('q-texte').oninput();
+      $('q-merci-detail').textContent = corps.generale ? 'Question générale, à la fin de l\'exposé.' : `Rattachée à la diapositive ${corps.numero}${corps.titre ? ' · ' + corps.titre : ''}.`;
+      $('q-formulaire').hidden = true; $('q-merci').hidden = false;
+      rendreBandeauQR();
+    } catch (e) { $('q-erreur').textContent = 'Serveur injoignable, réessayez.'; $('q-envoyer').disabled = false; }
+  };
+  let etatQR = { actif: false, question: null, restantes: 0 };
+  function rendreBandeauQR() {
+    const b = $('bandeau-qr');
+    if (!etatQR.actif) { b.hidden = true; b.innerHTML = ''; return; }
+    b.hidden = false;
+    const reste = etatQR.restantes || 0;
+    const resteTxt = `${reste} restante${reste > 1 ? 's' : ''}`;
+    if (etatQR.question) {
+      const q = etatQR.question;
+      const mienne = mesQuestions.includes(q.id);
+      b.classList.remove('attente');
+      b.innerHTML = `<div class="sur"><span>On répond à${q.generale ? '' : ' · diapositive ' + echap(q.numero)}</span><span>${resteTxt}</span></div><div class="texte">${echap(q.texte)}</div>${mienne ? '<span class="mienne">votre question</span>' : ''}`;
+    } else {
+      b.classList.add('attente');
+      b.innerHTML = `<div class="sur"><span>Questions-réponses</span><span>${resteTxt}</span></div><div class="texte">${reste ? 'Les questions arrivent…' : 'Toutes les questions ont été traitées.'}</div>`;
+    }
+  }
+  function appliquerQR(m) { etatQR = { actif: !!m.actif, question: m.question || null, restantes: Number(m.restantes) || 0 }; rendreBandeauQR(); }
+  async function rechargerQR() {
+    try { const r = await fetch('/api/qr', { cache: 'no-store' }); if (r.ok) appliquerQR(await r.json()); } catch {}
+  }
+
   let delai = 1000, ws = null, interrogation = null;
   function connecter() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
-    ws.onopen = () => { delai = 1000; etatEl.textContent = ''; clearInterval(interrogation); interrogation = null; recharger(); };
-    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') appliquer(m, false); };
+    ws.onopen = () => { delai = 1000; etatEl.textContent = ''; clearInterval(interrogation); interrogation = null; recharger(); rechargerQR(); };
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') appliquer(m, false); else if (m.type === 'qr') appliquerQR(m); else if (m.type === 'questions') { etatQR.restantes = m.en_attente; if (etatQR.actif) rendreBandeauQR(); } };
     ws.onclose = () => {
       etatEl.textContent = 'Connexion perdue, nouvelle tentative…';
       if (!interrogation) interrogation = setInterval(() => recharger().catch(() => {}), 3000);

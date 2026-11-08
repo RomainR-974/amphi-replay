@@ -54,6 +54,9 @@ python obs/obs_quiz_bridge.py wss://<domaine> --obs-mdp <mot de passe obs-websoc
 
 obs-websocket : Outils → Paramètres du serveur WebSocket → activer, port 4455, mot de passe. À l'ouverture d'une question, la scène `Diapositives + vignette` est forcée ; à la fermeture, retour à la scène précédente. Si le pont tombe : F2 à la main.
 
+Le même pont **arrête l'enregistrement** (`StopRecord`) 2 s après l'ouverture de la séquence questions-réponses depuis la télécommande (bouton Q/R → Commencer), et affiche « enregistrement arrêté avant les questions-réponses ». Il ne le relance pas à la fin : les questions-réponses ne font pas partie du replay (voir docs/questions.md).
+Option `--sans-arret` pour désactiver cet arrêt automatique (il faut alors appuyer sur F9 soi-même avant Commencer).
+
 ## Enregistrement
 
 Paramètres → Sortie, mode avancé, onglet Enregistrement :

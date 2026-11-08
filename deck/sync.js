@@ -6,6 +6,8 @@
  *   obs    : PC 2, source Navigateur d'OBS. Suit l'état reçu, aucune transition.
  *   remote : téléphone. Source de vérité : applique localement puis publie Reveal.getIndices().
  *
+ * Événements : connexion, etat, ack, recharger, qr (séquence questions-réponses, voir docs/questions.md).
+ *
  * État partagé : {h, v, f}. À la connexion et à chaque reconnexion, le client lit
  * GET /etat et se recale avant d'écouter le WebSocket. Reconnexion à délai croissant
  * (1 s, 2 s, 4 s, plafond 10 s), sans rechargement de page.
@@ -14,7 +16,7 @@ window.AmphiSync = (function () {
   const params = new URLSearchParams(location.search);
   const role = ['scene', 'obs', 'remote'].includes(params.get('role')) ? params.get('role') : 'scene';
   const token = params.get('token') || '';
-  const ecouteurs = { ack: [], connexion: [], etat: [], recharger: [] };
+  const ecouteurs = { ack: [], connexion: [], etat: [], recharger: [], qr: [] };
 
   let ws = null;
   let delai = 1000;
@@ -77,12 +79,17 @@ window.AmphiSync = (function () {
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'slide') {
-        if (role === 'remote') return; // le remote n'obéit à personne
+        // Le remote n'obéit à personne… sauf au serveur quand la séquence questions-réponses déplace le deck
+        // (source « qr ») : sa miniature suit, et son prochain état publié ne ramènera pas la salle en arrière.
+        if (role === 'remote' && m.source !== 'qr') return;
         appliquer(m);
+        if (role === 'remote') dernierEnvoye = { type: 'slide', h: Number(m.h) || 0, v: Number(m.v) || 0, f: m.f === undefined || m.f === null ? -1 : Number(m.f) };
       } else if (m.type === 'ack') {
         emettre('ack', m);
       } else if (m.type === 'recharger') {
         emettre('recharger', m);
+      } else if (m.type === 'qr') {
+        emettre('qr', m);
       }
     };
     ws.onclose = () => {

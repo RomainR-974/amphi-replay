@@ -10,6 +10,9 @@
  *   [data-amphi="lottie"]               animation Lottie (lottie-web), jouée à l'affichage.
  *   [data-amphi="minuteur"]             compte à rebours démarré à l'affichage (ou au fragment).
  *   [data-amphi="video"]                vidéo lancée à l'affichage de la diapositive, jamais en autoplay HTML.
+ *
+ * Séquence questions-réponses (docs/questions.md) : sur l'événement `qr` d'AmphiSync, bandeau de la question en
+ * cours en bas de l'écran ou indicateur discret en haut à droite ; rôles scene et obs seulement.
  */
 window.AmphiQuizDeck = (function () {
   let questions = {};
@@ -161,6 +164,50 @@ window.AmphiQuizDeck = (function () {
   function arreterMinuteur(el) { if (el._minuteur) { clearInterval(el._minuteur); el._minuteur = null; } }
   function formater(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
 
+  // ----- Séquence questions-réponses : overlays posés sur <body>, hors de .reveal (ils survivent aux rechargements du deck)
+  let etatQR = { actif: false, question: null, restantes: 0 };
+  function appliquerQR(m) {
+    if (!AmphiSyncRoleUtile()) return; // la miniature de la télécommande n'affiche pas d'overlay
+    etatQR = { actif: !!m.actif, question: m.question || null, restantes: Number(m.restantes) || 0 };
+    rendreQR();
+  }
+  function rendreQR() {
+    let bandeau = document.getElementById('qr-bandeau'), indicateur = document.getElementById('qr-indicateur');
+    if (!etatQR.actif) { bandeau?.remove(); indicateur?.remove(); return; }
+    const dsfr = !!document.querySelector('.reveal .slides section.present.dsfr, .reveal .slides section.present section.dsfr, .reveal .slides section.dsfr.present');
+    if (etatQR.question) {
+      indicateur?.remove();
+      const q = etatQR.question;
+      if (!bandeau) {
+        bandeau = document.createElement('div');
+        bandeau.id = 'qr-bandeau'; bandeau.className = 'qr-bandeau'; bandeau.setAttribute('role', 'status');
+        document.body.appendChild(bandeau);
+      } else if (bandeau.dataset.id !== String(q.id)) {
+        bandeau.classList.remove('qr-entree'); void bandeau.offsetWidth; // rejoue l'animation d'entrée pour une nouvelle question
+      }
+      bandeau.dataset.id = String(q.id);
+      bandeau.classList.toggle('dsfr', dsfr);
+      bandeau.classList.add('qr-entree');
+      bandeau.innerHTML = `<div class="qr-sur">Question${q.generale ? '' : ' · diapositive ' + echap(q.numero)}${etatQR.restantes ? `<span class="qr-reste">${etatQR.restantes} restante${etatQR.restantes > 1 ? 's' : ''}</span>` : ''}</div><div class="qr-texte">${echap(q.texte)}</div>`;
+    } else {
+      bandeau?.remove();
+      if (!indicateur) {
+        indicateur = document.createElement('div');
+        indicateur.id = 'qr-indicateur'; indicateur.className = 'qr-indicateur';
+        document.body.appendChild(indicateur);
+      }
+      indicateur.classList.toggle('dsfr', dsfr);
+      indicateur.innerHTML = `<span class="qr-point"></span>Questions-réponses <b>${etatQR.restantes}</b> question${etatQR.restantes > 1 ? 's' : ''}`;
+    }
+  }
+  /** Branche les overlays sur AmphiSync et relit l'état courant (écran rechargé pendant une séquence). */
+  function demarrerQR() {
+    if (!AmphiSyncRoleUtile() || !window.AmphiSync) return;
+    window.AmphiSync.on('qr', appliquerQR);
+    if (window.Reveal) Reveal.on('slidechanged', () => { if (etatQR.actif) rendreQR(); });
+    fetch('/api/qr', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(e => { if (e) appliquerQR(e); }).catch(() => {});
+  }
+
   // Couleur du texte de l'élément hôte (style inline `color`), transmise à l'iframe qui ne peut pas en hériter.
   function couleurDe(el) {
     const c = (el.style && el.style.color) || '';
@@ -173,5 +220,5 @@ window.AmphiQuizDeck = (function () {
   }
   function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  return { preparer, surDiapositive, horsDiapositive, surFragment, get questions() { return questions; } };
+  return { preparer, surDiapositive, horsDiapositive, surFragment, appliquerQR, demarrerQR, get questions() { return questions; } };
 })();

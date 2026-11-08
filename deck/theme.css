@@ -54,3 +54,19 @@ html[data-role="remote"] .reveal { width: 100vw; height: 100vh; pointer-events: 
 .reveal .minuteur.lie { background: #e5e7eb; color: #374151; transition: background .3s, color .3s; }
 .reveal .minuteur.lie.actif { background: #111827; color: #f9fafb; }
 .reveal .minuteur.lie.fini { background: #166534; color: #fff; animation: none; }
+
+/* Séquence questions-réponses (docs/questions.md) : overlays posés sur <body>, hors de .reveal ; rôles scene et obs. */
+.qr-bandeau { position: fixed; left: 3vw; right: 3vw; bottom: 4vh; z-index: 60; box-sizing: border-box; padding: 1.4vw 2.2vw 1.6vw;
+  background: rgba(15, 23, 42, .92); color: #f8fafc; border-left: .7vw solid #3b82f6; border-radius: 1vw; box-shadow: 0 1vw 3vw rgba(0,0,0,.45);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: left; pointer-events: none; }
+.qr-bandeau.qr-entree { animation: qr-entree .45s cubic-bezier(.2, .8, .2, 1); }
+@keyframes qr-entree { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+.qr-bandeau .qr-sur { display: flex; align-items: center; gap: 1em; font-size: max(22px, 1.3vw); letter-spacing: .04em; text-transform: uppercase; color: #93c5fd; font-weight: 600; margin-bottom: .5em; }
+.qr-bandeau .qr-reste { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; color: #cbd5e1; }
+.qr-bandeau .qr-texte { font-size: max(40px, 2.6vw); line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; }
+.qr-indicateur { position: fixed; top: 2vh; right: 2vw; z-index: 60; display: flex; align-items: center; gap: .6em; padding: .5em 1em; border-radius: 2em;
+  background: rgba(15, 23, 42, .85); color: #e2e8f0; font: 600 max(18px, 1.1vw) system-ui, sans-serif; box-shadow: 0 .4vw 1.6vw rgba(0,0,0,.35); pointer-events: none; }
+.qr-indicateur b { color: #fff; }
+.qr-indicateur .qr-point { width: .7em; height: .7em; border-radius: 50%; background: #3b82f6; animation: qr-pulse 1.6s ease-in-out infinite; }
+@keyframes qr-pulse { 50% { opacity: .3; } }
+html[data-role="remote"] .qr-bandeau, html[data-role="remote"] .qr-indicateur { display: none; }

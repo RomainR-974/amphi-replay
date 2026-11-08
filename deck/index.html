@@ -103,7 +103,7 @@
     else Reveal.slide(i.h, i.v, i.f);
   });
   // Prévisualisation d'une présentation non active : pas de synchronisation avec la salle.
-  if (!prez) AmphiSync.demarrer();
+  if (!prez) { AmphiQuizDeck.demarrerQR(); AmphiSync.demarrer(); }
 })();
 </script>
 </body>

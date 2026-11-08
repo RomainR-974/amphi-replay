@@ -196,3 +196,10 @@
 .reveal .slides section.dsfr h1, .reveal .slides section.dsfr h2, .reveal .slides section.dsfr h3 {
   font-family: "Marianne", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-transform: none; letter-spacing: normal;
 }
+
+/* ---- Séquence questions-réponses : overlays (quiz-deck.js) quand la diapositive affichée est une section.dsfr ---- */
+.qr-bandeau.dsfr { font-family: "Marianne", system-ui, sans-serif; background: var(--dsfr-bleu); color: var(--dsfr-blanc); border-left-color: var(--dsfr-rouge); border-radius: 0; box-shadow: var(--dsfr-ombre); }
+.qr-bandeau.dsfr .qr-sur { color: var(--dsfr-bleu-clair); }
+.qr-bandeau.dsfr .qr-reste { color: var(--dsfr-blanc); opacity: .85; }
+.qr-indicateur.dsfr { font-family: "Marianne", system-ui, sans-serif; background: var(--dsfr-bleu); color: var(--dsfr-blanc); border-radius: 0; }
+.qr-indicateur.dsfr .qr-point { background: var(--dsfr-rouge); }

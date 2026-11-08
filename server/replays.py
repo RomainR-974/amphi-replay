@@ -2,7 +2,8 @@
 
     presentations/<slug>/replays/<AAAA-MM-JJ_HHMM>/
       replay.mp4            vidéo finale (chapitres MP4 embarqués)
-      journal.json          métadonnées (titre, date, durée, sources, séance, chapitres) + mesures du recalage
+      journal.json          métadonnées (titre, date, durée, sources, séance, chapitres, coupe_qr_s) + mesures du recalage
+      questions.csv         questions des participants exportées du serveur de séance (si fournies)
       chapitres.txt         format YouTube « 00:00 Titre »
       chapitres.vtt         WebVTT (piste de chapitres du lecteur)
       extraits/NN-titre.mp4 capsules par chapitre (optionnel)
@@ -184,6 +185,21 @@ def calculer_chapitres(evenements: list[dict], debut_enregistrement: float, dure
     if chapitres:
         chapitres[0]["debut"] = 0.0
     return chapitres
+
+
+def instant_qr(evenements: list[dict], debut_enregistrement: float, decalage: float = 0.0) -> float | None:
+    """Instant (s depuis le début de la vidéo) du premier `qr_ouvrir` de la séance, ou None s'il n'y en a pas."""
+    origine = debut_enregistrement + decalage
+    instants = [float(ev["horodatage"]) - origine for ev in evenements if ev.get("type") == "qr_ouvrir" and ev.get("horodatage") is not None]
+    return round(min(instants), 3) if instants else None
+
+
+def couper_video(video: Path, instant: float, consigner: Callable[[str], None] | None = None) -> None:
+    """Tronque `video` à `instant` (remux `-c copy -to`), vers un fichier temporaire puis remplacement."""
+    with tempfile.TemporaryDirectory(prefix="amphi-coupe-", dir=str(video.parent)) as tmp:
+        sortie = Path(tmp) / "coupe.mp4"
+        executer(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-to", f"{instant:.3f}", "-map", "0", "-c", "copy", "-movflags", "+faststart", str(sortie)], consigner=consigner)
+        os.replace(sortie, video)
 
 
 def texte_chapitres(chapitres: list[dict]) -> str:
@@ -565,6 +581,27 @@ def charger_journal_distant(serveur: str, jeton: str, prez: str, depuis: float |
     return donnees
 
 
+def telecharger_questions(serveur: str, jeton: str, destination: Path, consigner: Callable[[str], None] | None = None) -> bool:
+    """GET <serveur>/api/questions/export?token=… → `destination` (questions.csv). 404 (serveur sans cet espace) : ignoré en silence ; autre échec : consigné."""
+    serveur = (serveur or "").strip().rstrip("/")
+    url = f"{serveur}/api/questions/export?{urllib.parse.urlencode({'token': jeton or ''})}"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as reponse:
+            contenu = reponse.read()
+    except urllib.error.HTTPError as e:
+        if e.code != 404 and consigner:
+            consigner(f"questions des participants non récupérées : HTTP {e.code}")
+        return False
+    except (urllib.error.URLError, OSError) as e:
+        if consigner:
+            consigner(f"questions des participants non récupérées : {getattr(e, 'reason', e)}")
+        return False
+    destination.write_bytes(contenu)
+    if consigner:
+        consigner(f"questions des participants : {destination.name} ({max(0, contenu.count(b'\n') - 1)} question(s))")
+    return True
+
+
 # -------------------------------------------------------------------------------------
 # Pipeline d'assemblage
 # -------------------------------------------------------------------------------------
@@ -573,8 +610,12 @@ def charger_journal_distant(serveur: str, jeton: str, prez: str, depuis: float |
 def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lire_journal_local: Callable[[str, float | None, float | None], list[dict]],
                      *, prez: str, video: str, audio: str | None = None, seance_debut: float | None = None, seance_fin: float | None = None,
                      decalage: float = 0.0, titre: str | None = None, garder_reference: bool = False, extraits: bool = False,
-                     serveur: str | None = None, jeton_serveur: str | None = None) -> dict:
-    """Corps d'une tâche : assemblage (ou remux), chapitrage, VTT/TXT, extraits. Renvoie {slug, id}."""
+                     serveur: str | None = None, jeton_serveur: str | None = None, couper_qr: bool = True) -> dict:
+    """Corps d'une tâche : assemblage (ou remux), coupe avant les questions-réponses, chapitrage, VTT/TXT, extraits. Renvoie {slug, id}.
+
+    `couper_qr` : si la séance contient un événement `qr_ouvrir` qui tombe dans la vidéo, celle-ci est tronquée à cet instant
+    (la séquence questions-réponses n'est pas dans le replay) ; journal.json porte alors `coupe_qr_s`.
+    """
     if not outils_presents():
         raise RuntimeError("ffmpeg / ffprobe introuvables : installer ffmpeg et l'ajouter au PATH")
     tache.etape("préparation")
@@ -601,6 +642,12 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
 
     titres = titres_presentation(replays.biblio.exiger(prez))
     chapitres = calculer_chapitres(evenements, debut_enregistrement, duree, titres, decalage)
+    coupe = instant_qr(evenements, debut_enregistrement, decalage) if couper_qr else None
+    if coupe is not None and not 0.5 < coupe < duree:
+        tache.consigner(f"questions-réponses ouvertes à {coupe:.0f} s : hors de la vidéo, pas de coupe")
+        coupe = None
+    if coupe is not None:
+        chapitres = [c for c in chapitres if c["debut"] < coupe]
     if not chapitres:
         tache.consigner("aucun chapitre : vérifier la séance choisie et le décalage")
     else:
@@ -637,6 +684,16 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
             executer(commande, consigner=tache.consigner)
         duree_sortie = duree_fichier(sortie) or duree
 
+        if couper_qr:
+            tache.etape("coupe")
+            if coupe is not None and coupe < duree_sortie:
+                couper_video(sortie, coupe, consigner=tache.consigner)
+                duree_sortie = duree_fichier(sortie) or coupe
+                tache.consigner(f"coupé avant les questions-réponses à {formater_temps(coupe)} ({duree_sortie:.1f} s)")
+            else:
+                coupe = None
+                tache.consigner("pas de questions-réponses dans la séance : vidéo complète")
+
         tache.etape("chapitrage")
         chapitres = [c for c in chapitres if c["debut"] <= duree_sortie]
         if chapitres:
@@ -652,11 +709,15 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
             "debut_enregistrement": debut_enregistrement,
             "decalage": decalage,
             "garder_reference": garder_reference,
+            "coupe_qr_s": coupe,
             "chapitres": chapitres,
             "mesures": mesures,
             "cree": datetime.now().replace(microsecond=0).isoformat(),
         }
         replays.ecrire_journal(prez, id, donnees)
+
+        if serveur:
+            telecharger_questions(serveur, jeton_serveur or "", dossier / "questions.csv", consigner=tache.consigner)
 
         if extraits:
             tache.etape("extraits")

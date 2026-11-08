@@ -1,7 +1,8 @@
 """Journal de séance : ce qui s'est passé sur le deck et quand (voir docs/postprod.md, section 1).
 
 Table SQLite `journal` dans la base du quiz (`CHEMIN_BDD`) : une ligne par changement de diapositive
-(rôle `remote`), par ouverture / fermeture / révélation de question et par activation de présentation.
+(rôle `remote`), par ouverture / fermeture / révélation de question, par activation de présentation et par
+ouverture / fermeture de la séquence questions-réponses (`qr_ouvrir` / `qr_fermer`, où la post-production coupe).
 La post-production s'en sert pour chapitrer le replay. `Quiz.purger()` ne touche pas à cette table.
 
 Les titres des diapositives sont extraits de `slides.html` par expressions régulières : premier
@@ -19,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-TYPES = ("diapositive", "quiz_ouvrir", "quiz_fermer", "quiz_reveler", "activation")
+TYPES = ("diapositive", "quiz_ouvrir", "quiz_fermer", "quiz_reveler", "activation", "qr_ouvrir", "qr_fermer")
 ECART_SEANCE_S = 3 * 3600  # deux événements séparés de plus de 3 h appartiennent à deux séances
 LONGUEUR_TITRE = 80
 

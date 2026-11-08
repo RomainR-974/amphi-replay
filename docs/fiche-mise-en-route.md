@@ -29,12 +29,14 @@
 - Diapositive de quiz : **Ouvrir** → attendre (le chrono ferme tout seul s'il y en a un) → **Fermer** → **Révéler** (points attribués, bonne réponse affichée) → commenter.
 - Diapositive « Classement » : le podium se met à jour tout seul après chaque Révéler.
 - Voyant orange ou rouge pendant plus de 10 s : regarder le PC concerné, sans s'arrêter de parler.
+- Badge **? n** en haut de la télécommande : questions des participants en attente, pour la fin.
 
 ## Séquence de fin
 
-1. Dernière diapositive, questions du public.
-2. **Clap n°2** devant le DSLR.
-3. Arrêter l'enregistreur du téléphone, puis OBS (**F9**), puis le DSLR.
+1. Dernière diapositive de l'exposé.
+2. **Clap n°2** devant le DSLR, puis **arrêt d'OBS (F9)** — AVANT d'appuyer sur « Q/R » (ou laisser le pont `obs_quiz_bridge.py` arrêter OBS : il le fait 2 s après « Commencer »).
+3. Télécommande : bouton **Q/R** → **Commencer** → taper une question (le deck saute à sa diapositive, la question s'affiche à l'écran) → **→ Suivante** … → **Terminer** (retour à la diapositive de départ). Les questions arrivent du bouton « ? » de la page participant ; la séquence Q/R n'est **pas** dans le replay (la post-production coupe la vidéo à l'ouverture des Q/R).
+4. Arrêter l'enregistreur du téléphone, puis le DSLR.
 
 ## Post-production (PC 2, < 10 min)
 

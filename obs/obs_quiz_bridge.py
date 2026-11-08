@@ -10,6 +10,10 @@ qui écoute /ws/quiz et parle à OBS en local.
 À l'ouverture d'une question : sauvegarde la scène courante, bascule sur la scène de quiz.
 À la fermeture : revient à la scène sauvegardée. Advanced Scene Switcher reprend ensuite sa boucle.
 Si ce script tombe, rien ne casse : raccourcis F1/F2/F3 en secours.
+
+Séquence questions-réponses (docs/questions.md) : le serveur relaie `{"type": "qr", "actif": true}` sur /ws/quiz ;
+le pont arrête alors l'enregistrement OBS (`StopRecord`) après 2 s, une fois par séquence, sauf `--sans-arret`.
+À la fermeture de la séquence, l'enregistrement n'est pas relancé : les questions-réponses ne sont pas dans le replay.
 """
 
 from __future__ import annotations
@@ -59,6 +63,24 @@ class Obs:
     async def changer_scene(self, nom: str) -> None:
         await self.requete("SetCurrentProgramScene", {"sceneName": nom})
 
+    async def arreter_enregistrement(self) -> bool:
+        """StopRecord ; False si OBS n'enregistrait pas (requête refusée), sans faire tomber le pont."""
+        try:
+            await self.requete("StopRecord")
+        except RuntimeError as e:
+            print("OBS : enregistrement non arrêté :", e, file=sys.stderr)
+            return False
+        return True
+
+
+DELAI_ARRET_S = 2.0
+
+
+async def arreter_apres_delai(obs: Obs) -> None:
+    await asyncio.sleep(DELAI_ARRET_S)
+    if await obs.arreter_enregistrement():
+        print("enregistrement arrêté avant les questions-réponses")
+
 
 async def principal() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -66,11 +88,13 @@ async def principal() -> int:
     p.add_argument("--obs", default="ws://127.0.0.1:4455")
     p.add_argument("--obs-mdp", default="")
     p.add_argument("--scene", default="Diapositives + vignette", help="scène forcée pendant une question ouverte")
+    p.add_argument("--sans-arret", action="store_true", help="ne pas arrêter l'enregistrement OBS à l'ouverture des questions-réponses")
     args = p.parse_args()
     url_quiz = args.serveur.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + "/ws/quiz"
 
     obs = Obs(args.obs, args.obs_mdp)
     scene_avant: str | None = None
+    qr_arretee = False  # StopRecord déjà demandé pour la séquence Q/R en cours
     delai = 1
     while True:
         try:
@@ -82,6 +106,17 @@ async def principal() -> int:
                 delai = 1
                 async for brut in ws:
                     m = json.loads(brut)
+                    if m.get("type") == "qr":
+                        if m.get("actif") and not qr_arretee:
+                            qr_arretee = True
+                            if args.sans_arret:
+                                print("questions-réponses ouvertes (enregistrement laissé tel quel : --sans-arret)")
+                            else:
+                                print(f"questions-réponses ouvertes → arrêt de l'enregistrement OBS dans {DELAI_ARRET_S:.0f} s")
+                                asyncio.create_task(arreter_apres_delai(obs))
+                        elif not m.get("actif"):
+                            qr_arretee = False  # séquence terminée ; l'enregistrement n'est pas relancé
+                        continue
                     if m.get("type") != "quiz":
                         continue
                     if m.get("ouverte") and scene_avant is None:

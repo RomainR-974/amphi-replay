@@ -235,7 +235,8 @@ def test_cycle_complet_postprod(client, tmp_path, monkeypatch):
     assert r.status_code == 200, r.text
     tache = attendre_tache(client, r.json()["tache"])
     assert tache["etat"] == "terminee", "\n".join(tache["journal"])
-    assert [e["etat"] for e in tache["etapes"]] == ["terminee"] * 4
+    assert [e["etat"] for e in tache["etapes"]] == ["terminee"] * 5  # préparation, assemblage, coupe (sans effet ici), chapitrage, extraits
+    assert "pas de questions-réponses dans la séance" in "\n".join(tache["journal"])
     assert tache["replay"]["slug"] == "demo"
     id = tache["replay"]["id"]
 
@@ -247,7 +248,7 @@ def test_cycle_complet_postprod(client, tmp_path, monkeypatch):
     assert [c["titre"] for c in detail["chapitres"]] == ["Démo", "Quiz : a"]
     assert detail["chapitres"][0]["debut"] == 0.0 and detail["chapitres"][1]["debut"] == pytest.approx(26.0, abs=0.2)
     assert detail["journal"]["mesures"]["decalage_debut_s"] == pytest.approx(0.8, abs=0.05)
-    assert detail["journal"]["source_video"] == "obs.mkv"
+    assert detail["journal"]["source_video"] == "obs.mkv" and detail["journal"]["coupe_qr_s"] is None
 
     dossier = client.presentations / "demo" / "replays" / id
     assert (dossier / "replay.mp4").is_file() and (dossier / "journal.json").is_file()
@@ -332,3 +333,57 @@ def test_assemblage_sans_audio_et_erreurs(client, tmp_path):
     assert t["etat"] == "erreur" and "injoignable" in t["erreur"]
     assert len(client.get("/api/presentations/demo/replays").json()) == 1
     assert client.get(jeton("/api/postprod/taches/inconnue")).status_code == 404
+
+
+def test_instant_qr():
+    debut = 1_000.0
+    ev = [{"horodatage": debut + 20, "type": "qr_ouvrir", "h": 3, "v": 0, "f": -1}, {"horodatage": debut + 25, "type": "qr_ouvrir"}]
+    assert module_replays.instant_qr(ev, debut) == 20.0
+    assert module_replays.instant_qr(ev, debut, decalage=5.0) == 15.0
+    assert module_replays.instant_qr([{"horodatage": debut, "type": "diapositive", "h": 0}], debut) is None
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="ffmpeg absent")
+def test_coupe_avant_questions_reponses(client, tmp_path):
+    """Séance avec `qr_ouvrir` à 20 s dans une vidéo de 30 s → replay d'environ 20 s, chapitres bornés, `coupe_qr_s` dans journal.json."""
+    import os
+
+    from server import app as module_app
+
+    captations = tmp_path / "captations"
+    captations.mkdir()
+    module_app.captations.dossier = captations
+    obs, _ = fabriquer_captation(captations, duree=30.0)
+    t0 = time.time() - 300
+    os.utime(obs, (t0 + 30, t0 + 30))  # enregistrée de t0 à t0+30
+    j = client.app.state.journal
+    j.ajouter("demo", "diapositive", 0, 0, -1, horodatage=t0 + 1)
+    j.ajouter("demo", "qr_ouvrir", 0, 0, -1, horodatage=t0 + 20)
+    j.ajouter("demo", "diapositive", 1, 0, -1, horodatage=t0 + 22)  # saut vers la question : après la coupe, pas de chapitre
+    j.ajouter("demo", "qr_fermer", 0, 0, -1, horodatage=t0 + 28)
+
+    seance = client.get(jeton("/api/journal/seances?prez=demo")).json()["seances"][0]
+    assert [e["type"] for e in seance["evenements"]] == ["diapositive", "qr_ouvrir", "diapositive", "qr_fermer"]
+    assert seance["evenements"][1]["horodatage"] == pytest.approx(t0 + 20)
+
+    r = client.post(jeton("/api/postprod/assembler"), json={"prez": "demo", "video": "obs.mkv", "seance_debut": seance["debut"], "seance_fin": seance["fin"], "titre": "Coupé"})
+    assert r.status_code == 200, r.text
+    tache = attendre_tache(client, r.json()["tache"])
+    assert tache["etat"] == "terminee", "\n".join(tache["journal"])
+    assert [e["nom"] for e in tache["etapes"]] == ["préparation", "assemblage", "coupe", "chapitrage"]
+    assert any("coupé avant les questions-réponses à 00:20" in l for l in tache["journal"])
+    id = tache["replay"]["id"]
+    dossier = client.presentations / "demo" / "replays" / id
+    sonde = module_replays.sonder(dossier / "replay.mp4")
+    assert sonde["duree"] == pytest.approx(20.0, abs=1.0)
+    journal_replay = json.loads((dossier / "journal.json").read_text(encoding="utf-8"))
+    assert journal_replay["coupe_qr_s"] == pytest.approx(20.0, abs=0.1) and journal_replay["duree"] == pytest.approx(20.0, abs=1.0)
+    assert [c["titre"] for c in journal_replay["chapitres"]] == ["Démo"]
+    assert not (dossier / "questions.csv").exists()  # pas de serveur de séance distant
+
+    # Sans coupe : vidéo complète, chapitre du saut conservé.
+    r = client.post(jeton("/api/postprod/assembler"), json={"prez": "demo", "video": "obs.mkv", "seance_debut": seance["debut"], "seance_fin": seance["fin"], "couper_qr": False})
+    tache = attendre_tache(client, r.json()["tache"])
+    assert tache["etat"] == "terminee" and [e["nom"] for e in tache["etapes"]] == ["préparation", "assemblage", "chapitrage"]
+    detail = client.get(f"/api/presentations/demo/replays/{tache['replay']['id']}").json()
+    assert detail["duree"] == pytest.approx(30.0, abs=1.0) and len(detail["chapitres"]) == 2 and detail["journal"]["coupe_qr_s"] is None

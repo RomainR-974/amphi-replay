@@ -23,6 +23,7 @@
     seance: null,         // index dans seances
     tache: null,
     minuteur: null,
+    seanceCoupe: undefined, // séance pour laquelle la case « couper avant les questions-réponses » a été préréglée
   };
 
   // ======================================================================
@@ -231,6 +232,26 @@
     });
   }
 
+  /** Instant (s dans la vidéo) du premier `qr_ouvrir` de la séance, ou null (même règle que server/replays.py : dans ]0,5 s ; durée[). */
+  function instantQR(seance, debut, duree) {
+    if (!seance) return null;
+    const instants = seance.evenements.filter(e => e.type === 'qr_ouvrir').map(e => e.horodatage - debut);
+    if (!instants.length) return null;
+    const t = Math.min(...instants);
+    return t > 0.5 && t < duree ? t : null;
+  }
+  function majCoupeQR() {
+    const seance = etatPage.seance !== null ? etatPage.seances[etatPage.seance] : null;
+    const f = fichierVideo();
+    const existe = !!seance && seance.evenements.some(e => e.type === 'qr_ouvrir');
+    const t = f && seance ? instantQR(seance, debutEnregistrement(), f.duree || 0) : null;
+    const case_ = $('#couper-qr');
+    if (etatPage.seanceCoupe !== etatPage.seance) { case_.checked = existe; etatPage.seanceCoupe = etatPage.seance; }
+    case_.disabled = !existe;
+    $('#couper-qr-aide').textContent = !seance ? '' : !existe ? '(pas de questions-réponses dans cette séance)' : !f ? '(choisir la vidéo pour situer la coupe)' : t !== null ? '(à ' + formaterDuree(t) + ' dans la vidéo)' : '(ouvertes hors de la vidéo : pas de coupe)';
+    return case_.checked && t !== null ? t : null;
+  }
+
   /** Même algorithme que server/replays.py : instants dans [0, durée], pas de chapitre sur un fragment, fusion < 20 s, premier à 0. */
   function calculerChapitres(evenements, debut, duree, titres) {
     const bruts = [];
@@ -263,18 +284,21 @@
     const vide = $('#apercu-vide');
     const resume = $('#apercu-resume');
     if (!f || !seance) {
+      majCoupeQR();
       vide.hidden = false; resume.textContent = '';
       vide.textContent = !f ? 'Choisir une vidéo pour estimer le début de l\'enregistrement.' : 'Choisir une séance.';
       $('#lancer-aide').textContent = !f ? 'Choisir d\'abord une vidéo.' : '';
       return;
     }
-    const chapitres = calculerChapitres(seance.evenements, debut, f.duree || 0, etatPage.titres);
+    const coupe = majCoupeQR();
+    const chapitres = calculerChapitres(seance.evenements, debut, f.duree || 0, etatPage.titres).filter(c => coupe === null || c.debut < coupe);
     vide.hidden = chapitres.length > 0;
     if (!chapitres.length) {
       vide.textContent = 'Aucun changement de diapositive ne tombe dans la durée de la vidéo : la séance choisie correspond-elle à cet enregistrement ? Ajuster le décalage manuel si besoin (écart séance → vidéo : ' + Math.round(seance.debut - debut) + ' s).';
     }
     resume.textContent = chapitres.length ? '(' + chapitres.length + ' chapitre' + (chapitres.length > 1 ? 's' : '') + ', diapositives dans la vidéo : ' + seance.evenements.filter(e => e.type === 'diapositive' && e.horodatage - debut >= 0 && e.horodatage - debut <= (f.duree || 0)).length + '/' + seance.evenements.filter(e => e.type === 'diapositive').length + ')' : '';
     chapitres.forEach(c => corps.append(h('tr', {}, h('td', { class: 'temps' }, formaterDuree(c.debut)), h('td', {}, c.titre))));
+    if (coupe !== null) corps.append(h('tr', { class: 'coupe' }, h('td', { class: 'temps' }, formaterDuree(coupe)), h('td', { class: 'sourd' }, '✂ fin du replay : questions-réponses (coupées)')));
     $('#lancer-aide').textContent = chapitres.length ? '' : 'Le replay sera assemblé sans chapitres.';
   }
 
@@ -306,6 +330,7 @@
       titre: $('#titre').value.trim() || $('#titre').placeholder,
       garder_reference: $('#garder-reference').checked,
       extraits: $('#extraits').checked,
+      couper_qr: $('#couper-qr').checked && !$('#couper-qr').disabled,
       serveur: seance && serveur ? serveur : null,
       jeton_serveur: seance && serveur ? ($('#jeton-serveur').value || token) : null,
     };
@@ -396,6 +421,7 @@
   $('#b-assembler').onclick = assembler;
   $('#sans-audio').onchange = () => { rendreCaptations(); };
   $('#decalage').oninput = () => { rendreApercu(); };
+  $('#couper-qr').onchange = () => { rendreApercu(); };
   $('#serveur').onkeydown = $('#jeton-serveur').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); chargerSeances(); } };
   demarrer();
 })();

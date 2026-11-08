@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from . import config
 from .journal import Journal, titres_presentation
 from .presentations import Bibliotheque, valider_slug
+from .questions import Questions, SequenceQR, question_publique
 from .quiz import Quiz, charger_questions, questions_depuis_liste
 from .replays import Captations, Replays, Taches, assembler_replay, outils_presents
 
@@ -96,6 +97,8 @@ etat_deck = EtatDeck()
 biblio = Bibliotheque(config.DOSSIER_PRESENTATIONS, config.FICHIER_ACTIVE, config.PRESENTATION_DEFAUT)
 quiz: Quiz
 journal_bd: Journal  # journal de séance (table `journal` de la même base SQLite ; voir docs/postprod.md)
+questions_bd: Questions  # questions des participants (table `questions_participants` ; voir docs/questions.md)
+qr = SequenceQR()  # séquence questions-réponses en cours
 replays = Replays(biblio)
 captations = Captations(config.DOSSIER_CAPTATIONS)
 taches = Taches()
@@ -105,15 +108,18 @@ _fond: asyncio.Task | None = None
 
 @asynccontextmanager
 async def cycle_de_vie(app: FastAPI):
-    global quiz, journal_bd
+    global quiz, journal_bd, questions_bd
     active = biblio.active()
     fichier_quiz = biblio.fichier_quiz(active) if active else None
     quiz = Quiz(charger_questions(fichier_quiz) if fichier_quiz else {}, config.CHEMIN_BDD)
     journal_bd = Journal(config.CHEMIN_BDD)
+    questions_bd = Questions(config.CHEMIN_BDD)
     captations.preparer()
     app.state.quiz = quiz
     app.state.biblio = biblio
     app.state.journal = journal_bd
+    app.state.questions = questions_bd
+    app.state.qr = qr
     app.state.replays = replays
     if config.JETON_GENERE:
         journal.warning("AMPHI_JETON absent : jeton de session généré = %s", config.JETON)
@@ -229,6 +235,8 @@ async def sante() -> dict:
         "quiz_clients": quiz_ws.compter(),
         "question_ouverte": quiz.ouverte,
         "questions": len(quiz.questions),
+        "questions_participants": questions_bd.en_attente(),
+        "qr": qr.actif,
         "presentation": biblio.active(),
     }
 
@@ -647,6 +655,7 @@ class DemandeAssemblage(BaseModel):
     extraits: bool = False
     serveur: str | None = None
     jeton_serveur: str | None = None
+    couper_qr: bool = True  # tronquer la vidéo au `qr_ouvrir` de la séance (séquence questions-réponses hors replay)
 
 
 @app.get("/api/postprod/configuration", dependencies=[Depends(verifier_jeton)])
@@ -671,7 +680,7 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             captations.fichier(corps.audio)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    etapes = ["préparation", "assemblage", "chapitrage"] + (["extraits"] if corps.extraits else [])
+    etapes = ["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + ["chapitrage"] + (["extraits"] if corps.extraits else [])
     serveur = (corps.serveur or "").strip() or None
 
     def travail(tache):
@@ -679,7 +688,7 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             tache, replays, captations, journal_bd.lire,
             prez=corps.prez, video=corps.video, audio=corps.audio or None, seance_debut=corps.seance_debut, seance_fin=corps.seance_fin,
             decalage=corps.decalage or 0.0, titre=corps.titre, garder_reference=corps.garder_reference, extraits=corps.extraits,
-            serveur=serveur, jeton_serveur=corps.jeton_serveur,
+            serveur=serveur, jeton_serveur=corps.jeton_serveur, couper_qr=corps.couper_qr,
         )
 
     return {"tache": taches.lancer(etapes, travail).id}
@@ -877,8 +886,239 @@ async def quiz_export() -> PlainTextResponse:
 @app.post("/api/quiz/purger", dependencies=[Depends(verifier_jeton)])
 async def quiz_purger() -> dict:
     quiz.purger()
+    questions_bd.purger()
     await publier_quiz()
+    await publier_questions()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------------
+# Questions des participants (docs/questions.md)
+# ---------------------------------------------------------------------------------
+
+
+def contexte_diapositive() -> dict:
+    """Diapositive courante : {h, v, numero, total, titre} (état du deck + titres de la présentation active)."""
+    actif = biblio.active()
+    titres = titres_presentation(biblio.exiger(actif)) if actif else []
+    h, v = int(etat_deck.indices.get("h", 0)), int(etat_deck.indices.get("v", 0))
+    titre = titres[h] if 0 <= h < len(titres) else f"Diapositive {h + 1}"
+    return {"h": h, "v": v, "numero": h + 1, "total": len(titres), "titre": titre}
+
+
+def message_qr() -> dict:
+    question = questions_bd.lire(qr.question_id) if qr.question_id is not None else None
+    return {"type": "qr", "actif": qr.actif, "question": question_publique(question), "restantes": questions_bd.en_attente()}
+
+
+async def publier_questions() -> None:
+    """Compteur des questions en attente, pour la télécommande (badge) et les participants."""
+    await quiz_ws.diffuser({"type": "questions", "en_attente": questions_bd.en_attente()})
+
+
+async def publier_qr() -> None:
+    """État de la séquence Q/R : écran et télécommande (/ws/deck), pont OBS et participants (/ws/quiz)."""
+    message = message_qr()
+    await deck_ws.diffuser(message)
+    await quiz_ws.diffuser(message)
+
+
+class NouvelleQuestion(BaseModel):
+    texte: str
+    generale: bool = False
+
+
+class EtatQuestion(BaseModel):
+    etat: str
+
+
+class OrdreQuestions(BaseModel):
+    ids: list[int]
+
+
+@app.get("/api/questions/contexte")
+async def questions_contexte() -> dict:
+    return contexte_diapositive()
+
+
+@app.post("/api/questions")
+async def questions_poser(corps: NouvelleQuestion, request: Request, response: Response) -> dict:
+    pid = identifiant_participant(request, response)
+    pseudo = quiz.pseudo(pid)
+    contexte = contexte_diapositive()
+    try:
+        q = questions_bd.ajouter(biblio.active(), pid, pseudo, corps.texte, contexte["h"], contexte["v"], contexte["titre"], corps.generale)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    await publier_questions()
+    return {"id": q["id"], "numero": q["numero"], "titre": q["titre"], "generale": q["generale"]}
+
+
+@app.get("/api/questions", dependencies=[Depends(verifier_jeton)])
+async def questions_lister(etat: str | None = None) -> list[dict]:
+    return [{k: v for k, v in q.items() if k != "participant"} for q in questions_bd.lister(etat or None)]
+
+
+@app.get("/api/questions/publiques")
+async def questions_publiques(etat: str | None = None) -> list[dict]:
+    return questions_bd.lister(etat or None, avec_pseudo=False)
+
+
+@app.get("/api/questions/export", dependencies=[Depends(verifier_jeton)])
+async def questions_export() -> PlainTextResponse:
+    return PlainTextResponse(questions_bd.export_csv(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="questions.csv"', **CORS_JOURNAL})
+
+
+@app.options("/api/questions/export")
+async def questions_export_options() -> Response:
+    return Response(status_code=204, headers=CORS_JOURNAL)
+
+
+@app.post("/api/questions/ordre", dependencies=[Depends(verifier_jeton)])
+async def questions_ordre(corps: OrdreQuestions) -> dict:
+    questions_bd.reordonner(corps.ids)
+    return {"ok": True}
+
+
+@app.post("/api/questions/purger", dependencies=[Depends(verifier_jeton)])
+async def questions_purger() -> dict:
+    questions_bd.purger()
+    qr.question_id = None
+    await publier_questions()
+    if qr.actif:
+        await publier_qr()
+    return {"ok": True}
+
+
+@app.post("/api/questions/{id}/etat", dependencies=[Depends(verifier_jeton)])
+async def questions_etat(id: int, corps: EtatQuestion) -> dict:
+    try:
+        q = questions_bd.changer_etat(id, corps.etat)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="question inconnue")
+    if qr.question_id == id and corps.etat != "en_cours":
+        qr.question_id = None
+    await publier_questions()
+    if qr.actif:
+        await publier_qr()
+    return {k: v for k, v in q.items() if k != "participant"}
+
+
+@app.delete("/api/questions/{id}", dependencies=[Depends(verifier_jeton)])
+async def questions_supprimer(id: int) -> dict:
+    if not questions_bd.supprimer(id):
+        raise HTTPException(status_code=404, detail="question inconnue")
+    if qr.question_id == id:
+        qr.question_id = None
+    await publier_questions()
+    if qr.actif:
+        await publier_qr()
+    return {"ok": True}
+
+
+# --- Séquence questions-réponses ---------------------------------------------------------
+
+
+async def deplacer_deck(h: int, v: int, f: int) -> None:
+    """Comme un message `slide` du remote, mais émis par le serveur : tous les rôles le reçoivent (la miniature de la télécommande suit)."""
+    etat_deck.appliquer(h, v, f)
+    journal_bd.ajouter(biblio.active(), "diapositive", h, v, f)
+    await deck_ws.diffuser({"type": "slide", "h": h, "v": v, "f": f, "source": "qr"})
+
+
+async def passer_a_la_question(q: dict) -> None:
+    courante = questions_bd.en_cours()
+    if courante and courante["id"] != q["id"]:
+        questions_bd.changer_etat(courante["id"], "repondue")
+    questions_bd.changer_etat(q["id"], "en_cours")
+    qr.question_id = q["id"]
+    await deplacer_deck(int(q["h"]), int(q["v"]), -1)
+    await publier_qr()
+    await publier_questions()
+
+
+def etat_qr() -> dict:
+    return {**qr.etat(), "question": message_qr()["question"], "restantes": questions_bd.en_attente()}
+
+
+class CibleQuestion(BaseModel):
+    id: int
+
+
+class RetourListe(BaseModel):
+    repondue: bool = True
+
+
+@app.get("/api/qr")
+async def qr_lire() -> dict:
+    return etat_qr()
+
+
+@app.post("/api/qr/ouvrir", dependencies=[Depends(verifier_jeton)])
+async def qr_ouvrir() -> dict:
+    if not qr.actif:
+        qr.ouvrir(etat_deck.indices)
+        journal_bd.ajouter(biblio.active(), "qr_ouvrir", **qr.retour)
+    await publier_qr()
+    return etat_qr()
+
+
+@app.post("/api/qr/question", dependencies=[Depends(verifier_jeton)])
+async def qr_question(cible: CibleQuestion) -> dict:
+    if not qr.actif:
+        raise HTTPException(status_code=409, detail="séquence questions-réponses non ouverte")
+    q = questions_bd.lire(cible.id)
+    if q is None:
+        raise HTTPException(status_code=404, detail="question inconnue")
+    await passer_a_la_question(q)
+    return etat_qr()
+
+
+@app.post("/api/qr/suivante", dependencies=[Depends(verifier_jeton)])
+async def qr_suivante() -> dict:
+    if not qr.actif:
+        raise HTTPException(status_code=409, detail="séquence questions-réponses non ouverte")
+    courante = questions_bd.en_cours()
+    if courante:
+        questions_bd.changer_etat(courante["id"], "repondue")
+    qr.question_id = None
+    suivante = questions_bd.premiere_en_attente()
+    if suivante is None:
+        await publier_qr()
+        await publier_questions()
+        return {"fin": True, **etat_qr()}
+    await passer_a_la_question(suivante)
+    return {"fin": False, **etat_qr()}
+
+
+@app.post("/api/qr/liste", dependencies=[Depends(verifier_jeton)])
+async def qr_liste(corps: RetourListe | None = None) -> dict:
+    courante = questions_bd.en_cours()
+    if courante:
+        questions_bd.changer_etat(courante["id"], "repondue" if corps is None or corps.repondue else "en_attente")
+    qr.question_id = None
+    await publier_qr()
+    await publier_questions()
+    return etat_qr()
+
+
+@app.post("/api/qr/fermer", dependencies=[Depends(verifier_jeton)])
+async def qr_fermer() -> dict:
+    if not qr.actif:
+        return etat_qr()
+    courante = questions_bd.en_cours()
+    if courante:
+        questions_bd.changer_etat(courante["id"], "repondue")
+    retour = qr.fermer()
+    await deplacer_deck(retour["h"], retour["v"], retour["f"])
+    journal_bd.ajouter(biblio.active(), "qr_fermer", **retour)
+    await publier_qr()
+    await publier_questions()
+    return etat_qr()
 
 
 @app.websocket("/ws/quiz")
@@ -886,7 +1126,7 @@ async def ws_quiz(ws: WebSocket) -> None:
     """Pousse l'état du quiz aux participants, aux pages de résultats et à la télécommande."""
     await quiz_ws.ajouter(ws, "quiz")
     try:
-        await ws.send_json({"type": "quiz", **quiz.etat()})
+        await ws.send_json({"type": "quiz", **quiz.etat()})  # l'état des questions / de la séquence Q/R est relu par HTTP à la connexion (GET /api/qr)
         while True:
             message = await ws.receive_json()
             if message.get("type") == "ping":
