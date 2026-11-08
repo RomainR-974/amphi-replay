@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Classement</title>
 <style>
-  /* Podium + top N, lisible depuis le fond de l'amphi, aucune action possible. Mis à jour à chaque révélation. */
-  :root { --or: #f59e0b; --argent: #9ca3af; --bronze: #b45309; }
+  /* Deux modes, lisibles depuis le fond de l'amphi, aucune action possible :
+     - direct (défaut) : podium + top N, mis à jour à chaque révélation ;
+     - cérémonie (?ceremonie=1 | auto) : titre seul, puis déroulé animé déclenché par postMessage({type:"ceremonie"}). */
+  :root { --or: #f59e0b; --argent: #9ca3af; --bronze: #b45309; --sur-marche: #1f2937; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: transparent; color: var(--texte, inherit); font-family: system-ui, sans-serif; }
   body { display: flex; flex-direction: column; padding: 2vh 3vw; gap: 2vh; overflow: hidden; }
@@ -15,7 +17,7 @@
   .marche { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; height: 100%; }
   .marche .nom { font-size: 34px; font-weight: 700; text-align: center; overflow-wrap: anywhere; }
   .marche .pts { font-size: 28px; opacity: .75; font-variant-numeric: tabular-nums; }
-  .marche .bloc { width: 100%; border-radius: 16px 16px 0 0; display: flex; align-items: flex-start; justify-content: center; font-size: 56px; padding-top: 10px; transform-origin: bottom; animation: monte .8s cubic-bezier(.2,.8,.2,1) both; }
+  .marche .bloc { width: 100%; border-radius: 16px 16px 0 0; display: flex; align-items: flex-start; justify-content: center; font-size: 56px; padding-top: 10px; transform-origin: bottom; animation: monte .8s cubic-bezier(.2,.8,.2,1) both; color: var(--sur-marche); }
   @keyframes monte { from { transform: scaleY(0); } to { transform: scaleY(1); } }
   .m1 .bloc { height: 60%; background: var(--or); animation-delay: .4s; }
   .m2 .bloc { height: 42%; background: var(--argent); animation-delay: .2s; }
@@ -30,20 +32,77 @@
   .attente { font-size: 40px; opacity: .6; text-align: center; margin: auto; }
   html.sans-titre h1 { display: none; }
   html.sans-titre body { justify-content: flex-start; padding-top: 1vh; }
+
+  /* ---- Cérémonie ---- */
+  html.ceremonie body { gap: 1vh; }
+  #ceremonie { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 1vh; }
+  #ceremonie[hidden] { display: none; }
+  /* Défilé : nouvelle ligne en haut, les précédentes poussées vers le bas (marge négative animée). */
+  .defile { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; flex: 1; min-height: 0; overflow: hidden; transition: opacity .5s; }
+  .defile li { --h: 56px; height: var(--h); flex: none; margin: 0 0 6px; font-size: 32px; padding: 0 18px; animation: entre var(--d, .3s) cubic-bezier(.2,.8,.2,1) both; }
+  .defile li.doux { animation-name: entre-doux; }
+  @keyframes entre { from { opacity: 0; margin-bottom: calc(-1 * var(--h)); transform: translateY(-12px); } to { opacity: 1; margin-bottom: 6px; transform: none; } }
+  @keyframes entre-doux { 0% { opacity: 0; margin-bottom: calc(-1 * var(--h)); } 40% { opacity: 0; margin-bottom: 6px; } 100% { opacity: 1; margin-bottom: 6px; } }
+  .defile li .rang { width: 2.2em; opacity: .55; }
+  .efface { opacity: 0 !important; }
+  .vibre { animation: vibre .12s linear infinite; }
+  @keyframes vibre { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-3px, 1px) rotate(-.25deg); } 50% { transform: translate(2px, -2px); } 75% { transform: translate(3px, 1px) rotate(.25deg); } }
+  /* Podium de la cérémonie : marches qui montent une à une, noms en fondu. */
+  .podium.cer { height: 66vh; flex: none; transition: height .8s cubic-bezier(.2,.8,.2,1); animation: apparait .5s both; }
+  .podium.cer.reduit { height: 34vh; }
+  .podium.cer .marche { transform-origin: bottom center; }
+  .podium.cer .bloc { animation: none; transform: scaleY(0); }
+  .podium.cer .bloc.monte { animation: monte .8s cubic-bezier(.2,.8,.2,1) both; }
+  .podium.cer .bloc .num { font-size: .5em; font-weight: 800; margin-left: .2em; opacity: .75; }
+  .podium.cer .etiquette { display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; position: relative; transition: opacity 1s ease; }
+  .podium.cer .etiquette.visible { opacity: 1; }
+  .podium.cer.reduit .marche .nom { font-size: 28px; } .podium.cer.reduit .marche .pts { font-size: 22px; } .podium.cer.reduit .bloc { font-size: 40px; }
+  .wobble { animation: wobble .9s ease-in-out infinite; }
+  @keyframes wobble { 0%, 100% { transform: rotate(0) translateY(0); } 25% { transform: rotate(-1.6deg) translateY(-4px); } 75% { transform: rotate(1.6deg) translateY(-2px); } }
+  .couronne { font-size: 56px; line-height: 1; display: block; animation: rebond .9s cubic-bezier(.3,1.6,.5,1) both; }
+  .couronne.flotte { animation: rebond .9s cubic-bezier(.3,1.6,.5,1) both, flotte 1.6s .9s ease-in-out infinite alternate; }
+  @keyframes rebond { from { opacity: 0; transform: translateY(-50px) scale(.4); } to { opacity: 1; transform: none; } }
+  @keyframes flotte { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+  @keyframes apparait { from { opacity: 0; } to { opacity: 1; } }
+  /* Tableau final : colonnes de 10 lignes, 26 px minimum. */
+  .tableau { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; display: grid; grid-auto-flow: column; grid-template-rows: repeat(10, minmax(0, 1fr)); grid-auto-columns: minmax(0, 1fr); gap: 4px 1.5vw; animation: apparait 1s both; }
+  .tableau li { font-size: 26px; padding: 0 12px; border-radius: 8px; gap: .5em; min-height: 0; animation: none; }
+  .tableau li .rang { width: 1.8em; }
+  .tableau.large li { font-size: 30px; }
+  .tableau li.p1 { background: color-mix(in srgb, var(--or) 30%, transparent); }
+  .tableau li.p2 { background: color-mix(in srgb, var(--argent) 30%, transparent); }
+  .tableau li.p3 { background: color-mix(in srgb, var(--bronze) 30%, transparent); }
+  #confettis { position: fixed; inset: 0; pointer-events: none; transition: opacity .6s; }
+  @media (prefers-reduced-motion: reduce) {
+    .vibre, .wobble, .couronne.flotte { animation: none; }
+    .couronne { animation: apparait .2s both; }
+    .defile li, .defile li.doux { animation-duration: .2s; }
+    .podium.cer .etiquette { transition-duration: .2s; }
+    .podium.cer .bloc.monte { animation-duration: .25s; }
+    .podium.cer, .tableau { animation-duration: .2s; }
+    .defile, .podium.cer { transition-duration: .2s; }
+  }
 </style>
 </head>
 <body>
 <h1 id="titre">Classement</h1>
 <div id="vue"><p class="attente">Pas encore de points…</p></div>
+<div id="ceremonie" data-ceremonie hidden></div>
 <script>
 (() => {
   // ?couleur=ffffff : couleur du texte imposée par la diapositive hôte (fond sombre).
-  if (new URLSearchParams(location.search).get('sans_titre')) document.documentElement.classList.add('sans-titre');
-  { const c = new URLSearchParams(location.search).get('couleur'); if (c && /^[0-9a-fA-F]{3,8}$/.test(c)) document.documentElement.style.setProperty('--texte', '#' + c); else if (c) document.documentElement.style.setProperty('--texte', c); }
+  const params = new URLSearchParams(location.search);
+  if (params.get('sans_titre')) document.documentElement.classList.add('sans-titre');
+  { const c = params.get('couleur'); if (c && /^[0-9a-fA-F]{3,8}$/.test(c)) document.documentElement.style.setProperty('--texte', '#' + c); else if (c) document.documentElement.style.setProperty('--texte', c); }
   const vue = document.getElementById('vue');
-  const nombre = Math.max(3, Math.min(100, Number(new URLSearchParams(location.search).get('nombre')) || 10));
-  let precedent = '';
+  const nombre = Math.max(3, Math.min(100, Number(params.get('nombre')) || 10));
+  const modeCeremonie = params.get('ceremonie'); // null | "1" | "auto"
+  function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+  // ======================================================================
+  // Mode direct : podium + top N, mis à jour à chaque révélation.
+  // ======================================================================
+  let precedent = '';
   function rendre(liste) {
     const cle = JSON.stringify(liste);
     if (cle === precedent) return;
@@ -59,7 +118,6 @@
     if (reste.length) html += `<ol>${reste.map((p, i) => `<li style="animation-delay:${.8 + i * .06}s"><span class="rang">${p.rang}.</span><span class="nom">${echap(p.pseudo)}</span><span class="pts">${p.points}</span></li>`).join('')}</ol>`;
     vue.innerHTML = html;
   }
-
   async function recharger() {
     const r = await fetch('/api/quiz/classement?nombre=' + nombre, { cache: 'no-store' });
     rendre(await r.json());
@@ -75,8 +133,143 @@
     };
     ws.onerror = () => ws.close();
   }
-  function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-  connecter();
+
+  // ======================================================================
+  // Mode cérémonie (docs/seance.md, partie D).
+  // ======================================================================
+  const zone = document.getElementById('ceremonie');
+  const titre = document.getElementById('titre');
+  const reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let generation = 0; // un nouveau message rejoue depuis le début : les étapes de la cérémonie précédente s'arrêtent
+  const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+  async function ceremonie() {
+    const g = ++generation;
+    const vivant = () => g === generation;
+    const attendre = async ms => { await dormir(ms); return vivant(); };
+    document.querySelectorAll('.vibre, .wobble').forEach(e => e.classList.remove('vibre', 'wobble'));
+    document.getElementById('confettis')?.remove();
+    zone.hidden = false;
+    zone.innerHTML = '';
+    let liste = [];
+    try { liste = await (await fetch('/api/quiz/classement?nombre=1000', { cache: 'no-store' })).json(); } catch (e) { console.warn('classement indisponible', e); }
+    if (!vivant()) return;
+    if (!liste.length) { zone.innerHTML = '<p class="attente">Pas encore de points</p>'; return; }
+    const n = liste.length;
+
+    // 1 & 2. Défilé du dernier au 4e : 0,3 s jusqu'au 16e, puis durée interpolée de 0,3 s à 1 s (ease-out) du 15e au 4e.
+    if (n > 3) {
+      const defile = document.createElement('ul');
+      defile.className = 'defile';
+      zone.append(defile);
+      const premierLent = Math.min(15, n); // premier rang ralenti (15e, ou le dernier s'il y a moins de 15 participants)
+      for (let rang = n; rang >= 4; rang--) {
+        let d = .3, doux = false;
+        if (rang <= 15) {
+          const x = premierLent > 4 ? (premierLent - rang) / (premierLent - 4) : 1; // 0 au premier rang ralenti, 1 au 4e
+          const easeOut = 1 - (1 - x) * (1 - x);
+          d = .3 + .7 * easeOut;
+          doux = true;
+        }
+        const p = liste[rang - 1];
+        const li = document.createElement('li');
+        li.className = doux ? 'doux' : '';
+        li.style.setProperty('--d', (doux ? Math.min(d, .9) : .3) + 's');
+        li.innerHTML = `<span class="rang">${p.rang}.</span><span class="nom">${echap(p.pseudo)}</span><span class="pts">${p.points}</span>`;
+        defile.prepend(li);
+        if (!await attendre(d * 1000)) return;
+      }
+      // 3. Suspense : 2 s de vibration de la liste et du titre.
+      if (!reduit) { defile.classList.add('vibre'); titre.classList.add('vibre'); }
+      if (!await attendre(2000)) return;
+      defile.classList.remove('vibre'); titre.classList.remove('vibre');
+      defile.classList.add('efface');
+      if (!await attendre(reduit ? 200 : 500)) return;
+      defile.remove();
+    }
+
+    // 4. Podium : trois marches vides, puis 3e et 2e révélés (marche qui monte, nom et points en fondu 1 s).
+    const podium = document.createElement('div');
+    podium.className = 'podium cer';
+    const marches = {};
+    [[1, 'm1', '🥇'], [2, 'm2', '🥈'], [3, 'm3', '🥉']].forEach(([r, cls, med]) => {
+      const m = document.createElement('div');
+      m.className = 'marche ' + cls;
+      m.innerHTML = `<div class="etiquette"><div class="nom"></div><div class="pts"></div></div><div class="bloc">${med}<span class="num">${r}</span></div>`;
+      marches[r] = m;
+      podium.append(m);
+    });
+    zone.append(podium);
+    const reveler = async rang => {
+      const p = liste[rang - 1], m = marches[rang];
+      if (!p) return true;
+      m.querySelector('.bloc').classList.add('monte');
+      if (!await attendre(reduit ? 250 : 800)) return false;
+      const et = m.querySelector('.etiquette');
+      if (rang === 1) et.insertAdjacentHTML('afterbegin', `<span class="couronne${reduit ? '' : ' flotte'}" aria-hidden="true">👑</span>`);
+      et.querySelector('.nom').textContent = p.pseudo;
+      et.querySelector('.pts').textContent = p.points + ' pts';
+      et.classList.add('visible');
+      return attendre(reduit ? 250 : 1000);
+    };
+    if (!await attendre(reduit ? 200 : 500)) return;
+    if (!await reveler(3)) return;
+    if (!await reveler(2)) return;
+    // 5. Avant le 1er : 2 s de wobbling des marches révélées, puis le 1er avec couronne et confettis.
+    if (n >= 2) {
+      if (!reduit) [2, 3].forEach(r => { if (liste[r - 1]) marches[r].classList.add('wobble'); });
+      if (!await attendre(2000)) return;
+      [2, 3].forEach(r => marches[r].classList.remove('wobble'));
+    }
+    if (!reduit) confettis(2000);
+    if (!await reveler(1)) return;
+    if (!await attendre(reduit ? 300 : 1200)) return;
+
+    // 6. Tableau final sous le podium réduit : toutes les lignes, colonnes de 10.
+    podium.classList.add('reduit');
+    const tableau = document.createElement('ol');
+    tableau.className = 'tableau' + (n <= 20 ? ' large' : '');
+    tableau.style.gridTemplateRows = `repeat(${Math.min(10, n)}, minmax(0, 1fr))`;
+    tableau.innerHTML = liste.map(p => `<li class="${p.rang <= 3 ? 'p' + p.rang : ''}"><span class="rang">${p.rang}.</span><span class="nom">${echap(p.pseudo)}</span><span class="pts">${p.points}</span></li>`).join('');
+    zone.append(tableau);
+    zone.dataset.etat = 'fin';
+  }
+
+  /** Pluie de confettis sur un Canvas plein écran pendant `duree` ms, puis fondu et retrait. */
+  function confettis(duree) {
+    document.getElementById('confettis')?.remove();
+    const c = document.createElement('canvas');
+    c.id = 'confettis';
+    c.width = innerWidth; c.height = innerHeight;
+    document.body.append(c);
+    const ctx = c.getContext('2d');
+    const couleurs = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#ec4899', '#facc15', '#ffffff'];
+    const grains = Array.from({ length: 160 }, () => ({
+      x: Math.random() * c.width, y: -20 - Math.random() * c.height * .5, vx: (Math.random() - .5) * 2.5, vy: 2 + Math.random() * 4,
+      l: 8 + Math.random() * 8, h: 5 + Math.random() * 5, a: Math.random() * Math.PI, va: (Math.random() - .5) * .25, coul: couleurs[Math.floor(Math.random() * couleurs.length)],
+    }));
+    const debut = performance.now();
+    let fini = false;
+    (function image(t) {
+      if (fini) return;
+      ctx.clearRect(0, 0, c.width, c.height);
+      grains.forEach(g => {
+        g.x += g.vx; g.y += g.vy; g.a += g.va; g.vy += .06;
+        ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(g.a); ctx.fillStyle = g.coul; ctx.fillRect(-g.l / 2, -g.h / 2, g.l, g.h); ctx.restore();
+      });
+      if (t - debut > duree) { c.style.opacity = '0'; setTimeout(() => { fini = true; c.remove(); }, 650); }
+      requestAnimationFrame(image);
+    })(debut);
+  }
+
+  if (modeCeremonie) {
+    document.documentElement.classList.add('ceremonie');
+    vue.remove(); // titre seul, aucun score avant le déclenchement
+    window.addEventListener('message', e => { if (e.data && e.data.type === 'ceremonie') ceremonie().catch(err => console.error(err)); });
+    if (modeCeremonie === 'auto') setTimeout(() => ceremonie().catch(err => console.error(err)), 1000);
+  } else {
+    connecter();
+  }
 })();
 </script>
 </body>

@@ -42,6 +42,7 @@
   nav { display: grid; grid-template-columns: 1fr .72fr 1.6fr; gap: 10px; padding: 12px; }
   nav button { min-height: 88px; font-size: 24px; font-weight: 700; border: 0; border-radius: 14px; color: #fff; background: #2a2a2a; }
   nav .suivant { background: var(--bleu); }
+  nav .suivant.quitter { background: var(--rouge); }
   nav .qr-bouton { position: relative; font-size: 20px; background: #3a2d05; color: var(--orange); }
   nav .qr-bouton small { display: block; font-size: 12px; font-weight: 500; color: #c9a23a; margin-top: 2px; }
   nav .qr-bouton .nb { position: absolute; top: 8px; right: 8px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: var(--orange); color: #111; font-size: 14px; font-weight: 800; display: none; align-items: center; justify-content: center; }
@@ -94,6 +95,14 @@
   .vue-q .actions-q button { min-height: 76px; border: 0; border-radius: 14px; font-size: 20px; font-weight: 700; color: #fff; background: #2a2a2a; }
   .vue-q .actions-q .suivante { background: var(--bleu); }
 
+  /* Fin de séance (docs/seance.md, C) : écran plein, chronomètre figé */
+  .fin { display: none; position: fixed; inset: 0; z-index: 40; background: var(--fond); flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+  .fin.visible { display: flex; }
+  .fin h2 { margin: 0; font-size: 30px; font-weight: 800; }
+  .fin p { margin: 0; color: var(--sourd); font-size: 16px; line-height: 1.45; max-width: 420px; }
+  .fin .duree { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .fin button { min-height: 64px; padding: 0 28px; border: 0; border-radius: 14px; background: var(--bleu); color: #fff; font-size: 20px; font-weight: 700; }
+
   .barre-erreur { display: none; position: fixed; top: 0; left: 0; right: 0; background: var(--rouge); color: #fff; text-align: center; padding: 6px; font-size: 14px; }
   .barre-erreur.visible { display: block; }
 </style>
@@ -133,6 +142,13 @@
   <button class="qr-bouton" id="b-qr" title="Questions-réponses">Q/R<small>questions</small><span class="nb" id="b-qr-nb"></span></button>
   <button class="suivant" id="suiv">Suivant ▶</button>
 </nav>
+
+<div class="fin" id="fin" role="dialog" aria-label="Séance terminée">
+  <h2>Séance terminée</h2>
+  <div class="duree" id="fin-duree">00:00</div>
+  <p>Les participants voient leur rang et le contact. L'enregistrement OBS a reçu l'ordre de s'arrêter.</p>
+  <button id="fin-retour">Revenir au début</button>
+</div>
 
 <div class="qr" id="qr" role="dialog" aria-label="Questions-réponses">
   <div class="qr-tete">
@@ -195,7 +211,18 @@
   });
 
   // --- Navigation : appliquée localement d'abord, la publication suit (AmphiSync dans l'iframe) ----
-  $('suiv').onclick = () => R && R.next();
+  // Sur la dernière diapositive (et son dernier fragment), Suivant devient Quitter (docs/seance.md, C).
+  let derniere = false;
+  function surDerniere() {
+    if (!R || !R.isLastSlide()) return false;
+    const frags = R.availableFragments ? R.availableFragments() : { next: false };
+    return frags.next === false;
+  }
+  $('suiv').onclick = () => {
+    if (!R) return;
+    if (derniere) { quitter(); return; }
+    R.next();
+  };
   $('prec').onclick = () => R && R.prev();
   let x0 = null;
   $('miniature').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
@@ -219,7 +246,30 @@
     $('quiz').classList.toggle('visible', !!questionCourante);
     if (questionCourante) { $('quiz-id').textContent = `quiz ${questionCourante}`; rendreQuiz(); }
     if (!chronoDebut && (i.h > 0 || i.f >= 0)) demarrerChrono();
+    derniere = surDerniere();
+    $('suiv').textContent = derniere ? 'Quitter' : 'Suivant ▶';
+    $('suiv').classList.toggle('quitter', derniere);
   }
+
+  // --- Fin de séance : POST /api/seance/terminer, écran « Séance terminée », chronomètre figé ----
+  let seanceTerminee = false;
+  async function quitter() {
+    if (!confirm('Terminer la séance ?')) return;
+    const r = await api('/api/seance/terminer');
+    if (r) afficherFin(true);
+  }
+  function afficherFin(terminee) {
+    seanceTerminee = !!terminee;
+    $('fin').classList.toggle('visible', seanceTerminee);
+    if (seanceTerminee) $('fin-duree').textContent = $('chrono').textContent;
+  }
+  $('fin-retour').onclick = async () => {
+    if (R) R.slide(0, 0, -1);
+    const r = await api('/api/seance/reprendre');
+    if (r) afficherFin(false);
+  };
+  // Télécommande rechargée après Quitter : l'écran de fin est réaffiché.
+  fetch('/api/seance', { cache: 'no-store' }).then(r => r.json()).then(m => { if (m.terminee) afficherFin(true); }).catch(() => {});
 
   // --- Quiz : administration par HTTP avec jeton, état par WebSocket ----
   const api = (chemin, corps) => fetch(`${chemin}?token=${encodeURIComponent(token)}`, {
@@ -390,6 +440,7 @@
       if (m.type === 'quiz') { etatQuiz = m; rendreQuiz(); }
       else if (m.type === 'questions') chargerQuestions();
       else if (m.type === 'qr') { appliquerQR(m); chargerQuestions(); }
+      else if (m.type === 'fin') afficherFin(m.terminee !== false);
     };
     ws.onclose = () => { setTimeout(connecterQuiz, delaiQ); delaiQ = Math.min(delaiQ * 2, 10000); };
     ws.onerror = () => ws.close();
@@ -424,6 +475,7 @@
   function demarrerChrono() {
     chronoDebut = Date.now();
     setInterval(() => {
+      if (seanceTerminee) return; // chronomètre figé pendant l'écran de fin
       const s = Math.floor((Date.now() - chronoDebut) / 1000);
       $('chrono').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     }, 1000);

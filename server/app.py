@@ -26,8 +26,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
-from .journal import Journal, titres_presentation
-from .presentations import Bibliotheque, valider_slug
+from .journal import ACTIONS_OBS, Journal, marqueurs_obs, titres_presentation
+from .presentations import Bibliotheque, normaliser_contact, valider_slug
 from .questions import Questions, SequenceQR, question_publique
 from .quiz import Quiz, charger_questions, questions_depuis_liste
 from .replays import Captations, Replays, Taches, assembler_replay, outils_presents
@@ -92,9 +92,23 @@ class EtatDeck:
         return {**self.indices, "horodatage": self.horodatage, "acks": {role: round(maintenant - t, 1) for role, t in self.acks.items()}}
 
 
+class EtatSeance:
+    """Fin de séance et marqueurs OBS de la présentation active (docs/seance.md, A et C)."""
+
+    def __init__(self) -> None:
+        self.terminee = False
+        self.marqueurs: dict[int, str] = {}  # index h → "demarrer" | "arreter"
+        self.dernier_h: int | None = None  # dernière diapositive (h) signalée : un fragment n'est pas une nouvelle arrivée
+
+    def reinitialiser(self) -> None:
+        self.terminee = False
+        self.dernier_h = None
+
+
 deck_ws = Diffuseur()
 quiz_ws = Diffuseur()
 etat_deck = EtatDeck()
+seance = EtatSeance()
 biblio = Bibliotheque(config.DOSSIER_PRESENTATIONS, config.FICHIER_ACTIVE, config.PRESENTATION_DEFAUT)
 quiz: Quiz
 journal_bd: Journal  # journal de séance (table `journal` de la même base SQLite ; voir docs/postprod.md)
@@ -127,6 +141,7 @@ async def cycle_de_vie(app: FastAPI):
     if active:
         biblio.activer(active)  # fige le choix par défaut dans active.json : créer une présentation ne change pas l'active
         biblio.dossier_medias(active).mkdir(exist_ok=True)
+        recharger_marqueurs_obs()
         journal.info("présentation active : %s ; %d question(s) de quiz chargée(s) depuis %s", active, len(quiz.questions), fichier_quiz)
     else:
         journal.warning("aucune présentation dans %s", config.DOSSIER_PRESENTATIONS)
@@ -239,7 +254,25 @@ async def sante() -> dict:
         "questions_participants": questions_bd.en_attente(),
         "qr": qr.actif,
         "presentation": biblio.active(),
+        "terminee": seance.terminee,
     }
+
+
+def recharger_marqueurs_obs() -> None:
+    """Relit les marqueurs `data-obs` de la présentation active (à l'activation et à chaque enregistrement de slides.html)."""
+    actif = biblio.active()
+    fichier = biblio.fichier_slides(actif) if actif else None
+    seance.marqueurs = marqueurs_obs(fichier.read_text(encoding="utf-8")) if fichier and fichier.is_file() else {}
+
+
+async def signaler_obs(h: int) -> None:
+    """À l'arrivée sur une diapositive marquée `data-obs`, diffuse `{"type":"obs","action":…,"h":h}` sur /ws/quiz (pont OBS) ; une fois par arrivée."""
+    if h == seance.dernier_h:
+        return
+    seance.dernier_h = h
+    marqueur = seance.marqueurs.get(h)
+    if marqueur:
+        await quiz_ws.diffuser({"type": "obs", "action": ACTIONS_OBS[marqueur], "h": h})
 
 
 @app.websocket("/ws/deck")
@@ -263,6 +296,7 @@ async def ws_deck(ws: WebSocket, role: str = Query(default="scene"), token: str 
                 etat_deck.appliquer(h, v, f)
                 journal_bd.ajouter(biblio.active(), "diapositive", h, v, f)
                 await deck_ws.diffuser({"type": "slide", "h": h, "v": v, "f": f}, sauf=ws)
+                await signaler_obs(h)
             elif role in ("scene", "obs") and genre == "ack":
                 etat_deck.acks[role] = time.time()
                 await deck_ws.diffuser(
@@ -307,6 +341,7 @@ async def deck_slides_ecrire(slides: Slides, prez: str | None = None) -> dict:
     fichier.write_text(slides.html, encoding="utf-8")
     biblio.toucher(slug)
     if slug == biblio.active():
+        recharger_marqueurs_obs()
         await deck_ws.diffuser({"type": "recharger"}, roles=("scene", "obs"))
     return {"ok": True, "taille": len(slides.html), "prez": slug}
 
@@ -484,7 +519,12 @@ async def presentations_activer(slug: str) -> dict:
     quiz.fermer()
     quiz.revelee = None
     journal_bd.ajouter(slug, "activation")
+    etait_terminee = seance.terminee
+    seance.reinitialiser()
+    recharger_marqueurs_obs()
     await publier_quiz()
+    if etait_terminee:
+        await quiz_ws.diffuser({"type": "fin", "terminee": False})
     # Tous les rôles rechargent le deck, télécommande comprise (sa miniature affiche la nouvelle présentation).
     await deck_ws.diffuser({"type": "recharger", "prez": slug})
     return biblio.resume(slug)
@@ -1061,6 +1101,7 @@ async def deplacer_deck(h: int, v: int, f: int) -> None:
     etat_deck.appliquer(h, v, f)
     journal_bd.ajouter(biblio.active(), "diapositive", h, v, f)
     await deck_ws.diffuser({"type": "slide", "h": h, "v": v, "f": f, "source": "qr"})
+    await signaler_obs(h)
 
 
 async def passer_a_la_question(q: dict) -> None:
@@ -1152,6 +1193,53 @@ async def qr_fermer() -> dict:
     await publier_qr()
     await publier_questions()
     return etat_qr()
+
+
+# ---------------------------------------------------------------------------------
+# Fin de séance (docs/seance.md, C)
+# ---------------------------------------------------------------------------------
+
+
+def etat_seance() -> dict:
+    actif = biblio.active()
+    return {"terminee": seance.terminee, "contact": biblio.lire(actif)["contact"] if actif else normaliser_contact(None), "presentation": actif}
+
+
+@app.get("/api/seance")
+async def seance_lire() -> dict:
+    return etat_seance()
+
+
+@app.post("/api/seance/terminer", dependencies=[Depends(verifier_jeton)])
+async def seance_terminer() -> dict:
+    """Bouton Quitter de la télécommande : ferme la question ouverte, termine la séquence Q/R, arrête OBS, journalise `fin`, prévient les participants."""
+    derniere = quiz.fermer()
+    if derniere:
+        journal_bd.ajouter(biblio.active(), "quiz_fermer", question=derniere)
+        await publier_quiz(derniere)
+    if qr.actif:
+        courante = questions_bd.en_cours()
+        if courante:
+            questions_bd.changer_etat(courante["id"], "repondue")
+        retour = qr.fermer()
+        journal_bd.ajouter(biblio.active(), "qr_fermer", **retour)
+        await publier_qr()
+        await publier_questions()
+    await quiz_ws.diffuser({"type": "obs", "action": "StopRecord", "h": int(etat_deck.indices.get("h", 0))})  # sécurité : l'enregistrement s'arrête avec la séance
+    seance.terminee = True
+    journal_bd.ajouter(biblio.active(), "fin", **etat_deck.indices)
+    etat = etat_seance()
+    await quiz_ws.diffuser({"type": "fin", "terminee": True, "contact": etat["contact"], "classement_total": len(quiz.classement(1000))})
+    return etat
+
+
+@app.post("/api/seance/reprendre", dependencies=[Depends(verifier_jeton)])
+async def seance_reprendre() -> dict:
+    """Bouton « Revenir au début » : la séance reprend, les participants reviennent à « En attente »."""
+    if seance.terminee:
+        seance.terminee = False
+        await quiz_ws.diffuser({"type": "fin", "terminee": False})
+    return etat_seance()
 
 
 @app.websocket("/ws/quiz")

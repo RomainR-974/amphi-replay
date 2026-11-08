@@ -2,7 +2,8 @@
 
 Table SQLite `journal` dans la base du quiz (`CHEMIN_BDD`) : une ligne par changement de diapositive
 (rôle `remote`), par ouverture / fermeture / révélation de question, par activation de présentation et par
-ouverture / fermeture de la séquence questions-réponses (`qr_ouvrir` / `qr_fermer`, où la post-production coupe).
+ouverture / fermeture de la séquence questions-réponses (`qr_ouvrir` / `qr_fermer`, où la post-production coupe)
+et par fin de séance (`fin`, bouton Quitter de la télécommande).
 La post-production s'en sert pour chapitrer le replay. `Quiz.purger()` ne touche pas à cette table.
 
 Les titres des diapositives sont extraits de `slides.html` par expressions régulières : premier
@@ -20,7 +21,7 @@ import threading
 import time
 from pathlib import Path
 
-TYPES = ("diapositive", "quiz_ouvrir", "quiz_fermer", "quiz_reveler", "activation", "qr_ouvrir", "qr_fermer")
+TYPES = ("diapositive", "quiz_ouvrir", "quiz_fermer", "quiz_reveler", "activation", "qr_ouvrir", "qr_fermer", "fin")
 ECART_SEANCE_S = 3 * 3600  # deux événements séparés de plus de 3 h appartiennent à deux séances
 LONGUEUR_TITRE = 80
 
@@ -28,6 +29,8 @@ BALISE_SECTION = re.compile(r"<(/?)section\b[^>]*>", re.I)
 BALISE = re.compile(r"<[^>]+>")
 ASIDE_NOTES = re.compile(r"<aside\b[^>]*class=\"[^\"]*\bnotes\b[^\"]*\"[^>]*>.*?</aside>", re.I | re.S)
 DATA_QUIZ = re.compile(r"data-quiz=\"([^\"]*)\"", re.I)
+DATA_OBS = re.compile(r"data-obs=\"([^\"]*)\"", re.I)
+ACTIONS_OBS = {"demarrer": "StartRecord", "arreter": "StopRecord"}
 TITRE_HN = re.compile(r"<h([123])\b[^>]*>(.*?)</h\1>", re.I | re.S)
 OUVRANTE_CLASSE = re.compile(r"<(\w+)\b[^>]*class=\"([^\"]*)\"[^>]*>", re.I)
 TAILLE_POLICE = re.compile(r"font-size:\s*(\d+(?:\.\d+)?)px", re.I)
@@ -221,6 +224,21 @@ def questions_diapositives(html: str) -> list[str | None]:
         quiz = DATA_QUIZ.search(ouvrante)
         identifiants.append(quiz.group(1).strip() or None if quiz else None)
     return identifiants
+
+
+def marqueurs_obs(html: str) -> dict[int, str]:
+    """Marqueurs d'enregistrement OBS : {index h de la section de premier niveau: "demarrer" | "arreter"} (docs/seance.md, A).
+
+    Même découpage que `titres_diapositives` ; l'attribut `data-obs` est lu sur la balise ouvrante de la section,
+    toute autre valeur est ignorée.
+    """
+    marqueurs: dict[int, str] = {}
+    for i, section in enumerate(_sections_premier_niveau(html)):
+        ouvrante = section[: section.find(">") + 1]
+        m = DATA_OBS.search(ouvrante)
+        if m and m.group(1).strip().lower() in ACTIONS_OBS:
+            marqueurs[i] = m.group(1).strip().lower()
+    return marqueurs
 
 
 def libelles_questions(fichier_quiz: Path) -> dict[str, str]:

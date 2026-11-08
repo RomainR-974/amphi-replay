@@ -16,6 +16,7 @@
 .reveal .slides section.libre > img.el { max-width: none; max-height: none; object-fit: contain; }
 .reveal .slides section.libre > .el.iframe, .reveal .slides section.libre > .el.video { border: 0; }
 .reveal .slides section.libre > .el iframe { width: 100%; height: 100%; border: 0; }
+.reveal .slides section.libre > .el.declencheur { pointer-events: none; background: transparent; } /* fragment invisible qui lance la cérémonie du classement */
 
 /* Rôle obs : aucune animation d'aucune sorte, les deux rendus doivent être simultanés. */
 html[data-role="obs"] .reveal .slides section,

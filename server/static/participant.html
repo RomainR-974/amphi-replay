@@ -83,6 +83,19 @@
   .bandeau-qr .texte { font-size: 1.1rem; line-height: 1.35; font-weight: 600; margin-top: 4px; }
   .bandeau-qr .mienne { display: inline-block; margin-top: 6px; padding: 2px 10px; border-radius: 10px; background: var(--ok); color: #fff; font-size: .8rem; font-weight: 700; }
   .bandeau-qr.attente .texte { font-weight: 400; opacity: .85; }
+  /* Fin de séance (docs/seance.md, C) : merci, rang et points, carte de contact */
+  .fin { display: flex; flex-direction: column; gap: 14px; text-align: center; }
+  .fin h1 { font-size: 1.6rem; margin: 0; }
+  .fin .rang { padding: 22px 18px; border-radius: 18px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .fin .rang .num { display: block; font-size: 2.6rem; font-weight: 800; color: var(--accent); line-height: 1.1; }
+  .fin .rang .pts { display: block; font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
+  .fin .rang small { display: block; opacity: .7; margin-top: 6px; font-size: .9rem; }
+  .fin .contact { text-align: left; padding: 18px; border-radius: 18px; background: var(--fond-carte); display: flex; flex-direction: column; gap: 6px; }
+  .fin .contact .nom { font-size: 1.25rem; font-weight: 800; }
+  .fin .contact .fonction { font-size: .95rem; opacity: .8; line-height: 1.35; }
+  .fin .contact .courriel { font-size: 1.05rem; user-select: all; -webkit-user-select: all; word-break: break-all; color: var(--accent); margin-top: 6px; }
+  .fin .linkedin { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; margin-top: 8px; border-radius: 14px; background: #0a66c2; color: #fff; font-weight: 700; font-size: 1.05rem; text-decoration: none; }
+  .fin .linkedin svg { width: 26px; height: 26px; fill: currentColor; }
 </style>
 </head>
 <body>
@@ -137,7 +150,9 @@
   async function definirPseudo(pseudo) {
     const r = await fetch('/api/quiz/pseudo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pseudo }) });
     const { pseudo: p } = await r.json();
+    monPseudo = p;
     $('pseudo').textContent = '👤 ' + p;
+    if (seanceTerminee) rendre();
     try { localStorage.setItem('amphi_pseudo', p); } catch {}
   }
   $('pseudo-ok').onclick = async () => { dlg.close(); await definirPseudo($('champ-pseudo').value); };
@@ -147,6 +162,7 @@
 
   // ----- Rendu -------------------------------------------------------------------------------
   function rendre() {
+    if (seanceTerminee) { rendreFin(); return; }
     if (!courant || !courant.question) { vue.innerHTML = '<p class="attente">En attente de la prochaine question…</p>'; return; }
     const q = courant.question;
     const repondu = maReponse !== null;
@@ -265,6 +281,41 @@
     } finally { enCours = false; }
   }
 
+  // ----- Fin de séance (docs/seance.md, C) --------------------------------------------------------
+  let seanceTerminee = false, contactFin = null, monPseudo = null;
+  const ICONE_LINKEDIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>';
+  function appliquerFin(m) {
+    seanceTerminee = m && m.terminee !== false;
+    if (m && m.contact) contactFin = m.contact;
+    rendre();
+  }
+  async function rechargerSeance() {
+    try { const r = await fetch('/api/seance', { cache: 'no-store' }); if (r.ok) appliquerFin(await r.json()); } catch {}
+  }
+  async function rendreFin() {
+    const pseudo = monPseudo || ($('pseudo').textContent || '').replace(/^👤\s*/, '').trim();
+    let moi = null, pointsOk = true;
+    try {
+      const liste = await (await fetch('/api/quiz/classement?nombre=1000', { cache: 'no-store' })).json();
+      moi = Array.isArray(liste) ? liste.find(l => l.pseudo === pseudo) || null : null;
+    } catch { pointsOk = false; }
+    if (!seanceTerminee) return; // la séance a repris pendant la lecture
+    const c = contactFin || {};
+    let html = '<div class="fin"><h1>Merci pour votre participation</h1>';
+    if (moi) html += `<div class="rang"><span class="num">${moi.rang}<sup>${moi.rang === 1 ? 'er' : 'e'}</sup></span><span class="pts">${moi.points} point${moi.points > 1 ? 's' : ''}</span><small>${echap(pseudo)}</small></div>`;
+    else html += `<div class="rang"><span class="pts">${pointsOk ? 'Vous n\'avez pas marqué de points' : 'Classement indisponible'}</span><small>${echap(pseudo)}</small></div>`;
+    if (c.nom || c.courriel || c.linkedin) {
+      html += '<div class="contact">';
+      if (c.nom) html += `<div class="nom">${echap(c.nom)}</div>`;
+      if (c.fonction) html += `<div class="fonction">${echap(c.fonction)}</div>`;
+      if (c.courriel) html += `<div class="courriel" title="Appui long pour copier">${echap(c.courriel)}</div>`;
+      if (c.linkedin && /^https:\/\/(www\.)?linkedin\.com\//.test(c.linkedin)) html += `<a class="linkedin" href="${echap(c.linkedin)}" target="_blank" rel="noopener">${ICONE_LINKEDIN} Me suivre sur LinkedIn</a>`;
+      html += '</div>';
+    }
+    html += '</div>';
+    vue.innerHTML = html;
+  }
+
   // ----- Chrono -----------------------------------------------------------------------------
   function majChrono() {
     const barre = $('barre'), txt = $('chrono-txt');
@@ -291,7 +342,7 @@
   async function recharger() {
     const r = await fetch('/api/quiz/etat', { cache: 'no-store' });
     const etat = await r.json();
-    if (etat.pseudo) $('pseudo').textContent = '👤 ' + etat.pseudo;
+    if (etat.pseudo) { monPseudo = etat.pseudo; $('pseudo').textContent = '👤 ' + etat.pseudo; }
     appliquer(etat, true);
   }
 
@@ -370,8 +421,8 @@
   let delai = 1000, ws = null, interrogation = null;
   function connecter() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/quiz');
-    ws.onopen = () => { delai = 1000; etatEl.textContent = ''; clearInterval(interrogation); interrogation = null; recharger(); rechargerQR(); };
-    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') appliquer(m, false); else if (m.type === 'qr') appliquerQR(m); else if (m.type === 'questions') { etatQR.restantes = m.en_attente; if (etatQR.actif) rendreBandeauQR(); } };
+    ws.onopen = () => { delai = 1000; etatEl.textContent = ''; clearInterval(interrogation); interrogation = null; recharger(); rechargerQR(); rechargerSeance(); };
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'quiz') appliquer(m, false); else if (m.type === 'qr') appliquerQR(m); else if (m.type === 'fin') appliquerFin(m); else if (m.type === 'questions') { etatQR.restantes = m.en_attente; if (etatQR.actif) rendreBandeauQR(); } };
     ws.onclose = () => {
       etatEl.textContent = 'Connexion perdue, nouvelle tentative…';
       if (!interrogation) interrogation = setInterval(() => recharger().catch(() => {}), 3000);
@@ -386,7 +437,7 @@
   (async () => {
     const r = await fetch('/api/quiz/etat', { cache: 'no-store' });
     const etat = await r.json();
-    if (etat.pseudo) $('pseudo').textContent = '👤 ' + etat.pseudo;
+    if (etat.pseudo) { monPseudo = etat.pseudo; $('pseudo').textContent = '👤 ' + etat.pseudo; }
     else { let memo = ''; try { memo = localStorage.getItem('amphi_pseudo') || ''; } catch {} $('champ-pseudo').value = memo; dlg.showModal(); }
     connecter();
   })();

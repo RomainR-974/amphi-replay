@@ -17,7 +17,7 @@
 
 ## Séquence de démarrage
 
-1. OBS : **F9** (enregistrement) — vérifier le compteur rouge.
+1. OBS : l'enregistrement démarre tout seul à la diapositive « Qui suis-je » (v2) / « Pour commencer » (v1) si le pont `obs_quiz_bridge.py` tourne ; **F9** reste le secours — vérifier le compteur rouge dans les deux cas.
 2. Téléphone : démarrer l'**enregistreur audio**.
 3. **Clap n°1** devant le DSLR, bien audible.
 4. Annonce orale du droit à l'image (plan amphi large, replay interne).
@@ -33,10 +33,11 @@
 
 ## Séquence de fin
 
-1. Dernière diapositive de l'exposé.
-2. **Clap n°2** devant le DSLR, puis **arrêt d'OBS (F9)** — AVANT d'appuyer sur « Q/R » (ou laisser le pont `obs_quiz_bridge.py` arrêter OBS : il le fait 2 s après « Commencer »).
+1. Dernière diapositive de l'exposé (l'enregistrement s'arrête tout seul à « À retenir » si le pont tourne ; sinon F9).
+2. **Clap n°2** devant le DSLR, puis **arrêt d'OBS (F9)** si ce n'est pas déjà fait — AVANT d'appuyer sur « Q/R » (ou laisser le pont `obs_quiz_bridge.py` arrêter OBS : il le fait 2 s après « Commencer »).
 3. Télécommande : bouton **Q/R** → **Commencer** → taper une question (le deck saute à sa diapositive, la question s'affiche à l'écran) → **→ Suivante** … → **Terminer** (retour à la diapositive de départ). Les questions arrivent du bouton « ? » de la page participant ; la séquence Q/R n'est **pas** dans le replay (la post-production coupe la vidéo à l'ouverture des Q/R).
-4. Arrêter l'enregistreur du téléphone, puis le DSLR.
+4. Sur la toute dernière diapositive, le bouton Suivant devient **Quitter** : les participants voient leur rang, le contact et le lien LinkedIn ; « Revenir au début » pour reprendre.
+5. Arrêter l'enregistreur du téléphone, puis le DSLR.
 
 ## Post-production (PC 2, < 10 min)
 

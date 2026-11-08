@@ -20,8 +20,9 @@ from pathlib import Path
 SECTION = re.compile(r"<section\b[^>]*>.*?</section>", re.S)
 CLASSEMENT = """<section class="libre" data-id="{id}" data-background-color="#2e3e7a">
   <div class="el texte" data-id="e1" style="left:120px;top:50px;width:1680px;height:110px;font-size:64px;font-weight:800;color:#ffffff;text-align:center">Classement</div>
-  <div class="el classement" data-amphi="classement" data-sans-titre="1" data-nombre="10" data-id="e2" style="left:120px;top:180px;width:1680px;height:860px;color:#ffffff"></div>
-  <aside class="notes">Podium animé : mis à jour à chaque « Révéler ».</aside>
+  <div class="el classement" data-amphi="classement" data-sans-titre="1" data-nombre="10" data-ceremonie="1" data-id="e2" style="left:120px;top:180px;width:1680px;height:860px;color:#ffffff"></div>
+  <div class="el declencheur fragment" data-amphi="ceremonie" data-id="e3" style="left:0;top:0;width:1px;height:1px"></div>
+  <aside class="notes">Cérémonie du classement : « Suivant » lance le défilé des rangs, le podium puis le tableau final (aucune autre action).</aside>
 </section>"""
 
 

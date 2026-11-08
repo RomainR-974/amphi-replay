@@ -14,6 +14,10 @@ Si ce script tombe, rien ne casse : raccourcis F1/F2/F3 en secours.
 Séquence questions-réponses (docs/questions.md) : le serveur relaie `{"type": "qr", "actif": true}` sur /ws/quiz ;
 le pont arrête alors l'enregistrement OBS (`StopRecord`) après 2 s, une fois par séquence, sauf `--sans-arret`.
 À la fermeture de la séquence, l'enregistrement n'est pas relancé : les questions-réponses ne sont pas dans le replay.
+
+Enregistrement piloté par les diapositives (docs/seance.md) : le serveur diffuse `{"type": "obs", "action": "StartRecord" |
+"StopRecord", "h": n}` à l'arrivée sur une diapositive marquée `data-obs` (et un `StopRecord` à la fin de séance) ; le pont
+vérifie d'abord `GetRecordStatus` (rien si l'état voulu est déjà atteint). Option `--sans-enregistrement` pour ignorer ces messages.
 """
 
 from __future__ import annotations
@@ -63,9 +67,26 @@ class Obs:
     async def changer_scene(self, nom: str) -> None:
         await self.requete("SetCurrentProgramScene", {"sceneName": nom})
 
-    async def arreter_enregistrement(self) -> bool:
-        """StopRecord ; False si OBS n'enregistrait pas (requête refusée), sans faire tomber le pont."""
+    async def enregistrement_actif(self) -> bool:
+        """GetRecordStatus → outputActive."""
+        return bool((await self.requete("GetRecordStatus")).get("outputActive"))
+
+    async def demarrer_enregistrement(self) -> bool:
+        """StartRecord ; False si OBS enregistrait déjà ou a refusé (sans faire tomber le pont)."""
         try:
+            if await self.enregistrement_actif():
+                return False
+            await self.requete("StartRecord")
+        except RuntimeError as e:
+            print("OBS : enregistrement non démarré :", e, file=sys.stderr)
+            return False
+        return True
+
+    async def arreter_enregistrement(self) -> bool:
+        """StopRecord ; False si OBS n'enregistrait pas (ou requête refusée), sans faire tomber le pont."""
+        try:
+            if not await self.enregistrement_actif():
+                return False
             await self.requete("StopRecord")
         except RuntimeError as e:
             print("OBS : enregistrement non arrêté :", e, file=sys.stderr)
@@ -82,6 +103,23 @@ async def arreter_apres_delai(obs: Obs) -> None:
         print("enregistrement arrêté avant les questions-réponses")
 
 
+async def executer_action_obs(obs: Obs, action: str, h) -> None:
+    """Action demandée par une diapositive : StartRecord / StopRecord, après vérification de l'état réel d'OBS."""
+    numero = f"la diapositive {int(h) + 1}" if isinstance(h, int) or (isinstance(h, str) and h.isdigit()) else "la séance"
+    if action == "StartRecord":
+        if await obs.demarrer_enregistrement():
+            print(f"enregistrement démarré par {numero}")
+        else:
+            print(f"enregistrement déjà en cours ({numero} : rien à faire)")
+    elif action == "StopRecord":
+        if await obs.arreter_enregistrement():
+            print(f"enregistrement arrêté par {numero}")
+        else:
+            print(f"aucun enregistrement en cours ({numero} : rien à faire)")
+    else:
+        print("action OBS inconnue ignorée :", action, file=sys.stderr)
+
+
 async def principal() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("serveur", help="URL WebSocket du serveur, ex. wss://q.exemple.fr")
@@ -89,6 +127,7 @@ async def principal() -> int:
     p.add_argument("--obs-mdp", default="")
     p.add_argument("--scene", default="Diapositives + vignette", help="scène forcée pendant une question ouverte")
     p.add_argument("--sans-arret", action="store_true", help="ne pas arrêter l'enregistrement OBS à l'ouverture des questions-réponses")
+    p.add_argument("--sans-enregistrement", action="store_true", help="ignorer les messages d'enregistrement envoyés par les diapositives (data-obs) et la fin de séance")
     args = p.parse_args()
     url_quiz = args.serveur.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + "/ws/quiz"
 
@@ -106,6 +145,12 @@ async def principal() -> int:
                 delai = 1
                 async for brut in ws:
                     m = json.loads(brut)
+                    if m.get("type") == "obs":
+                        if args.sans_enregistrement:
+                            print(f"diapositive : {m.get('action')} ignoré (--sans-enregistrement)")
+                        else:
+                            await executer_action_obs(obs, str(m.get("action")), m.get("h"))
+                        continue
                     if m.get("type") == "qr":
                         if m.get("actif") and not qr_arretee:
                             qr_arretee = True

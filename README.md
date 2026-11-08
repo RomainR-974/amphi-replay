@@ -122,6 +122,9 @@ Barème (comme Kahoot) : 1000 points par bonne réponse, moins jusqu'à 50 % sel
 
 Déroulé depuis la télécommande : **Ouvrir** (le chrono ferme tout seul) → **Fermer** → **Révéler** → **Réinitialiser** si besoin. Les pages participant, résultats et classement se mettent à jour par WebSocket, avec repli en interrogation toutes les 3 s.
 
+Fin de séance ([docs/seance.md](docs/seance.md)) : sur la dernière diapositive, le bouton Suivant devient **Quitter** ; la page participant affiche alors le rang et les points de chacun, puis la carte de contact (`contact` dans `presentation.json`) avec un bouton LinkedIn.
+Les diapositives marquées `data-obs="demarrer"` / `"arreter"` (champ « OBS » de l'éditeur) démarrent et arrêtent l'enregistrement OBS via le pont `obs/obs_quiz_bridge.py` ; Quitter envoie un `StopRecord` de sécurité.
+
 Anonymat : pas de compte, pas de nom réel. Le participant choisit un pseudo (ou en reçoit un au hasard, « Panda-42 ») qui ne sert qu'au classement ; identifiants et pseudos sont purgés par `deploy/sauvegarde.sh` après la séance. Seuls les pseudos des 5 premiers apparaissent à l'écran sur les questions de rapidité, de buzzer et d'estimation.
 
 Charge : `python tools/charge.py https://<domaine> --token … --clients 300 --duree 10` (cible PRD : 300 WebSockets, 300 votes en 10 s, diffusion < 1 s, CPU < 50 % sur 1 vCPU). Le serveur regroupe les diffusions sous rafale (un état toutes les 200 ms) : mesuré en local, 300 votes en 5 s donnent une latence de vote p95 de 12 ms et une diffusion complète en 100 ms.

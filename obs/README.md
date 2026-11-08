@@ -57,6 +57,11 @@ obs-websocket : Outils → Paramètres du serveur WebSocket → activer, port 44
 Le même pont **arrête l'enregistrement** (`StopRecord`) 2 s après l'ouverture de la séquence questions-réponses depuis la télécommande (bouton Q/R → Commencer), et affiche « enregistrement arrêté avant les questions-réponses ». Il ne le relance pas à la fin : les questions-réponses ne font pas partie du replay (voir docs/questions.md).
 Option `--sans-arret` pour désactiver cet arrêt automatique (il faut alors appuyer sur F9 soi-même avant Commencer).
 
+Le pont **démarre et arrête aussi l'enregistrement sur ordre des diapositives** (docs/seance.md) : une section de `slides.html` portant `data-obs="demarrer"` ou `data-obs="arreter"` fait diffuser par le serveur `{"type":"obs","action":"StartRecord"|"StopRecord","h":n}` à l'arrivée dessus (champ « OBS » du panneau de diapositive de l'éditeur).
+Avant d'agir, le pont lit `GetRecordStatus` : `StartRecord` est ignoré si OBS enregistre déjà, `StopRecord` si rien ne tourne ; console « enregistrement démarré par la diapositive n ».
+Le bouton **Quitter** de la télécommande (dernière diapositive) envoie aussi un `StopRecord` de sécurité.
+Option `--sans-enregistrement` pour ignorer tous ces messages (F9 à la main, comme avant).
+
 ## Enregistrement
 
 Paramètres → Sortie, mode avancé, onglet Enregistrement :

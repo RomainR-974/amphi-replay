@@ -36,7 +36,8 @@ Règles :
 | `lottie` | `div` | `data-amphi="lottie" data-src="medias/anim.json" data-boucle="1"` ; rendu par lottie-web au runtime |
 | `minuteur` | `div` | `data-amphi="minuteur" data-duree="60"` (s) ; démarre à l'affichage de la diapositive ; `data-auto="1"` sinon démarre au fragment |
 | `resultats` | `div` | `data-amphi="resultats" data-question="q1"` ; le runtime y insère une iframe `/q/resultats?question=q1` |
-| `classement` | `div` | `data-amphi="classement" data-nombre="10"` ; iframe `/q/classement?nombre=10` |
+| `classement` | `div` | `data-amphi="classement" data-nombre="10"` ; iframe `/q/classement?nombre=10`. Avec `data-ceremonie="1"` : iframe `/q/classement?ceremonie=1&…`, la page n'affiche que le titre puis joue la cérémonie du classement (défilé des rangs, podium 3e/2e/1er, tableau final ; voir `docs/seance.md`, D) quand elle reçoit `postMessage({type:"ceremonie"})` |
+| `declencheur` | `div` | `data-amphi="ceremonie"` sur un fragment invisible (`class="el declencheur fragment"`, `style="left:0;top:0;width:1px;height:1px"`) : au `fragmentshown`, le runtime envoie `{type:"ceremonie"}` à toutes les iframes de la section, donc « Suivant » sur la télécommande lance la cérémonie, synchronisée sur le projecteur et dans OBS. L'éditeur le pose via la case « Cérémonie animée » de l'élément classement |
 | `nuage` | `div` | `data-amphi="resultats" data-question="qN"` (un nuage est un résultat de question de type `nuage`) |
 | `qr` | `div` | `data-amphi="qr"` ; QR code + URL participant |
 
@@ -44,6 +45,7 @@ Règles :
 - Transition de diapositive : `data-transition` parmi `none`, `fade`, `slide`, `convex`, `concave`, `zoom`. Le rôle `obs` ignore les transitions (le runtime les retire).
 - Fond : `data-background-color`, `data-background-image`, `data-background-size`, `data-background-video` (évitée).
 - Notes de l'orateur : `<aside class="notes">…</aside>` en dernier enfant de la section, HTML simple.
+- Enregistrement OBS (docs/seance.md) : `data-obs="demarrer"` ou `data-obs="arreter"` sur la `<section>` (libre, flux ou quiz). À l'arrivée sur la diapositive, le serveur diffuse `{"type":"obs","action":"StartRecord"|"StopRecord","h":n}` sur `/ws/quiz`, une fois par arrivée (pas à chaque fragment) ; le pont `obs/obs_quiz_bridge.py` exécute l'action. Éditeur : champ « OBS » du panneau de la diapositive.
 - Police : `font-family` inline si nécessaire ; sinon celle du thème.
 
 ### 1.2 Section « flux » (reveal.js classique, issue de `pdf2reveal.py` ou écrite à la main)
@@ -93,8 +95,11 @@ Liste de questions. Champs communs : `id` (unique, `[a-z0-9_-]+`), `type`, `ques
 | POST | `/api/quiz/fermer?token=` | — |
 | POST | `/api/quiz/reveler?token=` | `{ "question_id" }` : calcule les points, publie la bonne réponse |
 | POST | `/api/quiz/reinitialiser?token=` | `{ "question_id" }` |
-| GET | `/api/quiz/classement?nombre=10` | public : top N `{ pseudo, points }` |
-| WS | `/ws/quiz` | état poussé : `{ type:"quiz", question, ouverte, revele, reste, resultat }` |
+| GET | `/api/quiz/classement?nombre=10` | public : top N `{ rang, pseudo, points }` (N ≤ 1000) |
+| GET | `/api/seance` | public : `{ terminee, contact, presentation }` (docs/seance.md) |
+| POST | `/api/seance/terminer?token=` | bouton Quitter : ferme la question ouverte, termine la séquence Q/R, `StopRecord`, journal `fin`, diffuse `{ type:"fin", contact, classement_total }` |
+| POST | `/api/seance/reprendre?token=` | la séance reprend (`terminee: false`) ; l'activation d'une présentation fait de même |
+| WS | `/ws/quiz` | état poussé : `{ type:"quiz", question, ouverte, revele, reste, resultat }`, `{ type:"obs", action, h }`, `{ type:"fin", terminee, contact }` |
 | WS | `/ws/deck?role=` | synchronisation `{h, v, f}` |
 
-Vues : `/q` (participant), `/q/resultats?question=` (résultats d'une question), `/q/classement?nombre=` (podium + top N), `/deck/?role=scene|obs|remote`, `/deck/remote.html?token=`, `/deck/editeur.html?token=`.
+Vues : `/q` (participant), `/q/resultats?question=` (résultats d'une question), `/q/classement?nombre=` (podium + top N ; `?ceremonie=1` : cérémonie animée déclenchée par `postMessage({type:"ceremonie"})`, `?ceremonie=auto` pour les tests), `/deck/?role=scene|obs|remote`, `/deck/remote.html?token=`, `/deck/editeur.html?token=`.

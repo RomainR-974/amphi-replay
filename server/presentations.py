@@ -1,6 +1,6 @@
 """Bibliothèque de présentations : un dossier par présentation, une seule active (voir docs/presentations.md).
 
-    presentations/<slug>/presentation.json   { titre, description, theme, cree, modifie }
+    presentations/<slug>/presentation.json   { titre, description, theme, cree, modifie, contact? }
     presentations/<slug>/slides.html         fragment HTML du deck (docs/format-deck.md)
     presentations/<slug>/quiz.json           questions du quiz
     presentations/<slug>/medias/             images, Lottie, vidéos
@@ -35,6 +35,15 @@ SECTION_TITRE = (
 
 def _echapper(texte: str) -> str:
     return texte.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+CLES_CONTACT = ("nom", "fonction", "courriel", "linkedin")
+
+
+def normaliser_contact(valeur) -> dict:
+    """Contact de la présentation (docs/seance.md, C) : {nom, fonction, courriel, linkedin}, chaînes vides par défaut."""
+    valeur = valeur if isinstance(valeur, dict) else {}
+    return {cle: str(valeur.get(cle) or "").strip() for cle in CLES_CONTACT}
 
 
 def _maintenant() -> str:
@@ -123,9 +132,12 @@ class Bibliotheque:
             "theme": str(meta.get("theme") or ""),
             "cree": str(meta.get("cree") or horodatage),
             "modifie": str(meta.get("modifie") or horodatage),
+            "contact": normaliser_contact(meta.get("contact")),
         }
 
     def ecrire_meta(self, slug: str, meta: dict) -> None:
+        if "contact" in meta and not any(normaliser_contact(meta["contact"]).values()):
+            meta = {k: v for k, v in meta.items() if k != "contact"}  # un contact vide n'est pas écrit
         (self.exiger(slug) / "presentation.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def toucher(self, slug: str) -> None:

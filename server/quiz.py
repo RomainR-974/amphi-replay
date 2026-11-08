@@ -496,7 +496,7 @@ class Quiz:
                 """SELECT p.pseudo, COALESCE(SUM(r.points), 0) AS pts, COUNT(r.points) AS n
                    FROM participants p LEFT JOIN reponses r ON r.participant = p.participant
                    GROUP BY p.participant HAVING pts > 0 ORDER BY pts DESC, n ASC LIMIT ?""",
-                (max(1, min(nombre, 100)),),
+                (max(1, min(nombre, 1000)),),
             ).fetchall()
         return [{"rang": i + 1, "pseudo": pseudo, "points": int(pts)} for i, (pseudo, pts, _) in enumerate(lignes)]
 

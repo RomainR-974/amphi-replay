@@ -24,6 +24,8 @@
   const ANIMATIONS = ['fade-in', 'fade-out', 'fade-up', 'fade-down', 'fade-left', 'fade-right', 'fade-in-then-out',
     'fade-in-then-semi-out', 'zoom-in', 'grow', 'shrink', 'strike', 'highlight-red', 'highlight-blue', 'highlight-green', 'semi-fade-out'];
   const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom'];
+  // Enregistrement OBS déclenché par la diapositive (docs/seance.md) : valeur de data-obs → libellé.
+  const OBS_OPTIONS = [{ v: '', l: 'aucun' }, { v: 'demarrer', l: 'démarrer l\'enregistrement' }, { v: 'arreter', l: 'arrêter l\'enregistrement' }];
   const TYPES_EL = ['texte', 'image', 'forme', 'iframe', 'video', 'lottie', 'minuteur', 'resultats', 'classement', 'nuage', 'qr'];
   const TYPES_QUESTION = ['qcm', 'multi', 'vrai_faux', 'emoji', 'rapidite', 'buzzer', 'nuage', 'texte_libre', 'trou', 'echelle', 'classement', 'nombre'];
   const AVEC_OPTIONS = { qcm: [2, 6], multi: [2, 6], emoji: [2, 8], rapidite: [2, 6], classement: [2, 6] };
@@ -1125,6 +1127,24 @@
     if (type === 'classement') {
       blocs.push(h('h4', {}, 'Classement'));
       blocs.push(champNombre('Nombre', () => num(el.dataset.nombre, 10), v => { el.dataset.nombre = String(Math.max(1, Math.round(v))); }, { min: 1 }));
+      // Cérémonie (docs/seance.md, D) : data-ceremonie="1" sur l'élément + un déclencheur invisible (fragment) dans la section.
+      blocs.push(champCase('Cérémonie animée (déclenchée par Suivant)', () => el.dataset.ceremonie === '1', v => {
+        const declencheurs = Array.from(s.querySelectorAll(':scope > .el[data-amphi="ceremonie"]'));
+        if (v) {
+          el.dataset.ceremonie = '1';
+          if (!declencheurs.length) {
+            const d = creerElement('<div class="el declencheur fragment" data-amphi="ceremonie" style="left:0;top:0;width:1px;height:1px"></div>');
+            d.dataset.id = nouvelIdElement(s);
+            const notes = s.querySelector(':scope > aside.notes');
+            if (notes) notes.before(d); else s.append(d);
+          }
+        } else {
+          delete el.dataset.ceremonie;
+          if (!s.querySelector(':scope > .el[data-amphi="classement"][data-ceremonie="1"]')) declencheurs.forEach(d => d.remove());
+        }
+        rendreScene();
+      }));
+      blocs.push(h('p', { class: 'aide' }, 'Défilé des rangs, podium puis tableau final, lancés par « Suivant » sur la télécommande.'));
     }
 
     // Animation (fragment)
@@ -1200,8 +1220,13 @@
     blocs.push(champSelect('Transition', () => s.dataset.transition || '', [{ v: '', l: 'défaut' }, ...TRANSITIONS.map(t => ({ v: t, l: t }))], v => { if (v) s.dataset.transition = v; else delete s.dataset.transition; rendreScene(); }));
     blocs.push(champCouleur('Fond', () => s.dataset.backgroundColor || '', v => { if (v) s.dataset.backgroundColor = v; else delete s.dataset.backgroundColor; rendreScene(); }));
     blocs.push(champSource('Image de fond', () => s.dataset.backgroundImage || '', v => { if (v) s.dataset.backgroundImage = v; else delete s.dataset.backgroundImage; rendreScene(); }, 'image/*'));
+    blocs.push(champObs(s));
     blocs.push(...blocsCommunsSection(s));
     return blocs;
+  }
+  /** Champ « OBS » : pose ou retire data-obs (démarrer / arrêter l'enregistrement à l'arrivée sur la diapositive). */
+  function champObs(s) {
+    return champSelect('OBS', () => s.dataset.obs || '', OBS_OPTIONS, v => { if (v) s.dataset.obs = v; else delete s.dataset.obs; });
   }
   function blocsCommunsSection(s) {
     const blocs = [h('h4', {}, 'Notes de l\'orateur')];
@@ -1239,6 +1264,7 @@
     blocs.push(h('button', { class: 'principal', onclick: convertirEnLibre }, 'Convertir en section libre'));
     blocs.push(champSelect('Transition', () => s.dataset.transition || '', [{ v: '', l: 'défaut' }, ...TRANSITIONS.map(t => ({ v: t, l: t }))], v => { if (v) s.dataset.transition = v; else delete s.dataset.transition; }));
     blocs.push(champCouleur('Fond', () => s.dataset.backgroundColor || '', v => { if (v) s.dataset.backgroundColor = v; else delete s.dataset.backgroundColor; rendreScene(); }));
+    blocs.push(champObs(s));
     blocs.push(h('h4', {}, 'Éléments'));
     const enfants = Array.from(s.children).filter(c => !c.matches('aside.notes'));
     enfants.forEach((c, i) => {
@@ -1291,6 +1317,7 @@
     const options = etat.questions.map(x => ({ v: x.id, l: x.id + ' – ' + x.question }));
     if (!q) options.unshift({ v: s.dataset.quiz, l: s.dataset.quiz + ' (absente de quiz.json)' });
     blocs.push(champSelect('Question', () => s.dataset.quiz, options, v => { s.dataset.quiz = v; rendreScene(); rendreVignette(etat.courant); rendrePanneau(); }));
+    blocs.push(champObs(s));
     if (q) {
       blocs.push(h('div', { class: 'enfant' }, h('div', {}, h('b', {}, q.question)), h('div', { class: 'aide' }, 'type : ' + (q.type || 'qcm') + (q.chrono ? ' · chrono ' + q.chrono + ' s' : '')),
         Array.isArray(q.options) ? h('ol', {}, q.options.map(o => h('li', {}, String(o)))) : null));

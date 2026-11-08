@@ -5,7 +5,8 @@
  *                                       à main levée), QR code, résultats en direct.
  *   <section data-qr>                   QR code et URL participant.
  *   [data-amphi="resultats"]            iframe /q/resultats?question=…
- *   [data-amphi="classement"]           iframe /q/classement?nombre=…
+ *   [data-amphi="classement"]           iframe /q/classement?nombre=… (data-ceremonie="1" : &ceremonie=1)
+ *   [data-amphi="ceremonie"]            fragment invisible : au fragmentshown, lance la cérémonie dans les iframes de la section.
  *   [data-amphi="qr"]                   QR code + URL.
  *   [data-amphi="lottie"]               animation Lottie (lottie-web), jouée à l'affichage.
  *   [data-amphi="minuteur"]             compte à rebours démarré à l'affichage (ou au fragment).
@@ -76,7 +77,8 @@ window.AmphiQuizDeck = (function () {
     if (genre === 'resultats') {
       el.innerHTML = `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(el.dataset.question || '')}&couleur=${couleurDe(el)}${el.dataset.sansTitre ? '&sans_titre=1' : ''}" title="Résultats" loading="eager"></iframe>`;
     } else if (genre === 'classement') {
-      el.innerHTML = `<iframe class="quiz-resultats" src="/q/classement?nombre=${encodeURIComponent(el.dataset.nombre || 10)}&couleur=${couleurDe(el)}${el.dataset.sansTitre ? '&sans_titre=1' : ''}" title="Classement" loading="eager"></iframe>`;
+      // data-ceremonie="1" : cérémonie animée, déclenchée par le fragment [data-amphi="ceremonie"] de la section (docs/seance.md, D).
+      el.innerHTML = `<iframe class="quiz-resultats" src="/q/classement?nombre=${encodeURIComponent(el.dataset.nombre || 10)}&couleur=${couleurDe(el)}${el.dataset.sansTitre ? '&sans_titre=1' : ''}${el.dataset.ceremonie === '1' ? '&ceremonie=1' : ''}" title="Classement" loading="eager"></iframe>`;
     } else if (genre === 'qr') {
       el.innerHTML = blocQr();
     } else if (genre === 'minuteur') {
@@ -140,6 +142,14 @@ window.AmphiQuizDeck = (function () {
   function surFragment(fragment) {
     if (fragment.dataset.amphi === 'minuteur') demarrerMinuteur(fragment);
     fragment.querySelectorAll?.('[data-amphi="minuteur"]').forEach(demarrerMinuteur);
+    if (fragment.dataset.amphi === 'ceremonie') lancerCeremonie(fragment);
+  }
+  /** Déclencheur de la cérémonie du classement : toutes les iframes de la section reçoivent {type:"ceremonie"}
+   *  (la miniature de la télécommande la rejoue aussi, sans conséquence). */
+  function lancerCeremonie(fragment) {
+    const section = fragment.closest('section') || fragment.parentElement;
+    if (!section) return;
+    section.querySelectorAll('iframe').forEach(f => { try { f.contentWindow?.postMessage({ type: 'ceremonie' }, '*'); } catch (e) { /* iframe non chargée */ } });
   }
 
   function jouerLottie(el) {
