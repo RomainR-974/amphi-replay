@@ -17,6 +17,7 @@
 <script src="sync.js"></script>
 <script src="camera.js"></script>
 <script src="quiz-deck.js"></script>
+<script src="teachable.js"></script>
 <script>
 (async () => {
   const role = AmphiSync.role;
@@ -71,6 +72,7 @@
     // Rôle obs : aucune transition, pour un rendu simultané avec le projecteur.
     if (role === 'obs') slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
     await AmphiQuizDeck.preparer(slides, prez, meta.camera);
+    AmphiTeachable.preparer(slides);
     // Rôle obs : zone réservée à la vignette caméra (docs/zone-camera.md), ajustée en mémoire, jamais réécrite dans le fichier.
     if (role === 'obs') reserverCamera();
   }
@@ -101,9 +103,12 @@
   };
   await Reveal.initialize({ ...commun, ...parRole[role] });
 
-  Reveal.on('slidechanged', e => { if (e.previousSlide) AmphiQuizDeck.horsDiapositive(e.previousSlide); AmphiQuizDeck.surDiapositive(e.currentSlide); });
+  Reveal.on('slidechanged', e => {
+    if (e.previousSlide) { AmphiQuizDeck.horsDiapositive(e.previousSlide); AmphiTeachable.horsDiapositive(e.previousSlide); }
+    AmphiQuizDeck.surDiapositive(e.currentSlide); AmphiTeachable.surDiapositive(e.currentSlide);
+  });
   Reveal.on('fragmentshown', e => AmphiQuizDeck.surFragment(e.fragment));
-  Reveal.on('ready', e => AmphiQuizDeck.surDiapositive(e.currentSlide));
+  Reveal.on('ready', e => { AmphiQuizDeck.surDiapositive(e.currentSlide); AmphiTeachable.surDiapositive(e.currentSlide); });
 
   // L'éditeur a enregistré ou une autre présentation a été activée : recharger le contenu sans perdre la position
   // (tous les rôles, la miniature de la télécommande comprise ; à l'activation, on revient à la première diapositive).
@@ -111,6 +116,7 @@
     const i = Reveal.getIndices();
     await charger(); // relit aussi les métadonnées (thème, caméra) et rejoue l'ajustement OBS
     Reveal.sync();
+    AmphiTeachable.surDiapositive(Reveal.getCurrentSlide());
     if (m && m.prez) Reveal.slide(0, 0, -1);
     else Reveal.slide(i.h, i.v, i.f);
   });

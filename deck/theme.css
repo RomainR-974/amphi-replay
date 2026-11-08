@@ -52,6 +52,22 @@ html[data-role="remote"] .reveal { width: 100vw; height: 100vh; pointer-events: 
 .reveal .minuteur.fini { background: #b91c1c; animation: clignote 1s steps(2) infinite; }
 @keyframes clignote { to { opacity: .4; } }
 .reveal .lottie svg { width: 100%; height: 100%; }
+
+/* Teachable Machine (deck/teachable.js) : caméra carrée en haut, une barre de probabilité par classe en dessous. */
+.reveal .el.teachable { display: flex; flex-direction: column; gap: 18px; font-size: 30px; color: #161616; }
+.reveal .teachable .tm-camera { flex: 0 0 auto; width: 100%; aspect-ratio: 1; border-radius: 16px; overflow: hidden; background: #f0f0f6;
+  display: flex; align-items: center; justify-content: center; }
+.reveal .teachable .tm-camera canvas { width: 100%; height: 100%; display: block; }
+.reveal .teachable .tm-attente { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; text-align: center; color: #3a3a3a; font-size: 26px; }
+.reveal .teachable .tm-camera svg { width: 72px; height: 72px; fill: none; stroke: #000091; stroke-width: 1.6; stroke-linejoin: round; }
+.reveal .teachable .tm-absent { flex-direction: column; gap: 12px; color: #000091; font-weight: 700; }
+.reveal .teachable .tm-classes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.reveal .teachable .tm-classes li { display: grid; grid-template-columns: 150px 1fr 90px; align-items: center; gap: 14px; }
+.reveal .teachable .tm-nom { font-weight: 700; }
+.reveal .teachable .tm-barre { height: 26px; border-radius: 13px; background: #e3e3fd; overflow: hidden; }
+.reveal .teachable .tm-barre > span { display: block; height: 100%; width: 0; background: #6a6af4; transition: width .15s linear; }
+.reveal .teachable .tm-meilleure .tm-barre > span { background: #000091; }
+.reveal .teachable .tm-pct { text-align: right; font-variant-numeric: tabular-nums; }
 .reveal .minuteur.lie { background: #e5e7eb; color: #374151; transition: background .3s, color .3s; }
 .reveal .minuteur.lie.actif { background: #111827; color: #f9fafb; }
 .reveal .minuteur.lie.fini { background: #166534; color: #fff; animation: none; }
