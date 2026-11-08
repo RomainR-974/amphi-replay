@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITRE}}</title>
+<link rel="icon" href="data:,">
+<!-- Replay interactif (docs/replay-interactif.md) : la vidéo de l'intervenant, et la présentation redessinée en HTML
+     d'après le journal de la séance. Même dossier pour la lecture autonome et pour le paquet SCORM 1.2. -->
+<link rel="stylesheet" href="vendor/reveal/reveal.css">
+<link rel="stylesheet" href="vendor/reveal/theme/white.css">
+<link rel="stylesheet" href="theme.css">
+{{THEME}}
+<link rel="stylesheet" href="lecteur.css">
+</head>
+<body>
+<div id="lecteur" class="paysage">
+  <div id="scene"><div class="reveal"><div class="slides" id="slides"></div></div></div>
+  <div id="cadre-camera" aria-label="Vidéo de l'intervenant"><video id="video" playsinline preload="auto" src="{{VIDEO}}"></video></div>
+  <div id="barre">
+    <button type="button" id="b-lecture" class="icone" aria-label="Lecture">▶</button>
+    <span id="temps">00:00 / 00:00</span>
+    <div id="piste"><input type="range" id="position" min="0" max="1" step="0.1" value="0" aria-label="Position dans la vidéo"><div id="reperes"></div></div>
+    <select id="chapitre" aria-label="Chapitre"></select>
+    <select id="vitesse" aria-label="Vitesse"><option value="1">1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2×</option></select>
+    <button type="button" id="b-taches" class="secondaire" hidden></button>
+    <button type="button" id="b-plein" class="icone" aria-label="Plein écran">⛶</button>
+  </div>
+  <ol id="liste-chapitres" aria-label="Chapitres"></ol>
+  <div id="fenetre" role="dialog" aria-modal="true" hidden><div id="fenetre-contenu"></div></div>
+  <div id="bandeau" hidden></div>
+</div>
+<script src="donnees.js"></script>
+<script>window.AmphiSync = { role: 'replay', on: function () {}, demarrer: function () {} };</script>
+<script src="vendor/reveal/reveal.js"></script>
+{{SCRIPTS}}
+<script src="camera.js"></script>
+<script src="quiz-deck.js"></script>
+<script src="teachable.js"></script>
+<script src="scorm.js"></script>
+<script src="lecteur.js"></script>
+</body>
+</html>

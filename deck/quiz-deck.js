@@ -100,7 +100,7 @@ window.AmphiQuizDeck = (function () {
           ${optionsStatiques(q)}
           ${blocQr()}
         </div>
-        <iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(q.id)}" title="Résultats" loading="eager"></iframe>
+        ${enReplay() ? '<div class="quiz-resultats" data-replay-salle="question"></div>' : `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(q.id)}" title="Résultats" loading="eager"></iframe>`}
       </div>
       <aside class="notes">${notes}</aside>`;
   }
@@ -117,7 +117,9 @@ window.AmphiQuizDeck = (function () {
   // ----- Éléments data-amphi ----------------------------------------------------------------
   function construireElement(el) {
     const genre = el.dataset.amphi;
-    if (genre === 'resultats') {
+    if ((genre === 'resultats' || genre === 'classement') && enReplay()) {
+      el.innerHTML = '<div class="quiz-resultats" data-replay-salle="' + genre + '"></div>'; // replay : rien de la salle
+    } else if (genre === 'resultats') {
       el.innerHTML = `<iframe class="quiz-resultats" src="/q/resultats?question=${encodeURIComponent(el.dataset.question || '')}&couleur=${couleurDe(el)}${el.dataset.sansTitre ? '&sans_titre=1' : ''}" title="Résultats" loading="eager"></iframe>`;
     } else if (genre === 'classement') {
       // data-ceremonie="1" : cérémonie animée, déclenchée par le fragment [data-amphi="ceremonie"] de la section (docs/seance.md, D).
@@ -169,7 +171,8 @@ window.AmphiQuizDeck = (function () {
     }
     if (AmphiSyncRoleUtile()) connecter();
   })();
-  function AmphiSyncRoleUtile() { return !(window.AmphiSync && window.AmphiSync.role === 'remote'); }
+  // Ni la miniature de la télécommande ni le replay interactif (hors ligne, docs/replay-interactif.md) ne se connectent au quiz.
+  function AmphiSyncRoleUtile() { return !(window.AmphiSync && ['remote', 'replay'].includes(window.AmphiSync.role)); }
 
   // Lancements à l'affichage d'une diapositive : Lottie, minuteurs, vidéos.
   function surDiapositive(section) {
@@ -267,7 +270,10 @@ window.AmphiQuizDeck = (function () {
     return encodeURIComponent(c.replace(/^#/, ''));
   }
 
+  /** Replay interactif (docs/replay-interactif.md) : ni résultats de la salle, ni QR de vote, aucune requête au serveur. */
+  function enReplay() { return !!(window.AmphiSync && window.AmphiSync.role === 'replay'); }
   function blocQr() {
+    if (enReplay()) return '';
     const lisible = urlPublique.replace(/^https?:\/\//, '') + '/q';
     return `<div class="quiz-qr"><img src="/qr.png" alt="QR code vers ${echap(lisible)}"><div class="quiz-url">${echap(lisible)}</div></div>`;
   }

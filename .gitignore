@@ -17,3 +17,5 @@ presentations/**/*.github
 # Secrets locaux du lanceur de séance (PC 2)
 lancer-seance.local.bat
 presentations/*/seances/
+presentations/*/replays-interactifs/
+data/modeles/

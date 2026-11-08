@@ -5,8 +5,9 @@
  *
  * data-src : dossier contenant model.json, metadata.json et weights.bin (fichiers de l'export « TensorFlow.js »).
  *
- * Rôle scene (projecteur, PC 1) et replay : webcam du poste + barre de probabilité par classe, uniquement pendant
- * que la diapositive est affichée (caméra libérée dès qu'on la quitte). Bibliothèques chargées à la demande depuis
+ * Rôle scene (projecteur, PC 1) : webcam du poste + barre de probabilité par classe, uniquement pendant que la
+ * diapositive est affichée (caméra libérée dès qu'on la quitte). Rôle replay (replay interactif, SCORM) : même chose,
+ * mais la caméra de l'apprenant ne s'allume qu'après un clic sur « Activer ma caméra ». Bibliothèques chargées à la demande depuis
  * deck/vendor/tm/ (tools/fetch_reveal.sh) : aucune dépendance à un CDN pendant la séance.
  * Rôles obs et remote : encadré « démonstration en direct » — la caméra du PC 2 est déjà prise par OBS, et la
  * miniature de la télécommande n'a pas à ouvrir de caméra. Voir docs/format-deck.md.
@@ -38,15 +39,21 @@ window.AmphiTeachable = (() => {
     racine.querySelectorAll('[data-amphi="teachable"]').forEach(el => {
       arreter(el);
       el.classList.add('teachable');
-      el.innerHTML = actif()
+      el.innerHTML = role() === 'replay'
+        ? '<div class="tm-camera"><div class="tm-attente">' + ICONE + '<span>À vous d’essayer avec votre caméra</span>'
+          + '<button type="button" class="tm-activer">Activer ma caméra</button></div></div><ol class="tm-classes"></ol>'
+        : actif()
         ? '<div class="tm-camera"><div class="tm-attente">' + ICONE + '<span>La caméra s’allume à l’affichage de la diapositive</span></div></div><ol class="tm-classes"></ol>'
         : '<div class="tm-camera tm-absent">' + ICONE + '<span>Démonstration en direct</span></div><ol class="tm-classes"></ol>';
+      const bouton = el.querySelector('.tm-activer');
+      if (bouton) bouton.addEventListener('click', () => { el.dataset.autorise = '1'; demarrer(el); });
     });
   }
 
   function surDiapositive(section) {
     if (!actif()) return;
-    section.querySelectorAll('[data-amphi="teachable"]').forEach(demarrer);
+    // Replay : la caméra de l'apprenant ne s'allume qu'après son clic (puis à chaque retour sur la diapositive).
+    section.querySelectorAll('[data-amphi="teachable"]').forEach(el => { if (role() !== 'replay' || el.dataset.autorise) demarrer(el); });
   }
 
   function horsDiapositive(section) {
@@ -120,7 +127,8 @@ window.AmphiTeachable = (() => {
     cancelAnimationFrame(etat.raf);
     if (etat.webcam) etat.webcam.stop();
     el._tm = null;
-    if (actif()) message(el, 'La caméra s’allume à l’affichage de la diapositive');
+    if (role() === 'scene') message(el, 'La caméra s’allume à l’affichage de la diapositive');
+    else if (role() === 'replay') preparer(el.parentElement || el);
   }
 
   return { preparer, surDiapositive, horsDiapositive };

@@ -51,6 +51,12 @@ if ($LASTEXITCODE -ne 0) {
     & $VenvPython -m pip install -q -r requirements.txt 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Host "!! installation des dependances echouee" -ForegroundColor Red; exit 1 }
 }
+# Replay interactif : cadrage de l'intervenant (facultatif, docs/replay-interactif.md)
+& $VenvPython -c "import cv2" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "== installation d'OpenCV (cadrage du replay interactif)"
+    & $VenvPython -m pip install -q -r requirements-postprod.txt 2>&1 | Out-Host
+}
 if (-not (Test-Path (Join-Path $Racine "deck\vendor\reveal"))) {
     if (Get-Command bash -ErrorAction SilentlyContinue) {
         bash tools/fetch_reveal.sh

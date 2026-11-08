@@ -1,0 +1,2 @@
+# Post-production sur le PC 2 (en plus de requirements.txt) : cadrage du replay interactif (postprod/cadrage.py)
+opencv-python-headless>=4.8
