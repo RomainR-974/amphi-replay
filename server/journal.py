@@ -21,7 +21,8 @@ import threading
 import time
 from pathlib import Path
 
-TYPES = ("diapositive", "quiz_ouvrir", "quiz_fermer", "quiz_reveler", "activation", "qr_ouvrir", "qr_fermer", "fin")
+TYPES = ("diapositive", "quiz_ouvrir", "quiz_fermer", "quiz_reveler", "activation", "qr_ouvrir", "qr_fermer", "fin",
+         "enregistrement_debut", "enregistrement_fin")  # début / fin de l'enregistrement OBS, signalés par le pont (docs/seance.md §E)
 ECART_SEANCE_S = 3 * 3600  # deux événements séparés de plus de 3 h appartiennent à deux séances
 LONGUEUR_TITRE = 80
 

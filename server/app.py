@@ -15,14 +15,18 @@ import json
 import logging
 import re
 import secrets
+import tempfile
 import time
+import zipfile
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 
 from . import config
@@ -625,6 +629,38 @@ def replay_ou_404(slug: str, id: str) -> None:
         replays.chemin(slug, id)
     except KeyError:
         raise HTTPException(status_code=404, detail="replay inconnu")
+
+
+# ---------------------------------------------------------------------------------
+# Copies figées des séances (docs/seance.md §E) : relues par la post-production du PC 2
+# ---------------------------------------------------------------------------------
+
+
+@app.get("/api/presentations/{slug}/seances", dependencies=[Depends(verifier_jeton)])
+async def seances_figees(slug: str) -> list[dict]:
+    slug_ou_404(slug)
+    return await asyncio.to_thread(biblio.seances_figees, slug)
+
+
+@app.get("/api/presentations/{slug}/seances/{id_seance}.zip", dependencies=[Depends(verifier_jeton)])
+async def seance_figee_zip(slug: str, id_seance: str) -> FileResponse:
+    slug_ou_404(slug)
+    try:
+        dossier = biblio.seance_figee(slug, id_seance)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="séance inconnue")
+
+    def zipper() -> str:
+        fd, chemin = tempfile.mkstemp(suffix=".zip")
+        with open(fd, "wb") as brut, zipfile.ZipFile(brut, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in sorted(dossier.rglob("*")):
+                if f.is_file():
+                    z.write(f, f.relative_to(dossier).as_posix())
+        return chemin
+
+    chemin = await asyncio.to_thread(zipper)
+    return FileResponse(chemin, media_type="application/zip", filename=f"{slug}-{id_seance}.zip",
+                        background=BackgroundTask(lambda: Path(chemin).unlink(missing_ok=True)))
 
 
 @app.get("/api/presentations/{slug}/replays")
@@ -1255,9 +1291,43 @@ async def seance_reprendre() -> dict:
     return etat_seance()
 
 
+ECART_ANCRE_S = 2.0  # deux débuts d'enregistrement à moins de 2 s l'un de l'autre sont le même (le pont le renvoie à chaque reconnexion)
+
+
+def signaler_enregistrement(actif: bool, duree_ms: float) -> dict:
+    """Ancre du replay interactif (docs/seance.md §E) : le pont OBS signale l'état de l'enregistrement.
+
+    `duree_ms` = durée déjà enregistrée selon OBS (GetRecordStatus.outputDuration) : le début est daté avec l'horloge du
+    serveur, comme le reste du journal, à la latence du réseau près. Au début, la présentation active est figée.
+    """
+    slug = biblio.active()
+    if not slug:
+        return {"type": "enregistrement", "ok": False, "raison": "aucune présentation active"}
+    maintenant = time.time()
+    if not actif:
+        journal_bd.ajouter(slug, "enregistrement_fin", horodatage=maintenant)
+        return {"type": "enregistrement", "ok": True, "actif": False}
+    debut = maintenant - max(0.0, float(duree_ms)) / 1000
+    deja = [e for e in journal_bd.lire(slug, debut - ECART_ANCRE_S, debut + ECART_ANCRE_S) if e["type"] == "enregistrement_debut"]
+    if deja:
+        debut = deja[0]["horodatage"]
+    else:
+        journal_bd.ajouter(slug, "enregistrement_debut", horodatage=debut)
+    try:
+        id_seance = biblio.figer(slug, debut)
+    except OSError as e:
+        journal.warning("copie figée de %s impossible : %s", slug, e)
+        id_seance = None
+    return {"type": "enregistrement", "ok": True, "actif": True, "debut": debut, "seance": id_seance, "presentation": slug}
+
+
 @app.websocket("/ws/quiz")
-async def ws_quiz(ws: WebSocket) -> None:
-    """Pousse l'état du quiz aux participants, aux pages de résultats et à la télécommande."""
+async def ws_quiz(ws: WebSocket, token: str = Query(default="")) -> None:
+    """Pousse l'état du quiz aux participants, aux pages de résultats et à la télécommande.
+
+    Avec le jeton (pont OBS), accepte aussi `{"type": "enregistrement", "actif": bool, "duree_ms": n}`.
+    """
+    autorise = bool(token) and jeton_valide(token)
     await quiz_ws.ajouter(ws, "quiz")
     try:
         await ws.send_json({"type": "quiz", **quiz.etat()})  # l'état des questions / de la séquence Q/R est relu par HTTP à la connexion (GET /api/qr)
@@ -1265,6 +1335,13 @@ async def ws_quiz(ws: WebSocket) -> None:
             message = await ws.receive_json()
             if message.get("type") == "ping":
                 await ws.send_json({"type": "pong", "reste": quiz.reste})
+            elif message.get("type") == "enregistrement" and autorise:
+                try:
+                    duree_ms = float(message.get("duree_ms") or 0)
+                except (TypeError, ValueError):
+                    continue
+                reponse = await asyncio.to_thread(signaler_enregistrement, bool(message.get("actif")), duree_ms)
+                await ws.send_json(reponse)
     except WebSocketDisconnect:
         pass
     finally:

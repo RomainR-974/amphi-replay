@@ -130,6 +130,60 @@ class Bibliotheque:
     def dossier_sauvegardes(self, slug: str) -> Path:
         return self.exiger(slug) / "sauvegardes"
 
+    def dossier_seances(self, slug: str) -> Path:
+        return self.exiger(slug) / "seances"
+
+    # --- Copies figées des séances (docs/seance.md §E) ---------------------------------
+
+    def figer(self, slug: str, horodatage: float) -> str:
+        """Copie slides.html, quiz.json, presentation.json et medias/ dans seances/<AAAA-MM-JJ_HHMMSS>/ ; renvoie l'identifiant.
+
+        Le replay interactif rejoue la présentation telle qu'elle était pendant la séance, même si elle est modifiée ensuite.
+        Idempotent : une copie déjà présente n'est pas refaite.
+        """
+        source = self.exiger(slug)
+        id_seance = datetime.fromtimestamp(horodatage).strftime("%Y-%m-%d_%H%M%S")
+        cible = source / "seances" / id_seance
+        if cible.is_dir():
+            return id_seance
+        temporaire = cible.with_name(id_seance + ".partiel")
+        shutil.rmtree(temporaire, ignore_errors=True)
+        temporaire.mkdir(parents=True)
+        for nom in ("slides.html", "quiz.json", "presentation.json"):
+            if (source / nom).is_file():
+                shutil.copy2(source / nom, temporaire / nom)
+        if (source / "medias").is_dir():
+            shutil.copytree(source / "medias", temporaire / "medias")
+        (temporaire / "seance.json").write_text(
+            json.dumps({"presentation": slug, "id": id_seance, "debut_enregistrement": horodatage}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+        temporaire.rename(cible)
+        return id_seance
+
+    def seances_figees(self, slug: str) -> list[dict]:
+        """Copies figées d'une présentation, la plus récente d'abord : [{id, debut_enregistrement, taille}]."""
+        dossier = self.dossier_seances(slug)
+        resultat = []
+        for d in sorted(dossier.iterdir(), reverse=True) if dossier.is_dir() else []:
+            if not d.is_dir() or d.name.endswith(".partiel"):
+                continue
+            try:
+                debut = json.loads((d / "seance.json").read_text(encoding="utf-8")).get("debut_enregistrement")
+            except (OSError, ValueError):
+                debut = None
+            taille = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+            resultat.append({"id": d.name, "debut_enregistrement": debut, "taille": taille})
+        return resultat
+
+    def seance_figee(self, slug: str, id_seance: str) -> Path:
+        """Dossier d'une copie figée ; KeyError si l'identifiant est invalide ou absent."""
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{6}", id_seance or ""):
+            raise KeyError(id_seance)
+        d = self.dossier_seances(slug) / id_seance
+        if not d.is_dir():
+            raise KeyError(id_seance)
+        return d
+
     def media(self, slug: str, chemin: str) -> Path | None:
         """Fichier d'un média, ou None s'il sort du dossier (anti-traversée) ou n'existe pas."""
         medias = self.dossier_medias(slug).resolve()
@@ -235,7 +289,7 @@ class Bibliotheque:
             raise FileExistsError(slug)
         if depuis is not None:
             source = self.exiger(depuis)
-            shutil.copytree(source, self.dossier / slug, ignore=shutil.ignore_patterns("sauvegardes", "presentation.json"))
+            shutil.copytree(source, self.dossier / slug, ignore=shutil.ignore_patterns("sauvegardes", "seances", "presentation.json"))
             meta_source = self.lire(depuis)
             description = description if description else meta_source["description"]
             theme = theme if theme else meta_source["theme"]

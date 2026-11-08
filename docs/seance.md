@@ -40,3 +40,23 @@ Moins de 3 participants : passer directement aux marches disponibles. Aucun poin
 Déclenchement depuis le deck : une section de classement contient un élément invisible `<div class="el declencheur fragment" data-amphi="ceremonie" data-id="…" style="left:0;top:0;width:1px;height:1px"></div>` ; `quiz-deck.js`, sur `fragmentshown` d'un `[data-amphi="ceremonie"]`, envoie `postMessage({type:"ceremonie"}, "*")` à toutes les iframes de la section. L'élément classement de la section porte `data-ceremonie="1"` → iframe `…/q/classement?ceremonie=1&…`. Ainsi « Suivant » sur la télécommande lance la cérémonie, synchronisée sur le projecteur et dans OBS. `tools/inserer_quiz.py` (gabarit CLASSEMENT) et les sections classement de iag-v1 et iag-v2 adoptent ce balisage ; la diapositive de classement de la v2 est placée juste avant « À retenir » (déjà le cas) ; s'il n'y en a pas en fin de v1, en ajouter une avant « À retenir ».
 
 Éditeur : l'élément « Classement » propose une case « cérémonie animée (déclenchée par Suivant) » qui ajoute `data-ceremonie="1"` et l'élément déclencheur.
+
+## E. Ancre d'enregistrement et copie figée (replay interactif, étape 1)
+
+Préalable du **replay interactif** : la vidéo de la caméra (et le micro USB) est rejouée avec la présentation redessinée en HTML
+à partir du journal, au lieu de filmer l'écran. Il faut pour cela savoir **à quel instant du journal** commence l'enregistrement,
+et garder **la présentation telle qu'elle était** pendant la séance. Le replay vidéo actuel (`replay.mp4`) n'est pas modifié.
+
+- **Pont OBS** (`obs/obs_quiz_bridge.py --jeton …`, passé automatiquement par la fenêtre de lancement) : lit `GetRecordStatus`
+  chaque seconde ; à chaque début d'enregistrement (déclenché par une diapositive `data-obs` ou par F9) il envoie sur `/ws/quiz`
+  `{"type": "enregistrement", "actif": true, "duree_ms": <durée déjà enregistrée selon OBS>}`, et `actif: false` à l'arrêt.
+  Sans `--jeton`, rien n'est envoyé (comportement précédent).
+- **Serveur** (`/ws/quiz?token=…` ; sans jeton valide le message est ignoré) : `début = maintenant − duree_ms` daté avec
+  **l'horloge du serveur** (celle du journal ; précision ≈ latence réseau) → événement `enregistrement_debut` (ou
+  `enregistrement_fin`) dans le journal de la présentation active. Un même début renvoyé après une reconnexion du pont
+  (à moins de 2 s) n'est pas dupliqué. Réponse : `{"type": "enregistrement", "ok", "actif", "debut", "seance", "presentation"}`.
+- **Copie figée** : au début, `slides.html`, `quiz.json`, `presentation.json` et `medias/` sont copiés dans
+  `presentations/<slug>/seances/<AAAA-MM-JJ_HHMMSS>/` (+ `seance.json` : `{presentation, id, debut_enregistrement}`),
+  une seule fois par début. Hors git (`.gitignore`) ; non copiée quand on duplique une présentation.
+- **Routes** (jeton) : `GET /api/presentations/{slug}/seances` → `[{id, debut_enregistrement, taille}]` (plus récente d'abord) ;
+  `GET /api/presentations/{slug}/seances/{id}.zip` → la copie figée en zip (relue par la post-production du PC 2).
