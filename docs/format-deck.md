@@ -47,6 +47,7 @@ Règles :
 - Notes de l'orateur : `<aside class="notes">…</aside>` en dernier enfant de la section, HTML simple.
 - Enregistrement OBS (docs/seance.md) : `data-obs="demarrer"` ou `data-obs="arreter"` sur la `<section>` (libre, flux ou quiz). À l'arrivée sur la diapositive, le serveur diffuse `{"type":"obs","action":"StartRecord"|"StopRecord","h":n}` sur `/ws/quiz`, une fois par arrivée (pas à chaque fragment) ; le pont `obs/obs_quiz_bridge.py` exécute l'action. Éditeur : champ « OBS » du panneau de la diapositive.
 - Police : `font-family` inline si nécessaire ; sinon celle du thème.
+- Zone caméra (docs/zone-camera.md) : la vignette OBS est incrustée dans un coin de la scène (défaut 300 × 300 en bas à droite, marge 20 : zone réservée `x ≥ 1600, y ≥ 760`). Aucun `.el` important ne doit y déborder : `tools/reserver_camera.py` réagence les sections de quiz à la source, l'éditeur affiche la zone (calque « Caméra », contour orange sur les éléments qui la chevauchent) et le rôle `obs` du runtime ajuste en secours, en mémoire, les éléments des sections libres (`deck/camera.js`). Le réglage vient de `camera` dans `presentation.json` (`{"largeur", "hauteur", "position": "bas-droite|bas-gauche|haut-droite|haut-gauche", "marge"}`, `null` pour désactiver), exposé résolu par `GET /api/presentations` et `/api/presentations/active`.
 
 ### 1.2 Section « flux » (reveal.js classique, issue de `pdf2reveal.py` ou écrite à la main)
 
@@ -54,7 +55,7 @@ Sans `class="libre"`. Contenu en flux : `h1/h2`, `p`, `ul`, `img`, `iframe`. L'�
 
 ### 1.3 Diapositive de quiz
 
-`<section data-quiz="q1" data-id="s7"></section>` : le runtime y construit question + options statiques, QR code et résultats (voir `quiz-deck.js`). Une section libre peut aussi contenir un `.el resultats` ou `.el classement` pour une mise en page personnalisée ; dans ce cas elle porte aussi `data-quiz="q1"` pour que la télécommande affiche le bloc d'administration.
+`<section data-quiz="q1" data-id="s7"></section>` : le runtime y construit question + options statiques, QR code et résultats (voir `quiz-deck.js`) ; la colonne des résultats est raccourcie (`height: calc(100% - n px)`, le « padding-bottom » de docs/zone-camera.md) de la hauteur de la zone caméra qui dépasse dans la grille (idem pour l'iframe d'un classement en section de flux). Une section libre peut aussi contenir un `.el resultats` ou `.el classement` pour une mise en page personnalisée ; dans ce cas elle porte aussi `data-quiz="q1"` pour que la télécommande affiche le bloc d'administration.
 
 ## 2. Médias
 
@@ -83,6 +84,7 @@ Liste de questions. Champs communs : `id` (unique, `[a-z0-9_-]+`), `type`, `ques
 
 | Méthode | Chemin | Rôle |
 | --- | --- | --- |
+| GET | `/api/presentations`, `/api/presentations/active` | liste / présentation active, avec `camera` résolue (docs/presentations.md, docs/zone-camera.md) — public |
 | GET | `/api/deck/slides` | contenu de `slides.html` (texte) — public |
 | PUT | `/api/deck/slides?token=` | corps `{ "html": "…" }` ; écrit `slides.html`, sauvegarde l'ancien dans `presentations/<slug>/sauvegardes/slides-<horodatage>.html` ; `?prez=<slug>` vise une présentation donnée (défaut : l'active) |
 | GET | `/api/deck/sauvegardes?token=` | liste des sauvegardes |

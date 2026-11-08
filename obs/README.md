@@ -18,10 +18,12 @@ Le deck est chargé une seule fois au démarrage d'OBS et reste synchronisé par
 | Scène | Composition | Durée par passage |
 | --- | --- | --- |
 | `Intervenant` | DSLR plein cadre | 45 s |
-| `Diapositives + vignette` | Deck plein écran, DSLR en vignette 25 % (480×270) en bas à gauche, marge 40 px | 120 s |
+| `Diapositives + vignette` | Deck plein écran, DSLR en vignette **300 × 300 en bas à droite** (recadrée au carré, calée dans le coin) | 120 s |
 | `Amphithéâtre` | Webcam plein cadre | 15 s |
 
 Vignette de secours : une scène `Diapositives + webcam` identique à la deuxième avec la webcam en vignette, pour le cas où le DSLR surchauffe.
+
+La zone des diapositives sous la vignette (x ≥ 1600, y ≥ 760, soit la vignette plus 20 px de marge) est **réservée** : rien d'important ne s'y trouve (docs/zone-camera.md). Les decks sont réagencés à la source par `tools/reserver_camera.py`, l'éditeur affiche la zone (calque « Caméra ») et le rôle `obs` du deck ajuste en secours les éléments qui déborderaient. Si la vignette change de taille ou de coin dans OBS, régler `camera` dans `presentation.json` (`{"largeur": 300, "hauteur": 300, "position": "bas-droite", "marge": 20}` ; `null` si la scène n'a pas de vignette).
 
 ## Advanced Scene Switcher (séquence en boucle)
 

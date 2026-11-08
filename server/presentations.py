@@ -1,6 +1,6 @@
 """Bibliothèque de présentations : un dossier par présentation, une seule active (voir docs/presentations.md).
 
-    presentations/<slug>/presentation.json   { titre, description, theme, cree, modifie, contact? }
+    presentations/<slug>/presentation.json   { titre, description, theme, cree, modifie, contact?, camera? }
     presentations/<slug>/slides.html         fragment HTML du deck (docs/format-deck.md)
     presentations/<slug>/quiz.json           questions du quiz
     presentations/<slug>/medias/             images, Lottie, vidéos
@@ -44,6 +44,36 @@ def normaliser_contact(valeur) -> dict:
     """Contact de la présentation (docs/seance.md, C) : {nom, fonction, courriel, linkedin}, chaînes vides par défaut."""
     valeur = valeur if isinstance(valeur, dict) else {}
     return {cle: str(valeur.get(cle) or "").strip() for cle in CLES_CONTACT}
+
+
+# Zone réservée à la vignette caméra d'OBS (docs/zone-camera.md) : défaut 300 × 300 en bas à droite, marge 20.
+CAMERA_DEFAUT = {"largeur": 300, "hauteur": 300, "position": "bas-droite", "marge": 20}
+POSITIONS_CAMERA = ("bas-droite", "bas-gauche", "haut-droite", "haut-gauche")
+_ABSENT = object()
+
+
+def _entier_positif(valeur, defaut: int, minimum: int = 1) -> int:
+    try:
+        n = int(round(float(valeur)))
+    except (TypeError, ValueError):
+        return defaut
+    return n if n >= minimum else defaut
+
+
+def normaliser_camera(valeur=_ABSENT) -> dict | None:
+    """`camera` de presentation.json, valeurs résolues : clé absente ou invalide → défaut ; `null` → None (désactivée) ;
+    dict → chaque champ validé séparément (position inconnue → défaut)."""
+    if valeur is None:
+        return None
+    if not isinstance(valeur, dict):
+        return dict(CAMERA_DEFAUT)
+    position = valeur.get("position")
+    return {
+        "largeur": _entier_positif(valeur.get("largeur"), CAMERA_DEFAUT["largeur"]),
+        "hauteur": _entier_positif(valeur.get("hauteur"), CAMERA_DEFAUT["hauteur"]),
+        "position": position if position in POSITIONS_CAMERA else CAMERA_DEFAUT["position"],
+        "marge": _entier_positif(valeur.get("marge"), CAMERA_DEFAUT["marge"], minimum=0),
+    }
 
 
 def _maintenant() -> str:
@@ -133,11 +163,14 @@ class Bibliotheque:
             "cree": str(meta.get("cree") or horodatage),
             "modifie": str(meta.get("modifie") or horodatage),
             "contact": normaliser_contact(meta.get("contact")),
+            "camera": normaliser_camera(meta.get("camera", _ABSENT)),
         }
 
     def ecrire_meta(self, slug: str, meta: dict) -> None:
         if "contact" in meta and not any(normaliser_contact(meta["contact"]).values()):
             meta = {k: v for k, v in meta.items() if k != "contact"}  # un contact vide n'est pas écrit
+        if "camera" in meta and meta["camera"] is not None and normaliser_camera(meta["camera"]) == CAMERA_DEFAUT:
+            meta = {k: v for k, v in meta.items() if k != "camera"}  # la caméra par défaut n'est pas écrite (null et réglages explicites le sont)
         (self.exiger(slug) / "presentation.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def toucher(self, slug: str) -> None:

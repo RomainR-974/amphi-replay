@@ -76,6 +76,7 @@
       <button data-ajout="qr">QR code</button>
       <span class="espace"></span>
       <label class="case"><input type="checkbox" id="c-grille"> Grille</label>
+      <label class="case" title="Zone réservée à la vignette caméra d'OBS (docs/zone-camera.md)"><input type="checkbox" id="c-camera" checked> Caméra</label>
     </div>
     <div id="zone-scene">
       <div id="regle-h" class="regle"></div>
@@ -84,6 +85,7 @@
         <div id="scene">
           <div id="rendu" class="reveal"></div>
           <div id="grille" hidden></div>
+          <div id="zone-camera" hidden></div>
           <div id="calque"></div>
           <div id="selection" hidden>
             <div class="poignee" data-p="nw"></div><div class="poignee" data-p="n"></div><div class="poignee" data-p="ne"></div>
@@ -149,6 +151,7 @@
 </dialog>
 
 <div id="sonde" hidden></div>
+<script src="camera.js"></script>
 <script src="editeur.js"></script>
 </body>
 </html>

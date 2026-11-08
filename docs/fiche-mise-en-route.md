@@ -10,7 +10,7 @@
 2. **PC 2** sur secteur, connecté au hotspot. Brancher boîtier HDMI-USB (DSLR) et webcam. Lancer OBS. Vérifier les trois sources, piste audio 2 = DSLR.
 3. **DSLR** sur secteur ou fausse batterie, sortie HDMI propre, autofocus continu, carte SD vide → enregistrement interne lancé en parallèle.
 4. **PC 1** sur secteur, connecté au hotspot, HDMI vers le vidéoprojecteur, mode « dupliquer » (un seul écran). Navigateur plein écran sur `https://<domaine>/deck/?role=scene` (F11).
-5. PC 2 : source Navigateur `https://<domaine>/deck/?role=obs` chargée, scène `Intervenant` affichée. Lancer `obs_quiz_bridge.py` (facultatif).
+5. PC 2 : source Navigateur `https://<domaine>/deck/?role=obs` chargée, scène `Intervenant` affichée ; sur `Diapositives + vignette`, vérifier que la vignette DSLR est bien **en bas à droite, 300 × 300** (zone laissée libre sur les diapositives). Lancer `obs_quiz_bridge.py` (facultatif).
 6. Téléphone : ouvrir `https://<domaine>/remote?token=…`. Vérifier les **trois voyants verts** (serveur, scene, obs). Avancer d'une diapositive et revenir : les deux PC suivent.
 7. Lavalier au col, enregistreur du téléphone en WAV 48 kHz mono. Tester 10 s, réécouter.
 8. Dernière vérification : `https://<domaine>/sante` depuis le téléphone, `https://<domaine>/q` depuis un second téléphone.

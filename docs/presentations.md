@@ -7,7 +7,8 @@ Plusieurs présentations coexistent ; une seule est **active** (celle que voient
 ```
 presentations/
   iag-v1/                 ← slug : [a-z0-9-]{1,40}
-    presentation.json     ← { "titre": "…", "description": "…", "theme": "" | "dsfr", "cree": "2026-11-08T…", "modifie": "…" }
+    presentation.json     ← { "titre": "…", "description": "…", "theme": "" | "dsfr", "cree": "2026-11-08T…", "modifie": "…",
+                              "camera": { "largeur": 300, "hauteur": 300, "position": "bas-droite", "marge": 20 } }  (optionnel, docs/zone-camera.md ; null = pas de vignette)
     slides.html           ← format docs/format-deck.md
     quiz.json             ← questions (format section 3)
     medias/               ← images, JSON Lottie, vidéos

@@ -24,7 +24,7 @@ def test_liste_et_active(client):
     p = liste[0]
     assert p["titre"] == "Présentation de démonstration" and p["active"] is True
     assert p["diapositives"] == 2 and p["questions"] == 12 and p["theme"] == ""
-    assert client.get("/api/presentations/active").json() == {"slug": "demo", "titre": "Présentation de démonstration", "theme": ""}
+    assert client.get("/api/presentations/active").json() == {"slug": "demo", "titre": "Présentation de démonstration", "theme": "", "camera": {"largeur": 300, "hauteur": 300, "position": "bas-droite", "marge": 20}}
     assert client.get("/sante").json()["presentation"] == "demo"
 
 

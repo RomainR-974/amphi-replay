@@ -12,15 +12,30 @@
  *   [data-amphi="minuteur"]             compte à rebours démarré à l'affichage (ou au fragment).
  *   [data-amphi="video"]                vidéo lancée à l'affichage de la diapositive, jamais en autoplay HTML.
  *
+ * Zone caméra (docs/zone-camera.md) : sur les diapositives de quiz standard et le classement standard (section en flux),
+ * la colonne des résultats est raccourcie de la hauteur de la zone réservée qui dépasse dans la grille (le « padding-bottom »
+ * de la spécification, appliqué comme réduction de hauteur : les thèmes peignent la colonne en carte, un padding resterait
+ * visible sous la vignette), calculée à partir de `camera` (passée par index.html depuis /api/presentations/active ou la
+ * présentation prévisualisée).
+ *
  * Séquence questions-réponses (docs/questions.md) : sur l'événement `qr` d'AmphiSync, bandeau de la question en
  * cours en bas de l'écran ou indicateur discret en haut à droite ; rôles scene et obs seulement.
  */
 window.AmphiQuizDeck = (function () {
   let questions = {};
   let urlPublique = location.origin;
+  let camera; // réglage caméra de la présentation (undefined → défaut, null → désactivée)
 
-  /** `prez` : slug d'une présentation prévisualisée (ses questions, pas celles du quiz actif). */
-  async function preparer(racine, prez) {
+  /** `prez` : slug d'une présentation prévisualisée (ses questions, pas celles du quiz actif).
+   *  `cam` : `camera` de la présentation ; si elle n'est pas fournie, elle est relue sur l'API. */
+  async function preparer(racine, prez, cam) {
+    camera = cam;
+    if (camera === undefined) {
+      try {
+        if (prez) camera = ((await (await fetch('/api/presentations', { cache: 'no-store' })).json()).find(p => p.slug === prez) || {}).camera;
+        else camera = (await (await fetch('/api/presentations/active', { cache: 'no-store' })).json()).camera;
+      } catch (e) { camera = undefined; }
+    }
     try {
       const [rq, re] = await Promise.all([
         fetch('/api/quiz/questions' + (prez ? '?prez=' + encodeURIComponent(prez) : ''), { cache: 'no-store' }),
@@ -39,6 +54,34 @@ window.AmphiQuizDeck = (function () {
     });
     racine.querySelectorAll('section[data-quiz]:not(.libre)').forEach(construireQuiz);
     racine.querySelectorAll('[data-amphi]').forEach(construireElement);
+    reserverCameraStandard(racine);
+  }
+
+  // ----- Zone caméra sur les diapositives standard (docs/zone-camera.md) -------------------
+  const GRILLE_H = 920; // hauteur de .quiz-grille (theme.css), centrée verticalement par reveal dans la scène 1080
+  /** Hauteur de la zone réservée qui dépasse dans la grille (0 si la caméra est désactivée ou hors de la grille). */
+  function depassementCamera() {
+    if (!window.AmphiCamera) return { depasse: 0 };
+    const zone = AmphiCamera.zoneCamera(camera);
+    if (!zone) return { depasse: 0 };
+    const haut = (AmphiCamera.SCENE_H - GRILLE_H) / 2;
+    const depasse = zone.bas ? Math.max(0, haut + GRILLE_H - zone.y) : Math.max(0, zone.y + zone.h - haut);
+    return { depasse: Math.round(depasse), zone };
+  }
+  function reserverCameraStandard(racine) {
+    const { depasse, zone } = depassementCamera();
+    if (!depasse) return;
+    // Colonne des résultats (à droite) si la zone est à droite, colonne statique sinon ; l'espace libéré est noté sur
+    // l'élément (data-camera-depasse) pour les tests et le débogage.
+    const colonne = zone.droite ? '.quiz-grille > .quiz-resultats' : '.quiz-grille > .quiz-statique';
+    const raccourcir = el => {
+      el.style.height = 'calc(100% - ' + depasse + 'px)';
+      if (!zone.bas) el.style.marginTop = depasse + 'px';
+      el.dataset.cameraDepasse = depasse;
+    };
+    racine.querySelectorAll('section.quiz ' + colonne).forEach(raccourcir);
+    // Classement standard (section en flux portant un élément classement) : même règle sur son iframe.
+    racine.querySelectorAll('section:not(.libre) [data-amphi="classement"] iframe').forEach(raccourcir);
   }
 
   // ----- Diapositive de quiz standard ---------------------------------------------------------
@@ -230,5 +273,5 @@ window.AmphiQuizDeck = (function () {
   }
   function echap(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  return { preparer, surDiapositive, horsDiapositive, surFragment, appliquerQR, demarrerQR, get questions() { return questions; } };
+  return { preparer, surDiapositive, horsDiapositive, surFragment, appliquerQR, demarrerQR, depassementCamera, get questions() { return questions; }, get camera() { return camera; } };
 })();

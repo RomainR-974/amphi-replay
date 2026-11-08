@@ -15,6 +15,7 @@
 <script src="vendor/reveal/plugin/notes/notes.js"></script>
 <script src="vendor/lottie/lottie.min.js"></script>
 <script src="sync.js"></script>
+<script src="camera.js"></script>
 <script src="quiz-deck.js"></script>
 <script>
 (async () => {
@@ -25,7 +26,8 @@
   const params = new URLSearchParams(location.search);
   const prez = /^[a-z0-9-]{1,40}$/.test(params.get('prez') || '') ? params.get('prez') : null;
 
-  // Métadonnées de la présentation (titre, thème) : /api/presentations/active ou l'entrée de la présentation demandée.
+  // Métadonnées de la présentation (titre, thème, camera) : /api/presentations/active ou l'entrée de la présentation demandée.
+  let meta = {};
   async function metadonnees() {
     try {
       if (!prez) return await (await fetch('/api/presentations/active', { cache: 'no-store' })).json();
@@ -47,8 +49,6 @@
     document.head.appendChild(lien);
     await new Promise(r => { lien.onload = lien.onerror = r; });
   }
-  await appliquerTheme(await metadonnees());
-
   /** En prévisualisation, les médias relatifs (medias/…) sont ceux de la présentation demandée, pas de l'active. */
   function reecrireMedias(racine) {
     if (!prez) return;
@@ -62,13 +62,25 @@
   }
 
   async function charger() {
+    meta = await metadonnees();
+    await appliquerTheme(meta);
     // Le contenu du deck vit dans slides.html (PowerPoint converti, PDF converti ou éditeur).
     const html = await (await fetch(prez ? '/p/' + prez + '/slides.html' : 'slides.html', { cache: 'no-store' })).text();
     slides.innerHTML = html;
     reecrireMedias(slides);
     // Rôle obs : aucune transition, pour un rendu simultané avec le projecteur.
     if (role === 'obs') slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
-    await AmphiQuizDeck.preparer(slides, prez);
+    await AmphiQuizDeck.preparer(slides, prez, meta.camera);
+    // Rôle obs : zone réservée à la vignette caméra (docs/zone-camera.md), ajustée en mémoire, jamais réécrite dans le fichier.
+    if (role === 'obs') reserverCamera();
+  }
+  /** Secours au rendu OBS : les .el des sections libres qui chevauchent la zone caméra sont réagencés (deck/camera.js). */
+  function reserverCamera() {
+    const zone = AmphiCamera.zoneCamera(meta.camera); // undefined (API indisponible) → défaut ; null → désactivée
+    if (!zone) return;
+    slides.querySelectorAll('section.libre').forEach(s => {
+      AmphiCamera.reagencer(s, zone).forEach(a => console.info('zone caméra : ' + (s.dataset.id || '?') + ' · ' + a.id + ' (' + a.type + ') : ' + a.action));
+    });
   }
   await charger();
 
@@ -97,9 +109,9 @@
   // (tous les rôles, la miniature de la télécommande comprise ; à l'activation, on revient à la première diapositive).
   AmphiSync.on('recharger', async m => {
     const i = Reveal.getIndices();
-    await charger();
+    await charger(); // relit aussi les métadonnées (thème, caméra) et rejoue l'ajustement OBS
     Reveal.sync();
-    if (m && m.prez) { await appliquerTheme(await metadonnees()); Reveal.slide(0, 0, -1); }
+    if (m && m.prez) Reveal.slide(0, 0, -1);
     else Reveal.slide(i.h, i.v, i.f);
   });
   // Prévisualisation d'une présentation non active : pas de synchronisation avec la salle.

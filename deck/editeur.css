@@ -81,6 +81,14 @@ textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12p
 #scene { width: 1920px; height: 1080px; transform-origin: top left; transform: scale(var(--echelle)); position: relative; background: #fff; overflow: visible; background-size: cover; background-position: center; }
 #rendu { position: absolute; inset: 0; overflow: hidden; }
 #grille { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(to right, rgba(59,130,246,.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(59,130,246,.18) 1px, transparent 1px); background-size: 100px 100px; }
+/* Calque « Zone caméra OBS » (docs/zone-camera.md) : zone réservée en pointillés, vignette 🎥 dans le coin ; non sérialisé. */
+#zone-camera { position: absolute; pointer-events: none; box-sizing: border-box; border: 3px dashed var(--orange); background: rgba(245,158,11,.07); }
+#zone-camera .camera { position: absolute; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px;
+  border: 3px dashed var(--orange); background: rgba(245,158,11,.2); color: #92400e; font: 700 30px/1.2 system-ui, sans-serif; }
+/* Élément qui chevauche la zone caméra : contour orange (classe retirée à la sérialisation) */
+#rendu section.libre > .el.ed-chevauche { outline: 6px solid var(--orange); outline-offset: -3px; }
+#proprietes .alerte { background: rgba(245,158,11,.15); border: 1px solid var(--orange); color: #fbbf24; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+#liste-diapos .badge-camera { color: var(--orange); margin-left: 6px; cursor: help; }
 #calque { position: absolute; inset: 0; pointer-events: none; }
 #calque > div { position: absolute; pointer-events: auto; cursor: move; }
 

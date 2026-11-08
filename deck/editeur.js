@@ -95,6 +95,7 @@
     edition: null,     // élément en édition contenteditable
     echelle: 0.5,
     nomImport: null,
+    camera: undefined, // `camera` de la présentation (docs/zone-camera.md) : undefined → défaut, null → désactivée
   };
   const historique = { passe: [], futur: [] };
   const LIMITE_HISTORIQUE = 50;
@@ -166,7 +167,7 @@
   function sectionPropre(section) {
     const c = section.cloneNode(true);
     c.querySelectorAll('[contenteditable]').forEach(n => n.removeAttribute('contenteditable'));
-    c.querySelectorAll('.ed-cache').forEach(n => { n.classList.remove('ed-cache'); if (!n.className) n.removeAttribute('class'); });
+    c.querySelectorAll('.ed-cache, .ed-chevauche').forEach(n => { n.classList.remove('ed-cache', 'ed-chevauche'); if (!n.className) n.removeAttribute('class'); });
     c.querySelectorAll('[style]').forEach(compacterStyle);
     if (c.hasAttribute('style')) compacterStyle(c);
     return c;
@@ -227,6 +228,7 @@
       if (prez) meta = (await (await fetch('/api/presentations', { cache: 'no-store' })).json()).find(p => p.slug === prez) || null;
       else { meta = await (await fetch('/api/presentations/active', { cache: 'no-store' })).json(); prez = meta && meta.slug ? meta.slug : null; }
     } catch (e) { console.warn('présentation indisponible', e); }
+    etat.camera = meta ? meta.camera : undefined;
     if (prez) {
       const base = document.createElement('base');
       base.href = '/p/' + prez + '/';
@@ -344,7 +346,7 @@
       const li = h('li', { class: i === etat.courant ? 'courante' : '', draggable: 'true', 'data-index': i,
         onclick: () => { if (i !== etat.courant) { terminerEdition(true); etat.courant = i; etat.selection = null; rendreTout(); } } },
         h('div', { class: 'numero' }, String(i + 1)),
-        h('div', {}, vignette(s), h('div', { class: 'type' }, libelleSection(s))));
+        h('div', {}, vignette(s), h('div', { class: 'type' }, libelleSection(s), badgeCamera(s))));
       li.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.effectAllowed = 'move'; });
       li.addEventListener('dragover', e => { e.preventDefault(); li.classList.add('cible'); });
       li.addEventListener('dragleave', () => li.classList.remove('cible'));
@@ -376,7 +378,14 @@
     const ancien = li.querySelector('.vignette');
     if (ancien) ancien.replaceWith(vignette(etat.sections[i]));
     const type = li.querySelector('.type');
-    if (type) type.textContent = libelleSection(etat.sections[i]);
+    if (type) { type.textContent = libelleSection(etat.sections[i]); type.append(badgeCamera(etat.sections[i])); }
+  }
+  /** Badge « 🎥 n » : n éléments de la section chevauchent la zone caméra (calque activé). */
+  function badgeCamera(s) {
+    const zone = zoneCameraActive();
+    const n = zone && estLibre(s) ? AmphiCamera.elementsChevauchant(s, zone).length : 0;
+    if (!n) return null;
+    return h('span', { class: 'badge-camera', title: n + ' élément' + (n > 1 ? 's chevauchent' : ' chevauche') + ' la zone caméra OBS' }, '🎥 ' + n);
   }
   /** Rendu non vivant d'une section (pour les vignettes) ; les sections de quiz ont un aperçu généré. */
   function rendreApercu(s) {
@@ -411,8 +420,41 @@
     rafraichirCalque();
     rafraichirSelection();
   }
-  /** Calque transparent au-dessus des iframes et vidéos (sinon elles avalent la souris). */
+  // ---- Zone caméra OBS (docs/zone-camera.md) ----
+  /** Zone réservée si le calque est coché (case mémorisée) et la caméra de la présentation non désactivée. */
+  function zoneCameraActive() {
+    if (!window.AmphiCamera || !$('#c-camera').checked) return null;
+    return AmphiCamera.zoneCamera(etat.camera);
+  }
+  /** Rectangle en pointillés de la zone réservée, vignette 🎥 dans le coin ; hors DOM des sections (jamais sérialisé). */
+  function rendreZoneCamera() {
+    const bloc = $('#zone-camera');
+    const zone = zoneCameraActive();
+    const s = sectionCourante();
+    if (!zone || !estLibre(s)) { bloc.hidden = true; return; }
+    bloc.hidden = false;
+    Object.assign(bloc.style, { left: px(zone.x), top: px(zone.y), width: px(zone.l), height: px(zone.h) });
+    bloc.textContent = '';
+    const c = zone.camera;
+    const cam = h('div', { class: 'camera' }, '🎥 caméra ' + c.largeur + '×' + c.hauteur);
+    Object.assign(cam.style, { left: px(zone.droite ? zone.l - c.largeur : 0), top: px(zone.bas ? zone.h - c.hauteur : 0), width: px(c.largeur), height: px(c.hauteur) });
+    bloc.append(cam);
+  }
+  /** Contour orange (classe ed-chevauche, retirée à la sérialisation) sur les éléments qui chevauchent la zone ; alerte du panneau. */
+  function marquerChevauchements() {
+    const s = sectionCourante();
+    if (!s) return;
+    const zone = zoneCameraActive();
+    const touches = new Set(zone && estLibre(s) ? AmphiCamera.elementsChevauchant(s, zone) : []);
+    Array.from(s.children).forEach(el => { if (el.classList.contains('el')) el.classList.toggle('ed-chevauche', touches.has(el)); });
+    const alerte = $('#alerte-camera');
+    if (alerte) alerte.hidden = !touches.has(elSelectionne());
+  }
+
+  /** Calque transparent au-dessus des iframes et vidéos (sinon elles avalent la souris) ; rafraîchit aussi la zone caméra. */
   function rafraichirCalque() {
+    rendreZoneCamera();
+    marquerChevauchements();
     const calque = $('#calque');
     calque.textContent = '';
     const s = sectionCourante();
@@ -848,6 +890,13 @@
     ajouterElement(b.dataset.ajout, b.dataset.variante);
   });
   $('#c-grille').addEventListener('change', e => { $('#grille').hidden = !e.target.checked; });
+  // Calque « Zone caméra OBS » : activé par défaut, choix mémorisé.
+  try { $('#c-camera').checked = localStorage.getItem('editeur.camera') !== '0'; } catch (e) { /* stockage indisponible */ }
+  $('#c-camera').addEventListener('change', e => {
+    try { localStorage.setItem('editeur.camera', e.target.checked ? '1' : '0'); } catch (err) { /* stockage indisponible */ }
+    rafraichirCalque();
+    rendreListe();
+  });
 
   // Menus déroulants génériques
   function fermerMenus() { $$('.menu.ouvert').forEach(m => m.classList.remove('ouvert')); }
@@ -1063,6 +1112,7 @@
     const st = el.style;
     const blocs = [];
     blocs.push(h('h3', {}, 'Élément ' + type + ' · ' + el.dataset.id));
+    blocs.push(h('div', { class: 'alerte', id: 'alerte-camera', title: 'chevauche la zone caméra', hidden: !el.classList.contains('ed-chevauche') }, '🎥 Chevauche la zone caméra OBS (bas à droite) : déplacez ou réduisez l\'élément'));
     blocs.push(h('div', { class: 'boutons actions' },
       h('button', { onclick: dupliquerElement, title: 'Ctrl+D' }, 'Dupliquer'),
       h('button', { class: 'danger', onclick: supprimerElement, title: 'Suppr' }, 'Supprimer'),

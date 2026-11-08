@@ -460,9 +460,9 @@ async def presentations_lister() -> list[dict]:
 async def presentations_active() -> dict:
     actif = biblio.active()
     if not actif:
-        return {"slug": None, "titre": "", "theme": ""}
+        return {"slug": None, "titre": "", "theme": "", "camera": None}
     meta = biblio.lire(actif)
-    return {"slug": actif, "titre": meta["titre"], "theme": meta["theme"]}
+    return {"slug": actif, "titre": meta["titre"], "theme": meta["theme"], "camera": meta["camera"]}
 
 
 @app.post("/api/presentations", dependencies=[Depends(verifier_jeton)])
