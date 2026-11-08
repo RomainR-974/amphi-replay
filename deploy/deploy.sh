@@ -13,6 +13,11 @@ chown -R amphi:amphi "$DEST"
 cp "$DEST/deploy/amphi-replay.service" /etc/systemd/system/amphi-replay.service
 systemctl daemon-reload
 systemctl restart amphi-replay
-sleep 1
-systemctl --no-pager --lines=5 status amphi-replay
-curl -fsS http://127.0.0.1:8000/sante && echo
+# Attendre que uvicorn écoute (jusqu'à 15 s) avant de vérifier.
+for i in $(seq 1 15); do
+  if curl -fsS http://127.0.0.1:8000/sante 2>/dev/null; then echo; echo "== service opérationnel"; exit 0; fi
+  sleep 1
+done
+echo "!! le service ne répond pas après 15 s :"
+systemctl --no-pager --lines=15 status amphi-replay
+exit 1
