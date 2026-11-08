@@ -59,7 +59,7 @@ html[data-role="remote"] .reveal { width: 100vw; height: 100vh; pointer-events: 
   display: flex; align-items: center; justify-content: center; }
 .reveal .teachable .tm-camera canvas { width: 100%; height: 100%; display: block; }
 .reveal .teachable .tm-attente { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; text-align: center; color: #3a3a3a; font-size: 26px; }
-.reveal .teachable .tm-camera svg { width: 72px; height: 72px; fill: none; stroke: #000091; stroke-width: 1.6; stroke-linejoin: round; }
+.reveal .teachable .tm-icone { width: 72px; height: 72px; fill: none; stroke: #000091; stroke-width: 1.6; stroke-linejoin: round; }
 .reveal .teachable .tm-absent { flex-direction: column; gap: 12px; color: #000091; font-weight: 700; }
 .reveal .teachable .tm-classes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .reveal .teachable .tm-classes li { display: grid; grid-template-columns: 150px 1fr 90px; align-items: center; gap: 14px; }
@@ -71,6 +71,53 @@ html[data-role="remote"] .reveal { width: 100vw; height: 100vh; pointer-events: 
 .reveal .teachable .tm-activer { margin-top: 8px; font: inherit; font-size: 26px; font-weight: 700; color: #fff; background: #000091;
   border: 0; border-radius: 8px; padding: 14px 28px; cursor: pointer; }
 .reveal .minuteur.lie { background: #e5e7eb; color: #374151; transition: background .3s, color .3s; }
+
+/* Atelier Teachable Machine (data-scenario="atelier") : 1 · Données (300 images par classe), 2 · Entraînement (usine), 3 · Test. */
+.reveal .el.teachable[data-scenario="atelier"] { gap: 14px; font-size: 24px; }
+.reveal .teachable [hidden] { display: none !important; } /* les blocs en flex ne doivent pas ignorer hidden */
+.reveal .teachable .tm-phases { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; }
+.reveal .teachable .tm-phases li { flex: 1; text-align: center; font-size: 20px; font-weight: 700; padding: 8px 4px; border-radius: 8px; background: #eeeef8; color: #6a6a8a; }
+.reveal .teachable .tm-phases li.actif { background: #000091; color: #fff; }
+.reveal .teachable .tm-scene { position: relative; flex: 0 0 auto; height: 400px; border-radius: 16px; overflow: hidden; background: #f0f0f6; }
+.reveal .teachable[data-scenario="atelier"] .tm-camera { width: 400px; height: 400px; margin: 0 auto; border-radius: 0; aspect-ratio: auto; }
+.reveal .teachable .tm-rec { position: absolute; top: 12px; left: 14px; background: #e1000f; color: #fff; font-size: 18px; font-weight: 700; padding: 4px 10px; border-radius: 6px; animation: tm-clignote 1s steps(2) infinite; }
+@keyframes tm-clignote { 50% { opacity: .35; } }
+.reveal .teachable .tm-consigne { font-size: 22px; color: #3a3a3a; text-align: center; min-height: 28px; }
+.reveal .teachable .tm-bacs { display: flex; flex-direction: column; gap: 10px; }
+.reveal .teachable .tm-bac { border: 2px solid #e5e5f0; border-radius: 12px; padding: 8px 12px; transition: border-color .2s, background .2s; }
+.reveal .teachable .tm-bac.actif { border-color: hsl(var(--teinte) 80% 45%); background: hsl(var(--teinte) 90% 97%); }
+.reveal .teachable .tm-bac-tete { display: flex; justify-content: space-between; align-items: baseline; font-size: 22px; }
+.reveal .teachable .tm-compte { font-size: 18px; color: #555; font-variant-numeric: tabular-nums; }
+.reveal .teachable .tm-bac.plein .tm-compte { color: #18753c; font-weight: 700; }
+.reveal .teachable .tm-jauge { height: 8px; border-radius: 4px; background: #e3e3fd; overflow: hidden; margin: 6px 0; }
+.reveal .teachable .tm-jauge > span { display: block; height: 100%; width: 0; background: #000091; }
+.reveal .teachable .tm-bac .tm-jauge > span { background: hsl(var(--teinte) 75% 45%); }
+.reveal .teachable .tm-vignettes { display: flex; flex-wrap: nowrap; gap: 3px; height: 30px; overflow: hidden; }
+.reveal .teachable .tm-vignette { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 4px; display: block; animation: tm-arrive .25s ease-out; }
+.reveal .teachable .tm-vignette-couleur { background: linear-gradient(135deg, hsl(calc(var(--teinte) + var(--nuance)) 70% 62%), hsl(var(--teinte) 70% 40%)); }
+@keyframes tm-arrive { from { transform: scale(.2); opacity: 0; } }
+.reveal .teachable .tm-usine { position: absolute; inset: 0; background: #f5f5fe; }
+.reveal .teachable .tm-usine svg { width: 100%; height: 100%; display: block; }
+.reveal .teachable .tm-usine-texte { font: 700 20px Marianne, sans-serif; fill: #ffffff; letter-spacing: .12em; }
+.reveal .teachable .tm-tuile { fill: hsl(var(--teinte) 70% 55%); opacity: 0; }
+.reveal .teachable .tm-usine.marche .tm-tuile { animation: tm-tapis 2.8s linear infinite; animation-delay: calc(var(--i) * -0.4s); }
+@keyframes tm-tapis { 0% { transform: translateX(0); opacity: 0; } 8% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateX(360px); opacity: 0; } }
+.reveal .teachable .tm-roue { transform-box: fill-box; transform-origin: center; stroke: #000091; stroke-width: 2; }
+.reveal .teachable .tm-usine.marche .tm-roue-a { animation: tm-tourne 3s linear infinite; }
+.reveal .teachable .tm-usine.marche .tm-roue-b { animation: tm-tourne 2s linear infinite reverse; }
+.reveal .teachable .tm-usine.marche .tm-roue-c { animation: tm-tourne 1.6s linear infinite reverse; }
+@keyframes tm-tourne { to { transform: rotate(360deg); } }
+.reveal .teachable .tm-fumee { fill: #b9b9c8; opacity: 0; }
+.reveal .teachable .tm-usine.marche .tm-fumee { animation: tm-fumee 2.4s ease-out infinite; animation-delay: calc(var(--i) * 0.8s); transform-box: fill-box; transform-origin: center; }
+@keyframes tm-fumee { 0% { transform: translate(0, 0) scale(.6); opacity: .8; } 100% { transform: translate(26px, -60px) scale(2); opacity: 0; } }
+.reveal .teachable .tm-progression { position: absolute; left: 20px; right: 20px; bottom: 14px; }
+.reveal .teachable .tm-progression .tm-jauge { height: 12px; border-radius: 6px; }
+.reveal .teachable .tm-info { font-size: 18px; color: #161616; font-variant-numeric: tabular-nums; }
+.reveal .teachable .tm-pret { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); background: #18753c; color: #fff; font-weight: 700;
+  font-size: 24px; padding: 8px 18px; border-radius: 10px; animation: tm-arrive .4s ease-out; }
+.reveal .teachable[data-scenario="atelier"] .tm-classes { gap: 12px; margin-top: 6px; }
+.reveal .teachable[data-scenario="atelier"] .tm-classes li { grid-template-columns: 130px 1fr 80px; font-size: 26px; }
+
 .reveal .minuteur.lie.actif { background: #111827; color: #f9fafb; }
 .reveal .minuteur.lie.fini { background: #166534; color: #fff; animation: none; }
 

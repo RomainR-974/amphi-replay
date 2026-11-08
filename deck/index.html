@@ -107,7 +107,8 @@
     if (e.previousSlide) { AmphiQuizDeck.horsDiapositive(e.previousSlide); AmphiTeachable.horsDiapositive(e.previousSlide); }
     AmphiQuizDeck.surDiapositive(e.currentSlide); AmphiTeachable.surDiapositive(e.currentSlide);
   });
-  Reveal.on('fragmentshown', e => AmphiQuizDeck.surFragment(e.fragment));
+  Reveal.on('fragmentshown', e => { AmphiQuizDeck.surFragment(e.fragment); AmphiTeachable.surFragment(e.fragment); });
+  Reveal.on('fragmenthidden', e => AmphiTeachable.surFragment(e.fragment));
   Reveal.on('ready', e => { AmphiQuizDeck.surDiapositive(e.currentSlide); AmphiTeachable.surDiapositive(e.currentSlide); });
 
   // L'éditeur a enregistré ou une autre présentation a été activée : recharger le contenu sans perdre la position
