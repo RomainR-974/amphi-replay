@@ -13,3 +13,4 @@ presentations/*/replays/
 *.m4a
 replay_*.json
 .env
+presentations/**/*.github

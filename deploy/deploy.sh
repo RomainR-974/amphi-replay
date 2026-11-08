@@ -5,7 +5,26 @@ set -euo pipefail
 DEST=/opt/amphi-replay
 cd "$DEST"
 git config --global --add safe.directory "$DEST" >/dev/null 2>&1 || true
-git pull --ff-only
+
+# Les présentations éditées sur le serveur (éditeur, import, questions) sont la référence : on les garde.
+# Pour chaque fichier de presentations/ modifié ici, la version de GitHub est mise de côté en <fichier>.github
+# (pour comparaison) et la version du serveur est conservée telle quelle.
+MODIFIES="$(git diff --name-only -- presentations)"
+if [ -n "$MODIFIES" ]; then
+  echo "== présentations modifiées sur le serveur, conservées :"
+  echo "$MODIFIES" | sed 's/^/   /'
+  SAUVE="$(mktemp -d)"
+  while IFS= read -r f; do mkdir -p "$SAUVE/$(dirname "$f")"; cp -p "$f" "$SAUVE/$f"; done <<< "$MODIFIES"
+  git checkout -q -- presentations
+  git pull --ff-only
+  while IFS= read -r f; do
+    if [ -f "$f" ] && ! cmp -s "$f" "$SAUVE/$f"; then cp -p "$f" "$f.github"; echo "   version GitHub de $f gardée dans $f.github"; fi
+    mkdir -p "$(dirname "$f")"; cp -p "$SAUVE/$f" "$f"
+  done <<< "$MODIFIES"
+  rm -rf "$SAUVE"
+else
+  git pull --ff-only
+fi
 # Import PowerPoint depuis la page Présentations : LibreOffice Impress (rastérisation des objets complexes).
 if ! command -v soffice >/dev/null; then
   echo "== installation de LibreOffice Impress (import PowerPoint)"
