@@ -1,0 +1,19 @@
+# Fins de ligne : LF partout (les scripts bash cassent avec CRLF sous Git Bash / WSL), sauf PowerShell.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff2 binary
+*.mp4 binary
+*.pptx binary
+*.pdf binary

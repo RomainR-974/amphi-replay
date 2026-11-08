@@ -201,9 +201,11 @@
       etatPage.seances = corps.seances || [];
       etatPage.titres = corps.titres || [];
       etatPage.seance = etatPage.seances.length ? 0 : null;
+      etatPage.messageSeances = etatPage.seances.length ? '' : 'Aucune séance dans le journal de cette présentation : le serveur journalise les changements de diapositive depuis la télécommande ; jouez quelques diapositives puis rechargez.';
       etat(etatPage.seances.length ? etatPage.seances.length + ' séance(s) trouvée(s)' : 'aucune séance dans le journal de cette présentation', etatPage.seances.length ? 'ok' : 'erreur');
     } catch (e) {
       etatPage.seances = []; etatPage.seance = null;
+      etatPage.messageSeances = 'Erreur : ' + e.message;
       etat('erreur : ' + e.message, 'erreur');
     } finally {
       $('#b-seances').disabled = false;
@@ -219,7 +221,8 @@
     const vide = $('#seances-vide');
     vide.hidden = etatPage.seances.length > 0;
     if (!etatPage.seances.length) {
-      vide.textContent = etatPage.titres.length || etatPage.seances.length ? 'Aucune séance.' : 'Choisir une présentation puis cliquer sur « Charger les séances ».';
+      vide.textContent = etatPage.messageSeances || (etatPage.titres.length || etatPage.seances.length ? 'Aucune séance.' : 'Choisir une présentation puis cliquer sur « Charger les séances ».');
+      vide.classList.toggle('erreur', !!etatPage.messageSeances);
       return;
     }
     etatPage.seances.forEach((s, i) => {

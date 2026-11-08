@@ -111,3 +111,5 @@ pre.journal { background: #15151a; border: 1px solid var(--bord); border-radius:
 .extraits li span { color: var(--sourd); font-size: 12px; white-space: nowrap; }
 .meta { color: var(--sourd); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 textarea.youtube { width: 100%; min-height: 120px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; background: #15151a; border: 1px solid var(--bord); border-radius: 6px; padding: 8px; resize: vertical; color: var(--texte); }
+
+#seances-vide.erreur { color: #f87171; font-weight: 600; }
