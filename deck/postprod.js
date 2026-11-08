@@ -126,8 +126,10 @@
     }
     if (etatPage.video && !etatPage.captations.some(f => f.nom === etatPage.video)) etatPage.video = null;
     if (etatPage.audio && !etatPage.captations.some(f => f.nom === etatPage.audio)) etatPage.audio = null;
-    // Préselection : la vidéo et l'audio les plus récents.
-    if (!etatPage.video) { const v = etatPage.captations.find(f => f.genre === 'video'); if (v) etatPage.video = v.nom; }
+    // Préselection : la vidéo et l'audio les plus récents ; la vidéo principale plutôt que le fichier caméra seule du
+    // replay interactif (« <date> camera.mkv », Source Record, docs/replay-interactif.md).
+    const camera = f => / camera\.[a-z0-9]+$/i.test(f.nom);
+    if (!etatPage.video) { const v = etatPage.captations.find(f => f.genre === 'video' && !camera(f)) || etatPage.captations.find(f => f.genre === 'video'); if (v) etatPage.video = v.nom; }
     if (!etatPage.audio && !$('#sans-audio').checked) { const a = etatPage.captations.find(f => f.genre === 'audio'); if (a) etatPage.audio = a.nom; }
     rendreCaptations();
     rendreApercu();
@@ -406,14 +408,20 @@
       $('#dossier-captations').textContent = conf.captations;
       $('#dossier-captations').title = 'Dossier de captations (AMPHI_CAPTATIONS)';
       if (conf.seance_url) $('#serveur').value = conf.seance_url;
-      $('#jeton-serveur').value = token;
+      $('#jeton-serveur').value = conf.seance_jeton || token;
       if (!conf.ffmpeg) {
         etat('ffmpeg introuvable sur ce PC : installer ffmpeg (https://ffmpeg.org) et l\'ajouter au PATH, puis relancer le serveur', 'erreur');
         $('#b-assembler').disabled = true;
         $('#lancer-aide').textContent = 'ffmpeg / ffprobe absents : l\'assemblage est impossible.';
       } else etat('');
       await chargerPresentations();
+      // ?auto=1 (bouton « Fini » du lanceur de séance) : sans son de téléphone, pas de recalage ; séances chargées d'office.
+      if (params.get('auto') === '1') {
+        etatPage.captations = await api('/api/postprod/captations').catch(() => []);
+        if (!etatPage.captations.some(f => f.genre === 'audio')) $('#sans-audio').checked = true;
+      }
       await chargerCaptations();
+      if (params.get('auto') === '1' && $('#serveur').value) await chargerSeances();
     } catch (e) {
       etat('erreur : ' + e.message, 'erreur');
     }

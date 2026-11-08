@@ -783,7 +783,8 @@ class DemandeAssemblage(BaseModel):
 @app.get("/api/postprod/configuration", dependencies=[Depends(verifier_jeton)])
 async def postprod_configuration() -> dict:
     """Ce que la page de post-production préremplit : dossier de captations, URL du serveur de séance, présence de ffmpeg."""
-    return {"captations": str(config.DOSSIER_CAPTATIONS), "seance_url": config.SEANCE_URL, "ffmpeg": outils_presents()}
+    return {"captations": str(config.DOSSIER_CAPTATIONS), "seance_url": config.SEANCE_URL, "seance_jeton": config.SEANCE_JETON,
+            "ffmpeg": outils_presents()}
 
 
 @app.get("/api/postprod/captations", dependencies=[Depends(verifier_jeton)])

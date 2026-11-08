@@ -53,3 +53,5 @@ DOSSIER_CAPTATIONS: Path = Path(os.environ.get("AMPHI_CAPTATIONS") or _captation
 
 # URL du serveur de la séance (VPS) où lire le journal des diapositives ; vide = le journal local.
 SEANCE_URL: str = os.environ.get("AMPHI_SEANCE_URL", "").rstrip("/")
+# Jeton du serveur de séance, pour préremplir la page de post-production locale (bouton « Fini » du lanceur) ; jamais dans une URL.
+SEANCE_JETON: str = os.environ.get("AMPHI_SEANCE_JETON", "")

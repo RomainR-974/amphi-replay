@@ -84,6 +84,43 @@ def obs_lance() -> bool:
     return "obs64.exe" in sortie.lower()
 
 
+PORT_POSTPROD = 8000
+
+
+async def arreter_enregistrement(mdp: str) -> bool | None:
+    """StopRecord si OBS enregistre ; attend la fermeture du fichier. True = arrêté, False = rien à arrêter, None = échec."""
+    obs = Obs(f"ws://{OBS_HOTE}:{OBS_PORT}", mdp)
+    try:
+        await obs.connecter()
+        if not await obs.enregistrement_actif():
+            return False
+        await obs.requete("StopRecord")
+        for _ in range(40):  # le fichier est finalisé quand OBS ne signale plus d'enregistrement actif
+            await asyncio.sleep(0.25)
+            if not await obs.enregistrement_actif():
+                return True
+        return True
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        if obs.ws is not None:
+            await obs.ws.close()
+
+
+def ouvrir_postprod(serveur: str, jeton: str, prez: str) -> None:
+    """Post-production locale (deploy/postprod.ps1) préremplie : serveur de séance, son jeton (par l'environnement, jamais
+    dans l'URL), présentation active, séances chargées d'office. Déjà lancée → la page est simplement rouverte."""
+    url = f"http://127.0.0.1:{PORT_POSTPROD}/deck/postprod.html?token=local" + (f"&prez={prez}" if prez else "") + "&auto=1"
+    if port_ouvert("127.0.0.1", PORT_POSTPROD):
+        webbrowser.open(url)
+        return
+    env = {**os.environ, "AMPHI_SEANCE_JETON": jeton, "AMPHI_JETON": "local"}
+    commande = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(RACINE / "deploy" / "postprod.ps1"),
+                "--seance", serveur, "--auto"] + (["--prez", prez] if prez else [])
+    # Console visible : le journal du serveur local y défile ; la fermer arrête la post-production.
+    subprocess.Popen(commande, cwd=RACINE, env=env, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+
+
 def arreter_ponts_orphelins() -> None:
     """Arrête un pont resté d'un lancement précédent (sinon deux ponts piloteraient OBS)."""
     commande = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*.exe' -and "
@@ -170,6 +207,9 @@ class Lanceur:
 
         boutons = tk.Frame(cadre, bg=FOND, pady=8)
         boutons.pack(fill="x")
+        self.bouton_fini = tk.Button(boutons, text="✔ Fini", command=self.fini, font=("Segoe UI Semibold", 9), bg=VERT, fg="#ffffff",
+                                     relief="flat", activebackground="#1b8a3a", activeforeground="#ffffff", padx=8)
+        self.bouton_fini.pack(side="left", padx=(0, 10))
         for texte, action in (("Télécommande", self.ouvrir_remote), ("Journal", self.ouvrir_journal),
                               ("Relancer", self.relancer), ("Arrêter", self.quitter)):
             tk.Button(boutons, text=texte, command=action, font=petite, bg="#3c4043", fg=TEXTE, relief="flat",
@@ -185,6 +225,9 @@ class Lanceur:
         try:
             while True:
                 genre, cle, couleur, texte = self.evenements.get_nowait()
+                if genre == "bouton":
+                    self.bouton_fini.configure(text=texte, state="normal")
+                    continue
                 c, rond, label = (self.etapes if genre == "etape" else self.voyants)[cle]
                 c.itemconfigure(rond, fill=couleur)
                 label.configure(text=texte, fg=ROUGE if couleur == ROUGE else DISCRET)
@@ -198,6 +241,33 @@ class Lanceur:
     def ouvrir_remote(self) -> None:
         self.remote_ouverte = True
         webbrowser.open(f"{self.serveur}/remote" + (f"?token={self.jeton}" if self.jeton else ""))
+
+    # ------------------------------------------------------------------ fin de séance
+
+    def fini(self) -> None:
+        """Fin de séance : arrête l'enregistrement OBS s'il tourne, puis ouvre la post-production locale préremplie."""
+        if not messagebox.askyesno("Séance terminée ?", "Terminer la séance ?\n\n• l'enregistrement OBS est arrêté s'il tourne encore ;\n"
+                                   "• la post-production s'ouvre sur ce PC, avec la présentation, la vidéo et la séance déjà choisies.\n\n"
+                                   "Le pont et la télécommande restent ouverts.", parent=self.fen):
+            return
+        self.bouton_fini.configure(state="disabled", text="… fin de séance")
+        threading.Thread(target=self._fini, daemon=True).start()
+
+    def _fini(self) -> None:
+        try:
+            if self.mdp and port_ouvert(OBS_HOTE, OBS_PORT):
+                arrete = asyncio.run(arreter_enregistrement(self.mdp))
+                self.voyant("obs", VERT if arrete is not None else ROUGE, "enregistrement arrêté" if arrete else ("rien à arrêter" if arrete is False else "arrêt impossible"))
+            prez = ""
+            try:
+                prez = http_json(self.serveur + "/api/presentations/active", 4).get("slug") or ""
+            except Exception:  # noqa: BLE001
+                pass
+            ouvrir_postprod(self.serveur, self.jeton, prez)
+            self.evenements.put(("bouton", "", "", "✔ Post-production ouverte"))
+        except Exception as e:  # noqa: BLE001
+            self.evenements.put(("bouton", "", "", "✔ Fini"))
+            self.fen.after(0, lambda: messagebox.showerror("Post-production", f"Impossible d'ouvrir la post-production : {e}", parent=self.fen))
 
     def ouvrir_journal(self) -> None:
         if JOURNAL.exists():

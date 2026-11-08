@@ -82,3 +82,16 @@ avertissement) → coupe-bas 80 Hz → égalisation (chaleur, moins de « boue �
 - Vidéo : image copiée sans réencodage, son en AAC 192 kb/s par `aac_mf` (Media Foundation, Windows, ≈ 5× plus rapide que
   l'encodeur `aac` de ffmpeg ; `aac` ailleurs). Sortie : `<dossier>/traite_<preset>/<nom>.mp4` (audio seul : `.wav` 48 kHz).
 - Mesuré sur une captation de 7 min 50 (PC 2) : 35 s, -16,7 LUFS, crête -1,7 dBFS (sans débruitage) ; ≈ 9 min pour 2 h.
+
+## 5. Bouton « Fini » de la fenêtre de lancement (PC 2)
+
+`tools/lanceur_seance.py`, bouton **✔ Fini** (après confirmation) : arrête l'enregistrement OBS s'il tourne encore
+(StopRecord, attente de la fermeture du fichier), puis ouvre la post-production locale préremplie :
+`deploy/postprod.ps1 --seance <serveur> --prez <présentation active> --auto`, dans une console visible (la fermer arrête
+le serveur local), avec `AMPHI_SEANCE_JETON` = jeton du serveur de séance (passé par l'environnement, jamais dans l'URL ;
+rendu à la page par `GET /api/postprod/configuration`, protégé par le jeton local). Si la post-production tourne déjà
+(port 8000), la page est seulement rouverte.
+
+Page `postprod.html?…&prez=<slug>&auto=1` : jeton du serveur de séance prérempli, séances chargées d'office (la plus
+récente choisie), vidéo principale présélectionnée (pas le fichier `… camera.mkv` du replay interactif), « pas de recalage
+audio » coché s'il n'y a aucun fichier audio dans le dossier de captations.
