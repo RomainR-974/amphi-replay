@@ -87,3 +87,38 @@ html[data-role="remote"] .reveal { width: 100vw; height: 100vh; pointer-events: 
 .qr-indicateur .qr-point { width: .7em; height: .7em; border-radius: 50%; background: #3b82f6; animation: qr-pulse 1.6s ease-in-out infinite; }
 @keyframes qr-pulse { 50% { opacity: .3; } }
 html[data-role="remote"] .qr-bandeau, html[data-role="remote"] .qr-indicateur { display: none; }
+
+/* Teachable Machine, data-mode="entrainement" (deck/teachable.js) : collecte (caméra + boutons + mosaïques),
+   usine animée pendant l'entraînement simulé, puis test (caméra + barres). */
+.reveal .el.teachable.tm-simulation { display: grid; grid-template-columns: 600px 1fr; gap: 40px; align-items: start; }
+.reveal .tm-simulation .tm-panneau { display: flex; flex-direction: column; gap: 22px; }
+.reveal .tm-simulation .tm-collecte { display: flex; flex-direction: column; gap: 18px; }
+.reveal .tm-simulation .tm-ligne { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: center; }
+.reveal .tm-simulation button { font: inherit; font-size: 26px; font-weight: 700; color: #fff; background: #000091; border: 0; border-radius: 4px;
+  padding: 18px 20px; cursor: pointer; text-align: left; }
+.reveal .tm-simulation .tm-prendre:hover { background: #1212ff; }
+.reveal .tm-simulation .tm-en-cours .tm-prendre { background: #e1000f; }
+.reveal .tm-simulation .tm-fait .tm-prendre { background: #18753c; }
+.reveal .tm-simulation .tm-fait .tm-prendre::after { content: " ✓"; }
+.reveal .tm-simulation .tm-images { display: flex; flex-direction: column; gap: 6px; }
+.reveal .tm-simulation .tm-images canvas { width: 100%; height: auto; aspect-ratio: 600 / 90; background: #f0f0f6; border-radius: 4px; display: block; }
+.reveal .tm-simulation .tm-compte { font-size: 20px; color: #666; font-variant-numeric: tabular-nums; }
+.reveal .tm-simulation .tm-entrainer { text-align: center; font-size: 30px; padding: 22px; background: #18753c; }
+.reveal .tm-simulation .tm-entrainer:disabled { background: #e5e5e5; color: #929292; cursor: default; }
+.reveal .tm-simulation .tm-usine { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.reveal .tm-simulation .tm-usine[hidden], .reveal .tm-simulation .tm-classes[hidden] { display: none; }
+.reveal .tm-simulation.tm-en-usine .tm-camera, .reveal .tm-simulation.tm-en-usine .tm-panneau, .reveal .tm-simulation.tm-teste .tm-panneau { display: none; }
+.reveal .tm-simulation.tm-teste .tm-classes { align-self: center; }
+.reveal .tm-usine-svg { width: 100%; max-height: 560px; overflow: visible; }
+.reveal .tm-etape { font-size: 30px; font-weight: 700; color: #000091; margin: 0; }
+.reveal .tm-progression { width: 80%; height: 22px; background: #e3e3fd; border-radius: 11px; overflow: hidden; }
+.reveal .tm-progression > span { display: block; height: 100%; width: 0; background: #000091; }
+.reveal .tm-roue { transform-box: fill-box; transform-origin: center; animation: tm-tourne 2.4s linear infinite; }
+.reveal .tm-roue.inverse { animation-direction: reverse; }
+@keyframes tm-tourne { from { transform: scale(.55) rotate(0deg); } to { transform: scale(.55) rotate(360deg); } }
+.reveal .tm-fumee { fill: #bdbdbd; opacity: 0; transform-box: fill-box; transform-origin: center; animation: tm-fumee 3s ease-out infinite; }
+.reveal .tm-fumee.f2 { animation-delay: 1s; }
+.reveal .tm-fumee.f3 { animation-delay: 2s; }
+@keyframes tm-fumee { 0% { transform: translate(0, 0) scale(.6); opacity: .9; } 100% { transform: translate(40px, -90px) scale(2.2); opacity: 0; } }
+.reveal .tm-tapis { animation: tm-tapis 1.6s linear infinite; }
+@keyframes tm-tapis { from { transform: translateX(0); } to { transform: translateX(60px); } }
