@@ -349,7 +349,6 @@
   // Rendu général
   // ======================================================================
   function rendreTout() {
-    rendreObsPlage();
     rendreListe();
     rendreScene();
     rendrePanneau();
@@ -418,39 +417,7 @@
     const texte = mots.replace(/\s+/g, ' ').replace(/\s+([,.])/g, '$1').trim() || libelleSection(s);
     return texte.length > 42 ? texte.slice(0, 41) + '…' : texte;
   }
-  function rendreObsPlage() {
-    const zone = $('#obs-plage');
-    if (!zone) return;
-    zone.textContent = '';
-    const debut = indexObs('demarrer'), fin = indexObs('arreter');
-    const liste = (action, valeur) => {
-      const sel = h('select', { 'aria-label': action === 'demarrer' ? 'Diapositive qui démarre l\'enregistrement' : 'Diapositive qui arrête l\'enregistrement', onchange: e => fixerObs(action, e.target.value) },
-        h('option', { value: '' }, action === 'demarrer' ? '— à la main (F9 dans OBS)' : '— à la main, ou fin de séance'),
-        etat.sections.map((s, i) => h('option', { value: String(i) }, (i + 1) + ' · ' + titreCourt(s))));
-      sel.value = valeur >= 0 ? String(valeur) : '';
-      return sel;
-    };
-    zone.append(h('div', { class: 'obs-titre' }, '⏺ Enregistrement OBS'),
-      h('label', {}, h('span', {}, 'démarre à'), liste('demarrer', debut)),
-      h('label', {}, h('span', {}, 's\'arrête à'), liste('arreter', fin)));
-    if (debut >= 0 && fin >= 0 && fin <= debut) zone.append(h('p', { class: 'obs-alerte' }, 'L\'arrêt est placé avant le démarrage : l\'enregistrement ne s\'arrêtera pas tout seul.'));
-    else if (debut >= 0) zone.append(h('p', { class: 'obs-resume' }, (fin >= 0 ? (fin - debut + 1) : etat.sections.length - debut) + ' diapositive' + ((fin >= 0 ? fin - debut + 1 : etat.sections.length - debut) > 1 ? 's' : '') + ' enregistrée' + ((fin >= 0 ? fin - debut + 1 : etat.sections.length - debut) > 1 ? 's' : '') + ' (bordure rouge dans la liste)'));
-  }
-  /** Une seule diapositive porte chaque action : pose data-obs sur `valeur` (index, ou '' pour aucune) et le retire ailleurs. */
-  function fixerObs(action, valeur) {
-    const cible = valeur === '' ? -1 : parseInt(valeur, 10);
-    terminerEdition(true);
-    etat.sections.forEach((s, i) => {
-      const doit = i === cible;
-      if ((s.dataset.obs === action) === doit) return;
-      historique.passe.push({ i, html: sectionPropre(s).outerHTML });
-      if (doit) s.dataset.obs = action; else delete s.dataset.obs;
-    });
-    while (historique.passe.length > LIMITE_HISTORIQUE) historique.passe.shift();
-    historique.futur = [];
-    marquer();
-    rendreTout();
-  }
+
   /** Badge « 🎥 n » : n éléments de la section chevauchent la zone caméra (calque activé). */
   function badgeCamera(s) {
     const zone = zoneCameraActive();
@@ -1434,7 +1401,7 @@
     return champSelect('OBS', () => s.dataset.obs || '', OBS_OPTIONS, v => {
       if (v) etat.sections.forEach(x => { if (x !== s && x.dataset.obs === v) delete x.dataset.obs; });  // une seule diapositive par action
       if (v) s.dataset.obs = v; else delete s.dataset.obs;
-      rendreObsPlage(); rendreListe();
+      rendreListe(); // bordure rouge et pastilles de la liste
     });
   }
   function blocsCommunsSection(s) {

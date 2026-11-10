@@ -208,13 +208,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   .barre-outils button { padding: 3px 6px; font-size: 12px; }
 }
 
-/* ---- Enregistrement OBS : plage de diapositives enregistrées (data-obs) ---- */
-.obs-plage { margin: 8px 8px 4px; padding: 8px 10px; border: 1px solid var(--bord); border-radius: 8px; background: var(--fond3); display: grid; gap: 6px; font-size: 12px; }
-.obs-plage .obs-titre { font-weight: 600; color: var(--rouge); }
-.obs-plage label { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 6px; color: var(--sourd); }
-.obs-plage select { min-width: 0; width: 100%; font-size: 12px; }
-.obs-plage p { margin: 0; color: var(--sourd); }
-.obs-plage .obs-alerte { color: var(--orange); }
+/* ---- Enregistrement OBS (data-obs) : diapositives enregistrées dans la liste ---- */
 #liste-diapos li.enregistree { box-shadow: inset 3px 0 0 var(--rouge); }
 #liste-diapos .badge-obs { margin-left: 6px; font-weight: 600; cursor: help; }
 #liste-diapos .badge-obs.debut { color: var(--rouge); }
