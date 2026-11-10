@@ -3,6 +3,7 @@
     "id": "l1_humeur",
     "type": "qcm",
     "question": "Comment arrivez-vous à cette séance ?",
+    "chrono": 0,
     "options": [
       "😴 Digestion difficile",
       "🙂 Ça va",
@@ -14,6 +15,7 @@
     "id": "l2_usages",
     "type": "multi",
     "question": "Vous utilisez une IA générative… (plusieurs choix possibles)",
+    "chrono": 0,
     "options": [
       "Pour la vie perso",
       "Pour vos études",
@@ -25,6 +27,7 @@
     "id": "l3_a_quoi",
     "type": "nuage",
     "question": "En un ou deux mots : à quoi vous sert l’IA ?",
+    "chrono": 0,
     "max_mots": 3,
     "max_longueur": 25
   },
@@ -32,6 +35,7 @@
     "id": "l4_donnees",
     "type": "multi",
     "question": "Avez-vous déjà copié dans une IA… (cochez tout ce que vous avez déjà fait)",
+    "chrono": 0,
     "options": [
       "Un cours ou un diaporama d’un intervenant",
       "Un sujet d’examen ou un corrigé",
@@ -44,13 +48,14 @@
     "id": "l5_defi",
     "type": "texte_libre",
     "question": "Complétez : « Dans un monde où les robots pensent, les humains… »",
-    "max_longueur": 140,
-    "chrono": 120
+    "chrono": 120,
+    "max_longueur": 140
   },
   {
     "id": "l6_biais",
     "type": "nuage",
     "question": "Quels biais voyez-vous dans ces images ? (genre, âge, origine, tenue, décor…)",
+    "chrono": 0,
     "max_mots": 3,
     "max_longueur": 25
   },
@@ -58,6 +63,7 @@
     "id": "l7_delegation",
     "type": "multi",
     "question": "Quelles tâches peut-on déléguer à l’IA ? (cochez celles que vous délégueriez)",
+    "chrono": 0,
     "options": [
       "1 · Orthographe du mémoire",
       "2 · Mots-clés de recherche",
@@ -68,39 +74,25 @@
     ]
   },
   {
-    "id": "l8_a",
-    "type": "qcm",
-    "question": "Extrait A : écrit par un humain ou généré par une IA ?",
+    "id": "l8_humain_ia",
+    "type": "grille",
+    "question": "Humain ou IA ? Saurez-vous faire la différence ?",
+    "chrono": 45,
     "options": [
-      "✍️ Écrit par un humain",
-      "🤖 Généré par une IA"
+      "✍️ Humain",
+      "🤖 IA"
     ],
-    "chrono": 20
-  },
-  {
-    "id": "l8_b",
-    "type": "qcm",
-    "question": "Extrait B : écrit par un humain ou généré par une IA ?",
-    "options": [
-      "✍️ Écrit par un humain",
-      "🤖 Généré par une IA"
-    ],
-    "chrono": 20
-  },
-  {
-    "id": "l8_c",
-    "type": "qcm",
-    "question": "Extrait C : écrit par un humain ou généré par une IA ?",
-    "options": [
-      "✍️ Écrit par un humain",
-      "🤖 Généré par une IA"
-    ],
-    "chrono": 20
+    "lignes": [
+      "A",
+      "B",
+      "C"
+    ]
   },
   {
     "id": "l9_detecteur",
     "type": "qcm",
     "question": "Un détecteur annonce « 30 % de texte généré par IA » dans un mémoire. Est-ce suffisant pour sanctionner ?",
+    "chrono": 0,
     "options": [
       "Oui",
       "Non",
@@ -111,84 +103,82 @@
     "id": "regle_defaut",
     "type": "trou",
     "question": "La règle par défaut",
+    "chrono": 30,
     "texte": "Sans autorisation explicite dans la consigne, l’usage de l’IA générative dans un travail évalué est ___.",
     "bonnes": [
       "interdit",
       "interdite",
       "interdit."
-    ],
-    "chrono": 30
+    ]
   },
   {
     "id": "l10_1",
     "type": "qcm",
     "question": "Situation 1 : Je demande à l’IA de corriger les fautes de mon introduction.",
+    "chrono": 20,
     "options": [
       "Autorisé (avec accord et déclaration)",
       "Interdit"
-    ],
-    "bonne": 0,
-    "chrono": 20
+    ]
   },
   {
     "id": "l10_2",
     "type": "qcm",
     "question": "Situation 2 : Je colle mon paragraphe et je demande « rends-le plus fluide ».",
+    "chrono": 20,
     "options": [
       "Autorisé (avec accord et déclaration)",
       "Interdit"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l10_3",
     "type": "qcm",
     "question": "Situation 3 : Je demande des mots-clés pour ma revue de littérature.",
+    "chrono": 20,
     "options": [
       "Autorisé (avec accord et déclaration)",
       "Interdit"
-    ],
-    "bonne": 0,
-    "chrono": 20
+    ]
   },
   {
     "id": "l10_4",
     "type": "qcm",
     "question": "Situation 4 : Je fais rédiger ma problématique à partir de mon sujet.",
+    "chrono": 20,
     "options": [
       "Autorisé (avec accord et déclaration)",
       "Interdit"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l10_5",
     "type": "qcm",
     "question": "Situation 5 : Je demande à l’IA « qu’est-ce qui manque dans mon plan ? »",
+    "chrono": 20,
     "options": [
       "Autorisé (avec accord et déclaration)",
       "Interdit"
-    ],
-    "bonne": 0,
-    "chrono": 20
+    ]
   },
   {
     "id": "l10_6",
     "type": "qcm",
     "question": "Situation 6 : Je fais transcrire et analyser mes entretiens avec des patients.",
+    "chrono": 20,
     "options": [
       "Autorisé (avec accord et déclaration)",
       "Interdit"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l11_1",
     "type": "qcm",
     "question": "« Écrire un message » : vous le faites…",
+    "chrono": 0,
     "options": [
       "Avec l’IA",
       "Avec un outil numérique",
@@ -199,6 +189,7 @@
     "id": "l11_2",
     "type": "qcm",
     "question": "« Faire une liste de révisions » : vous le faites…",
+    "chrono": 0,
     "options": [
       "Avec l’IA",
       "Avec un outil numérique",
@@ -209,6 +200,7 @@
     "id": "l11_3",
     "type": "qcm",
     "question": "« Résumer un article » : vous le faites…",
+    "chrono": 0,
     "options": [
       "Avec l’IA",
       "Avec un outil numérique",
@@ -219,164 +211,164 @@
     "id": "prix_max",
     "type": "nombre",
     "question": "Combien seriez-vous prêt à payer par mois pour une IA générative ?",
+    "chrono": 0,
     "unite": "€/mois"
   },
   {
     "id": "l12_1",
     "type": "qcm",
     "question": "Vert, orange ou rouge ? Une capture d’écran de console, sans nom visible, pour comprendre un paramètre.",
+    "chrono": 20,
     "options": [
       "🟢 Vert · possible",
       "🟠 Orange · avec autorisation",
       "🔴 Rouge · jamais"
     ],
-    "bonne": 2,
-    "chrono": 20
+    "bonne": 2
   },
   {
     "id": "l12_2",
     "type": "qcm",
     "question": "Vert, orange ou rouge ? Le diaporama du cours de radioprotection, pour en faire des fiches.",
+    "chrono": 20,
     "options": [
       "🟢 Vert · possible",
       "🟠 Orange · avec autorisation",
       "🔴 Rouge · jamais"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l12_3",
     "type": "qcm",
     "question": "Vert, orange ou rouge ? Un cas inventé de toutes pièces pour réviser.",
+    "chrono": 20,
     "options": [
       "🟢 Vert · possible",
       "🟠 Orange · avec autorisation",
       "🔴 Rouge · jamais"
-    ],
-    "bonne": 0,
-    "chrono": 20
+    ]
   },
   {
     "id": "l12_4",
     "type": "qcm",
     "question": "Vert, orange ou rouge ? Le compte rendu d’un patient vu en stage, nom effacé.",
+    "chrono": 20,
     "options": [
       "🟢 Vert · possible",
       "🟠 Orange · avec autorisation",
       "🔴 Rouge · jamais"
     ],
-    "bonne": 2,
-    "chrono": 20
+    "bonne": 2
   },
   {
     "id": "l13_1",
     "type": "qcm",
     "question": "Sans autorisation explicite de l’enseignant, utiliser l’IA dans un travail évalué, c’est…",
+    "chrono": 20,
     "options": [
       "Autorisé si on le déclare",
       "Interdit",
       "Toléré pour l’orthographe",
       "Autorisé en stage"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l13_2",
     "type": "qcm",
     "question": "Qui est l’auteur d’un mémoire rédigé avec l’aide d’une IA ?",
+    "chrono": 20,
     "options": [
       "L’étudiant, seul",
       "L’étudiant et l’IA",
       "L’éditeur de l’outil",
       "Personne"
-    ],
-    "bonne": 0,
-    "chrono": 20
+    ]
   },
   {
     "id": "l13_3",
     "type": "qcm",
     "question": "Faire reformuler un de ses paragraphes par l’IA, c’est…",
+    "chrono": 20,
     "options": [
       "Autorisé si c’est déclaré",
       "Interdit",
       "Autorisé en annexe",
       "Autorisé sous 10 %"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l13_4",
     "type": "qcm",
     "question": "Que doit contenir la déclaration d’usage de l’IA ?",
+    "chrono": 20,
     "options": [
       "Seulement le nom de l’outil",
       "Le nom de l’outil, la finalité et le type de traitement",
       "La copie de toute la conversation",
       "Rien si c’est de l’orthographe"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l13_5",
     "type": "qcm",
     "question": "Coller dans un chatbot le compte rendu d’un patient de stage, nom effacé :",
+    "chrono": 20,
     "options": [
       "Autorisé car anonymisé",
       "Autorisé avec l’accord du tuteur",
       "Interdit",
       "Autorisé avec un outil payant"
     ],
-    "bonne": 2,
-    "chrono": 20
+    "bonne": 2
   },
   {
     "id": "l13_6",
     "type": "qcm",
     "question": "L’IA vous cite un article scientifique. Vous…",
+    "chrono": 20,
     "options": [
       "Le citez directement",
       "Demandez à une autre IA de confirmer",
       "Le retrouvez et le lisez dans une source fiable",
       "Le mettez en annexe"
     ],
-    "bonne": 2,
-    "chrono": 20
+    "bonne": 2
   },
   {
     "id": "l13_7",
     "type": "qcm",
     "question": "Le détecteur indique 12 % de texte suspect dans votre mémoire. Que se passe-t-il ?",
+    "chrono": 20,
     "options": [
       "Ajournement automatique",
       "Une vérification, et si besoin un entretien d’authenticité",
       "Rien du tout",
       "La note est divisée par deux"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l13_8",
     "type": "qcm",
     "question": "Depuis le 2 août 2026, l’IA Act impose notamment…",
+    "chrono": 20,
     "options": [
       "D’interdire les chatbots en Europe",
       "D’informer qu’on parle à une IA et de signaler les deepfakes",
       "De déclarer son mémoire à Bruxelles",
       "De payer une taxe par requête"
     ],
-    "bonne": 1,
-    "chrono": 20
+    "bonne": 1
   },
   {
     "id": "l15_note",
     "type": "echelle",
     "question": "Votre avis sur cette séance, de 1 à 5",
+    "chrono": 0,
     "min": 1,
     "max": 5,
     "libelle_min": "Pas utile",
@@ -386,18 +378,21 @@
     "id": "l15_utile",
     "type": "texte_libre",
     "question": "Qu’est-ce qui vous sera le plus utile ?",
+    "chrono": 0,
     "max_longueur": 140
   },
   {
     "id": "l15_question",
     "type": "texte_libre",
     "question": "Quelle question vous reste-t-il ?",
+    "chrono": 0,
     "max_longueur": 140
   },
   {
     "id": "l16_vote",
     "type": "qcm",
     "question": "Situation 1 · Prioriser les examens : éthique, pas éthique, ou ça dépend ?",
+    "chrono": 0,
     "options": [
       "Éthique",
       "Pas éthique",
@@ -408,12 +403,14 @@
     "id": "l16_justif",
     "type": "texte_libre",
     "question": "Situation 1 : une phrase pour justifier votre vote (anonyme)",
+    "chrono": 0,
     "max_longueur": 140
   },
   {
     "id": "l17_vote",
     "type": "qcm",
     "question": "Situation 2 · « J’ai enlevé le nom » : éthique, pas éthique, ou ça dépend ?",
+    "chrono": 0,
     "options": [
       "Éthique",
       "Pas éthique",
@@ -424,12 +421,14 @@
     "id": "l17_justif",
     "type": "texte_libre",
     "question": "Situation 2 : une phrase pour justifier votre vote (anonyme)",
+    "chrono": 0,
     "max_longueur": 140
   },
   {
     "id": "l18_vote",
     "type": "qcm",
     "question": "Situation 3 · Le détecteur décide : éthique, pas éthique, ou ça dépend ?",
+    "chrono": 0,
     "options": [
       "Éthique",
       "Pas éthique",
@@ -440,6 +439,20 @@
     "id": "l18_justif",
     "type": "texte_libre",
     "question": "Situation 3 : une phrase pour justifier votre vote (anonyme)",
+    "chrono": 0,
     "max_longueur": 140
+  },
+  {
+    "id": "l_netflix_prix",
+    "type": "qcm",
+    "question": "Le prix d’un abonnement Netflix Standard (sans publicité) en France aujourd’hui… c’est combien ?",
+    "chrono": 20,
+    "options": [
+      "8,99 €",
+      "11,99 €",
+      "14,99 €",
+      "19,99 €"
+    ],
+    "bonne": 2
   }
 ]

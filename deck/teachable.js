@@ -6,7 +6,7 @@
  * data-src : dossier contenant model.json, metadata.json et weights.bin (fichiers de l'export « TensorFlow.js »).
  *
  * data-mode="entrainement" : simulation pédagogique d'un entraînement, en trois temps.
- *   1. Collecte : un bouton par classe du modèle (« Objet 1 · gourde », « Objet 2 · stylo », « Vide ») ; chaque appui
+ *   1. Collecte : un bouton par classe du modèle (« Objet 1 · gourde », « Objet 2 · téléphone », « Vide ») ; chaque appui
  *      prend 300 images de la webcam en 5 secondes, affichées en mosaïque.
  *   2. Entraînement : animation d'une usine (engrenages, fumée, images qui entrent sur un tapis) et barre de progression.
  *   3. Test : la webcam et les barres de probabilité, comme le mode normal.
