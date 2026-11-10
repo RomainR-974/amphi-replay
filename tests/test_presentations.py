@@ -23,7 +23,7 @@ def test_liste_et_active(client):
     assert [p["slug"] for p in liste] == ["demo"]
     p = liste[0]
     assert p["titre"] == "Présentation de démonstration" and p["active"] is True
-    assert p["diapositives"] == 2 and p["questions"] == 12 and p["theme"] == ""
+    assert p["diapositives"] == 2 and p["questions"] == 13 and p["theme"] == ""
     assert client.get("/api/presentations/active").json() == {"slug": "demo", "titre": "Présentation de démonstration", "theme": "", "camera": {"largeur": 300, "hauteur": 300, "position": "bas-droite", "marge": 20}}
     assert client.get("/sante").json()["presentation"] == "demo"
 
@@ -43,7 +43,7 @@ def test_creation_duplication_renommage(client):
     (client.deck / "medias" / "img.png").write_bytes(b"png")
     r = client.post(jeton("/api/presentations"), json={"slug": "copie", "titre": "Copie", "depuis": "demo"})
     assert r.status_code == 200, r.text
-    assert r.json()["diapositives"] == 2 and r.json()["questions"] == 12 and r.json()["description"] == "Présentation de test"
+    assert r.json()["diapositives"] == 2 and r.json()["questions"] == 13 and r.json()["description"] == "Présentation de test"
     assert (client.presentations / "copie" / "medias" / "img.png").read_bytes() == b"png"
     assert client.get("/p/copie/slides.html").text == client.get("/deck/slides.html").text
     assert client.post(jeton("/api/presentations"), json={"slug": "c2", "titre": "C", "depuis": "inconnue"}).status_code == 404
@@ -139,13 +139,13 @@ def test_parametre_prez_sur_api(client):
     assert [m["chemin"] for m in client.get(jeton("/api/deck/medias?prez=b")).json()] == ["medias/i.png"]
 
     assert client.get("/api/quiz/questions?prez=b").json() == []
-    assert len(client.get("/api/quiz/questions?prez=demo").json()) == 12
+    assert len(client.get("/api/quiz/questions?prez=demo").json()) == 13
     nouvelles = [{"id": "n1", "type": "vrai_faux", "question": "Vrai ?", "bonne": True}]
     assert client.put(jeton("/api/quiz/questions?prez=b"), json=nouvelles).status_code == 200
     assert client.get(jeton("/api/quiz/questions?prez=b")).json()[0]["bonne"] is True
     assert "bonne" not in client.get("/api/quiz/questions?prez=b").json()[0]
-    assert len(client.get("/api/quiz/questions").json()) == 12  # le quiz actif n'a pas bougé
-    assert client.get("/sante").json()["questions"] == 12
+    assert len(client.get("/api/quiz/questions").json()) == 13  # le quiz actif n'a pas bougé
+    assert client.get("/sante").json()["questions"] == 13
     # Après activation de « b », ses questions sont celles du quiz.
     assert client.post(jeton("/api/presentations/b/activer")).status_code == 200
     assert [q["id"] for q in client.get("/api/quiz/questions").json()] == ["n1"]

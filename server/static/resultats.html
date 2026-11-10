@@ -48,6 +48,14 @@
   .histo .val { margin-bottom: 4px; font-weight: 700; }
   .histo > div.bonne .col { background: var(--ok); }
   .bonne-reponse { font-size: 30px; color: var(--ok); font-weight: 700; margin-top: 1vh; }
+  /* Grille : colonnes alignées sur une dsfr-grille (écart 40 px), sans marge latérale */
+  html.type-grille body { padding: 0; justify-content: flex-start; }
+  .grille-res { display: grid; gap: 40px; }
+  .grille-col { border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: 4px; padding: 12px 18px 6px; }
+  .grille-col .grille-tete { display: flex; align-items: baseline; gap: 12px; font-size: 30px; font-weight: 800; margin-bottom: 6px; }
+  .grille-col .grille-tete small { font-size: 22px; font-weight: 400; opacity: .6; }
+  .grille-col .ligne { font-size: 26px; margin-bottom: 6px; row-gap: 2px; }
+  .grille-col .barre { height: 24px; border-radius: 8px; }
   html.sans-titre h1 { display: none; }
   html.sans-titre body { justify-content: flex-start; padding-top: 1vh; }
 </style>
@@ -71,10 +79,26 @@
     const total = r.total || 0;
     const statut = etat.ouverte ? 'question ouverte' : etat.revele ? 'réponse révélée' : 'question fermée';
     let html = `<h1>${echap(q.type === 'trou' ? q.texte.replace('___', '______') : q.question)}</h1>`;
-    const rendus = { qcm: barres, rapidite: barres, emoji: barres, multi: barres, vrai_faux: barres, echelle: barres, classement: classement, buzzer: premiers, nuage: nuage, texte_libre: cartes, trou: trou, nombre: nombre };
+    const rendus = { qcm: barres, rapidite: barres, emoji: barres, multi: barres, vrai_faux: barres, echelle: barres, classement: classement, buzzer: premiers, nuage: nuage, texte_libre: cartes, trou: trou, nombre: nombre, grille: grille };
+    document.documentElement.classList.toggle('type-grille', q.type === 'grille');
     html += (rendus[q.type] || barres)(q, r, c, etat);
-    html += `<div class="total">${total} réponse${total > 1 ? 's' : ''} · ${statut}</div>`;
+    if (q.type !== 'grille') html += `<div class="total">${total} réponse${total > 1 ? 's' : ''} · ${statut}</div>`;
     vue.innerHTML = html;
+  }
+
+  // Grille (ex. « humain ou IA ? » pour les extraits A, B, C) : une colonne par ligne, alignée sous les blocs de la diapositive.
+  function grille(q, r, c, etat) {
+    const comptes = r.comptes || [];
+    return `<div class="grille-res" style="grid-template-columns:repeat(${q.lignes.length},1fr)">${q.lignes.map((l, i) => {
+      const cpt = comptes[i] || [], n = (r.repondus || [])[i] || 0, maxi = Math.max(1, ...cpt);
+      const bonne = etat.revele && c.bonnes ? c.bonnes[i] : null;
+      return `<div class="grille-col"><div class="grille-tete">${echap(l)}<small>${n} réponse${n > 1 ? 's' : ''}</small></div>${q.options.map((o, k) => {
+        const v = cpt[k] || 0, pct = n ? Math.round(100 * v / n) : 0;
+        const classe = bonne === null || bonne === undefined ? '' : bonne === k ? 'bonne' : 'mauvaise';
+        const fond = classe === 'bonne' ? 'var(--ok)' : classe === 'mauvaise' ? 'color-mix(in srgb, currentColor 30%, transparent)' : 'var(' + COULEURS[k % COULEURS.length] + ')';
+        return `<div class="ligne ${classe}"><div class="libelle">${echap(o)}</div><div class="nombre">${pct} %</div><div class="barre"><div style="width:${Math.round(100 * v / maxi)}%;background:${fond}"></div></div></div>`;
+      }).join('')}</div>`;
+    }).join('')}</div>`;
   }
 
   function libellesDe(q) {

@@ -110,6 +110,7 @@ window.AmphiQuizDeck = (function () {
     if (['qcm', 'multi', 'rapidite', 'classement'].includes(q.type)) return `<ol class="quiz-options">${q.options.map(o => `<li>${echap(o)}</li>`).join('')}</ol>`;
     if (q.type === 'emoji') return `<div class="quiz-emojis">${q.options.map(o => `<span>${echap(o)}</span>`).join('')}</div>`;
     if (q.type === 'vrai_faux') return `<ol class="quiz-options"><li>Vrai</li><li>Faux</li></ol>`;
+    if (q.type === 'grille') return `<p class="quiz-aide">${(q.lignes || []).map(echap).join(' · ')} : ${(q.options || []).map(echap).join(' ou ')} ?</p>`;
     if (q.type === 'echelle') return `<p class="quiz-aide">De ${q.min} (${echap(q.libelle_min || 'min')}) à ${q.max} (${echap(q.libelle_max || 'max')})</p>`;
     const aides = { buzzer: 'Appuyez le plus vite possible !', nuage: `Jusqu'à ${q.max_mots} mots`, texte_libre: 'Réponse libre', trou: 'Complétez le texte', nombre: `Votre estimation${q.unite ? ' en ' + echap(q.unite) : ''}` };
     return `<p class="quiz-aide">${aides[q.type] || ''}</p>`;

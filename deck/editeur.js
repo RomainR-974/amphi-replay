@@ -27,8 +27,8 @@
   // Enregistrement OBS déclenché par la diapositive (docs/seance.md) : valeur de data-obs → libellé.
   const OBS_OPTIONS = [{ v: '', l: 'aucun' }, { v: 'demarrer', l: 'démarrer l\'enregistrement' }, { v: 'arreter', l: 'arrêter l\'enregistrement' }];
   const TYPES_EL = ['texte', 'image', 'forme', 'iframe', 'video', 'lottie', 'minuteur', 'resultats', 'classement', 'nuage', 'qr'];
-  const TYPES_QUESTION = ['qcm', 'multi', 'vrai_faux', 'emoji', 'rapidite', 'buzzer', 'nuage', 'texte_libre', 'trou', 'echelle', 'classement', 'nombre'];
-  const AVEC_OPTIONS = { qcm: [2, 6], multi: [2, 6], emoji: [2, 8], rapidite: [2, 6], classement: [2, 6] };
+  const TYPES_QUESTION = ['qcm', 'multi', 'vrai_faux', 'emoji', 'rapidite', 'buzzer', 'nuage', 'texte_libre', 'trou', 'echelle', 'classement', 'nombre', 'grille'];
+  const AVEC_OPTIONS = { qcm: [2, 6], multi: [2, 6], emoji: [2, 8], rapidite: [2, 6], classement: [2, 6], grille: [2, 4] };
 
   const parametres = new URLSearchParams(location.search);
   const token = parametres.get('token') || '';
@@ -285,6 +285,16 @@
     const e = historique.passe.pop();
     if (!e) return;
     terminerEdition(false);
+    if (e.supprimee) { // diapositive supprimée : on la remet à sa place
+      const { sections } = parserDeck(e.html);
+      if (sections.length) etat.sections.splice(e.i, 0, sections[0]);
+      historique.futur.push(e);
+      etat.courant = e.i;
+      etat.selection = null;
+      marquer();
+      rendreTout();
+      return;
+    }
     historique.futur.push({ i: e.i, html: sectionPropre(etat.sections[e.i]).outerHTML });
     remplacerSection(e.i, e.html);
     etat.courant = e.i;
@@ -295,6 +305,15 @@
     const e = historique.futur.pop();
     if (!e) return;
     terminerEdition(false);
+    if (e.supprimee) { // rétablir la suppression
+      etat.sections.splice(e.i, 1);
+      historique.passe.push(e);
+      etat.courant = Math.max(0, Math.min(e.i, etat.sections.length - 1));
+      etat.selection = null;
+      marquer();
+      rendreTout();
+      return;
+    }
     historique.passe.push({ i: e.i, html: sectionPropre(etat.sections[e.i]).outerHTML });
     remplacerSection(e.i, e.html);
     etat.courant = e.i;
@@ -990,14 +1009,40 @@
     etat.selection = null;
     changementStructurel();
   }
-  function supprimerSection() {
-    if (!confirm('Supprimer la diapositive ' + (etat.courant + 1) + ' ?')) return;
+  /** Fenêtre de confirmation de l'éditeur (miniature de la diapositive) ; résout true sur « Supprimer ». */
+  function confirmerSuppression(i) {
+    return new Promise(resoudre => {
+      const s = etat.sections[i];
+      const fin = ok => { d.close(); d.remove(); resoudre(ok); };
+      const annuler = h('button', { onclick: () => fin(false) }, 'Annuler');
+      const supprimer = h('button', { class: 'danger plein', onclick: () => fin(true) }, '🗑 Supprimer');
+      const d = h('dialog', { class: 'confirmation-suppression', 'aria-label': 'Supprimer la diapositive' },
+        h('h3', {}, 'Supprimer la diapositive ' + (i + 1) + ' ?'),
+        h('p', {}, titreCourt(s)),
+        h('div', { class: 'apercu-suppression' }, vignette(s)),
+        h('p', { class: 'aide' }, 'Elle disparaît de la présentation à l\'enregistrement. « Annuler » (Ctrl+Z) la rétablit tant que la page est ouverte.'),
+        h('div', { class: 'actions' }, annuler, supprimer));
+      d.addEventListener('cancel', e => { e.preventDefault(); fin(false); });
+      document.body.append(d);
+      d.showModal();
+      const v = d.querySelector('.vignette'); // échelle propre à la fenêtre (celle de la liste est plus petite)
+      if (v && v.clientWidth) d.style.setProperty('--echelle-vignette', v.clientWidth / SCENE_L);
+      supprimer.focus();
+    });
+  }
+  async function supprimerSection() {
+    if (!(await confirmerSuppression(etat.courant))) return;
     terminerEdition(false);
+    historique.passe.push({ i: etat.courant, html: sectionPropre(sectionCourante()).outerHTML, supprimee: true });
     etat.sections.splice(etat.courant, 1);
     if (!etat.sections.length) { ajouterSection('libre', -1); return; }
     etat.courant = Math.min(etat.courant, etat.sections.length - 1);
     etat.selection = null;
-    changementStructurel();
+    // Pas de changementStructurel() : il viderait l'historique, et la suppression doit pouvoir s'annuler.
+    while (historique.passe.length > LIMITE_HISTORIQUE) historique.passe.shift();
+    historique.futur = [];
+    marquer();
+    rendreTout();
   }
   // ---- Clic droit sur une diapositive de la liste : dupliquer, copier, coller, monter, descendre, supprimer ----
   // Le presse-papiers est gardé dans le navigateur : on peut coller dans une autre présentation.
@@ -1687,7 +1732,16 @@
     f.append(texte('Identifiant', 'id', { placeholder: 'q1' }));
     const selType = h('select', {}, TYPES_QUESTION.map(t => h('option', { value: t, selected: t === type }, t)));
     selType.addEventListener('change', () => {
+      const ancienType = q.type;
       q.type = selType.value;
+      if (q.type === 'grille' && ancienType !== 'grille') {
+        // Grille : une réponse par ligne (A, B, C…) parmi les colonnes ; les anciennes bonnes réponses ne valent plus.
+        if (!Array.isArray(q.options) || !q.options.length) q.options = ['✍️ Humain', '🤖 IA'];
+        q.options = q.options.slice(0, 4);
+        if (!Array.isArray(q.lignes) || !q.lignes.length) q.lignes = ['A', 'B', 'C'];
+        delete q.bonne; delete q.bonnes;
+      }
+      if (q.type !== 'grille') delete q.lignes;
       if (AVEC_OPTIONS[q.type] && !Array.isArray(q.options)) q.options = ['Option A', 'Option B'];
       if (q.type === 'classement' && !Array.isArray(q.bonne)) delete q.bonne;
       if (q.type !== 'classement' && Array.isArray(q.bonne)) delete q.bonne;
@@ -1701,7 +1755,33 @@
     f.append(champ('Compte des points', h('div', {}, points, ' ', h('span', { class: 'aide' }, 'défaut : oui si une bonne réponse est déclarée'))));
 
     // Champs spécifiques
-    if (AVEC_OPTIONS[type]) f.append(h('h4', {}, 'Options'), blocOptions(q, type, maj));
+    if (AVEC_OPTIONS[type]) f.append(h('h4', {}, type === 'grille' ? 'Colonnes (choix proposés à chaque ligne)' : 'Options'), blocOptions(q, type, maj));
+    if (type === 'grille') {
+      if (!Array.isArray(q.lignes) || !q.lignes.length) q.lignes = ['A', 'B', 'C'];
+      const ta = h('textarea', { rows: 4, placeholder: 'une ligne par élément : A, B, C…' });
+      ta.value = q.lignes.join('\n');
+      ta.addEventListener('change', () => {
+        q.lignes = ta.value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8);
+        if (!q.lignes.length) q.lignes = ['A'];
+        if (Array.isArray(q.bonnes)) { q.bonnes = q.lignes.map((_, i) => q.bonnes[i] ?? null); if (q.bonnes.every(b => b === null)) delete q.bonnes; }
+        maj();
+      });
+      f.append(champ('Lignes', ta));
+      const bonnes = h('div', { class: 'champ large' });
+      q.lignes.forEach((l, i) => {
+        const sel = h('select', {}, h('option', { value: '' }, '— pas de bonne réponse'),
+          q.options.map((o, k) => h('option', { value: String(k), selected: Array.isArray(q.bonnes) && q.bonnes[i] === k }, o)));
+        sel.addEventListener('change', () => {
+          const b = q.lignes.map((_, k) => (Array.isArray(q.bonnes) ? q.bonnes[k] : null) ?? null);
+          b[i] = sel.value === '' ? null : Number(sel.value);
+          if (b.every(x => x === null)) delete q.bonnes; else q.bonnes = b;
+          maj();
+        });
+        bonnes.append(h('div', { class: 'option' }, h('b', { style: 'min-width:2em' }, l), sel));
+      });
+      f.append(h('h4', {}, 'Bonne réponse de chaque ligne'), bonnes,
+        h('p', { class: 'aide' }, 'Sur le téléphone : une ligne par élément, un bouton par colonne. Points : part des lignes justes, plus vite = plus de points. Dans une diapositive, un élément « résultats » montre une colonne de barres par ligne.'));
+    }
     if (type === 'vrai_faux') {
       const sel = h('select', {}, [['', '— pas de bonne réponse'], ['true', 'Vrai'], ['false', 'Faux']].map(([v, l]) => h('option', { value: v, selected: String(q.bonne) === v || (v === '' && typeof q.bonne !== 'boolean') }, l)));
       sel.addEventListener('change', () => { if (sel.value === '') delete q.bonne; else q.bonne = sel.value === 'true'; maj(); });
@@ -1751,6 +1831,8 @@
           }
           maj();
         });
+      } else if (type === 'grille') {
+        marque = h('span', { class: 'aide', style: 'min-width:16px' }, String(i + 1)); // bonne réponse : par ligne, plus bas
       } else {
         marque = h('input', { type: 'radio', name: 'bonne', title: 'Bonne réponse', checked: q.bonne === i });
         marque.addEventListener('change', () => { q.bonne = i; maj(); });
@@ -1762,6 +1844,7 @@
         q.options.splice(i, 1);
         if (type === 'multi' && Array.isArray(q.bonnes)) q.bonnes = q.bonnes.filter(b => b !== i).map(b => b > i ? b - 1 : b);
         else if (type === 'classement' && Array.isArray(q.bonne)) q.bonne = q.bonne.filter(b => b !== i).map(b => b > i ? b - 1 : b);
+        else if (type === 'grille' && Array.isArray(q.bonnes)) { q.bonnes = q.bonnes.map(b => b === i ? null : b !== null && b > i ? b - 1 : b); if (q.bonnes.every(b => b === null)) delete q.bonnes; }
         else if (q.bonne === i) delete q.bonne; else if (Number.isInteger(q.bonne) && q.bonne > i) q.bonne--;
         maj();
       } }, '×');

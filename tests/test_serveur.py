@@ -1,4 +1,4 @@
-"""Tests du serveur : synchronisation du deck, quiz (12 types), points, classement, éditeur, jeton."""
+"""Tests du serveur : synchronisation du deck, quiz (13 types), points, classement, éditeur, jeton."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ SLIDES_DEMO = """<!-- démo -->
 
 
 def creer_presentation(dossier: Path, slug: str, titre: str, slides: str = SLIDES_DEMO, quiz: str | None = None) -> Path:
-    """Fabrique une présentation de test (slides minimal, questions de démonstration couvrant les 12 types)."""
+    """Fabrique une présentation de test (slides minimal, questions de démonstration couvrant les 13 types)."""
     d = dossier / slug
     (d / "medias").mkdir(parents=True)
     (d / "slides.html").write_text(slides, encoding="utf-8")
@@ -137,7 +137,7 @@ def test_editeur_slides_et_medias(client):
 
 def test_questions_publiques_sans_bonnes_reponses(client):
     publiques = client.get("/api/quiz/questions").json()
-    assert len(publiques) == 12 and all("bonne" not in q and "bonnes" not in q for q in publiques)
+    assert len(publiques) == 13 and all("bonne" not in q and "bonnes" not in q for q in publiques)
     completes = client.get(f"/api/quiz/questions?token={JETON}").json()
     assert next(q for q in completes if q["id"] == "q1")["bonne"] == 1
 
@@ -319,7 +319,7 @@ def test_pages_et_qr(client):
     assert client.get("/remote").status_code == 403
     assert client.get(f"/remote?token={JETON}", follow_redirects=False).status_code == 307
     assert client.get(f"/editeur?token={JETON}", follow_redirects=False).status_code == 307
-    assert client.get("/sante").json()["questions"] == 12
+    assert client.get("/sante").json()["questions"] == 13
 
 
 def test_quiz_json_valide():

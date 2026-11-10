@@ -3,7 +3,12 @@
     "id": "q1",
     "type": "qcm",
     "question": "Quel est, selon vous, le premier facteur de réussite d'une captation solo ?",
-    "options": ["Le matériel", "La répétition générale", "Le logiciel de montage", "Le débit internet"],
+    "options": [
+      "Le matériel",
+      "La répétition générale",
+      "Le logiciel de montage",
+      "Le débit internet"
+    ],
     "bonne": 1,
     "chrono": 30
   },
@@ -17,7 +22,12 @@
     "id": "q3",
     "type": "rapidite",
     "question": "Combien de plans alternés voyez-vous dans le replay ?",
-    "options": ["Un", "Deux", "Trois", "Quatre"],
+    "options": [
+      "Un",
+      "Deux",
+      "Trois",
+      "Quatre"
+    ],
     "bonne": 2,
     "chrono": 15
   },
@@ -32,14 +42,30 @@
     "id": "q5",
     "type": "emoji",
     "question": "Votre humeur à cet instant ?",
-    "options": ["😀", "🤔", "😴", "🤯", "🔥", "🙃"]
+    "options": [
+      "😀",
+      "🤔",
+      "😴",
+      "🤯",
+      "🔥",
+      "🙃"
+    ]
   },
   {
     "id": "q6",
     "type": "multi",
     "question": "Quelles sources entrent dans OBS ? (plusieurs réponses)",
-    "options": ["Le DSLR", "La webcam", "Le deck", "Le téléphone de l'orateur"],
-    "bonnes": [0, 1, 2],
+    "options": [
+      "Le DSLR",
+      "La webcam",
+      "Le deck",
+      "Le téléphone de l'orateur"
+    ],
+    "bonnes": [
+      0,
+      1,
+      2
+    ],
     "chrono": 30
   },
   {
@@ -52,7 +78,10 @@
     "type": "trou",
     "question": "Le recalage audio",
     "texte": "Le décalage entre le téléphone et OBS est mesuré par corrélation ___.",
-    "bonnes": ["croisée", "croisee"],
+    "bonnes": [
+      "croisée",
+      "croisee"
+    ],
     "chrono": 30
   },
   {
@@ -68,8 +97,18 @@
     "id": "q10",
     "type": "classement",
     "question": "Classez par ordre de priorité si le temps manque",
-    "options": ["Captation OBS et audio", "Deck et synchronisation", "Télécommande", "Quiz"],
-    "bonne": [0, 1, 2, 3]
+    "options": [
+      "Captation OBS et audio",
+      "Deck et synchronisation",
+      "Télécommande",
+      "Quiz"
+    ],
+    "bonne": [
+      0,
+      1,
+      2,
+      3
+    ]
   },
   {
     "id": "q11",
@@ -83,5 +122,25 @@
     "type": "texte_libre",
     "question": "Une question ou une remarque pour la suite ?",
     "max_longueur": 140
+  },
+  {
+    "id": "q13",
+    "type": "grille",
+    "question": "Humain ou IA ?",
+    "chrono": 30,
+    "options": [
+      "Humain",
+      "IA"
+    ],
+    "lignes": [
+      "A",
+      "B",
+      "C"
+    ],
+    "bonnes": [
+      1,
+      0,
+      1
+    ]
   }
 ]

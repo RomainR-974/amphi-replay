@@ -18,3 +18,5 @@
 .res-vide { color: #8a94a6; font-style: italic; }
 .impression-pied { position: absolute; right: 24px; bottom: 6px; font: 18px/1.2 system-ui, sans-serif; color: #55627a; background: rgba(255, 255, 255, .85); padding: 2px 8px; border-radius: 4px; }
 html[data-role="seance"] .reveal .quiz-resultats:not(.remplie), html[data-role="impression"] .reveal .quiz-resultats:not(.remplie) { visibility: hidden; }
+.res .res-grille { display: grid; gap: 24px; }
+.res .res-grille .res-barres li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content; }

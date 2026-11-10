@@ -25,6 +25,11 @@
   .grille-emoji { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
   .grille-emoji button.option { font-size: 3rem; text-align: center; min-height: 110px; padding: 8px; }
   .vf { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grille-q { display: grid; gap: 12px; }
+  .grille-ligne { display: grid; grid-template-columns: 2.6rem 1fr; gap: 10px; align-items: center; }
+  .grille-libelle { font-size: 1.6rem; font-weight: 800; text-align: center; }
+  .grille-choix { display: grid; gap: 10px; }
+  .grille-choix button.option { text-align: center; min-height: 64px; padding: 10px 8px; font-weight: 700; }
   .vf button.option { text-align: center; min-height: 120px; font-size: 1.6rem; font-weight: 700; }
   .buzzer { width: min(80vw, 320px); aspect-ratio: 1; border-radius: 50%; margin: 0 auto; font-size: 2.2rem; font-weight: 800; color: #fff; background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c); border: 10px solid #7f1d1d; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
   .buzzer:active { transform: scale(.96); }
@@ -223,6 +228,13 @@
       }
       case 'nombre':
         return `<input type="number" id="nombre" inputmode="decimal" step="any" placeholder="Votre estimation${q.unite ? ' en ' + echap(q.unite) : ''}" value="${r ?? ''}" ${dis}><button class="primaire" id="valider" ${dis}>Envoyer</button>`;
+      case 'grille': {
+        // Une ligne par élément (A, B, C…), un bouton par colonne ; chaque choix est envoyé aussitôt.
+        const sel = brouillon || r || q.lignes.map(() => null);
+        return `<div class="grille-q">${q.lignes.map((l, i) => `<div class="grille-ligne"><span class="grille-libelle">${echap(l)}</span><div class="grille-choix" style="grid-template-columns:repeat(${q.options.length},1fr)">${
+          q.options.map((o, k) => `<button class="option ${sel[i] === k ? 'choisie' : ''}" data-gl="${i}" data-gk="${k}" ${dis}>${echap(o)}</button>`).join('')}</div></div>`).join('')}</div>`
+          + (ouverte && sel.some(x => x === null || x === undefined) ? `<p class="attente" style="margin:0">Répondez à chaque ligne.</p>` : '');
+      }
     }
     return '';
   }
@@ -240,6 +252,7 @@
     else if (q.type === 'trou') detail = 'Réponse attendue : ' + (c.bonnes || []).map(echap).join(' / ');
     else if (q.type === 'nombre') detail = 'Valeur exacte : ' + c.bonne + (q.unite ? ' ' + echap(q.unite) : '');
     else if (q.type === 'classement') detail = 'Bon ordre : ' + (c.bonne || []).map(i => echap(q.options[i])).join(' › ');
+    else if (q.type === 'grille') detail = q.lignes.map((l, i) => (c.bonnes || [])[i] === null || (c.bonnes || [])[i] === undefined ? '' : echap(l) + ' : ' + echap(q.options[c.bonnes[i]]) + ((r || [])[i] === c.bonnes[i] ? ' ✔' : ' ✘')).filter(Boolean).join(' · ');
     else if (q.type === 'buzzer') detail = bon ? 'Vous étiez dans les premiers !' : 'Trop tard cette fois.';
     return `<div class="resultat ${bon ? 'bon' : 'mauvais'}">${bon ? (pts >= 1000 ? 'Parfait !' : 'Bien joué') : 'Raté'}<span class="pts">+${pts}</span><small>${detail}</small></div>`;
   }
@@ -252,6 +265,13 @@
     vue.querySelectorAll('button.option[data-m]').forEach(b => b.onclick = () => {
       const i = Number(b.dataset.m); brouillon = [...(brouillon || (maReponse && maReponse.reponse) || [])];
       brouillon = brouillon.includes(i) ? brouillon.filter(x => x !== i) : [...brouillon, i]; rendre();
+    });
+    vue.querySelectorAll('button.option[data-gl]').forEach(b => b.onclick = () => {
+      const sel = [...(brouillon || (maReponse && maReponse.reponse) || q.lignes.map(() => null))];
+      sel[Number(b.dataset.gl)] = Number(b.dataset.gk);
+      brouillon = sel;
+      rendre(); // le choix s'affiche tout de suite, l'envoi suit
+      voter(sel);
     });
     vue.querySelectorAll('button[data-up], button[data-down]').forEach(b => b.onclick = () => {
       const ordre = [...(brouillon || (maReponse && maReponse.reponse) || q.options.map((_, i) => i))];
@@ -270,15 +290,20 @@
     const texte = $('texte'); if (texte && texte.tagName === 'INPUT') texte.onkeydown = e => { if (e.key === 'Enter') valider.click(); };
   }
 
+  let reponseEnAttente = null; // choix fait pendant un envoi (grille : plusieurs lignes touchées vite) : envoyé ensuite
   async function voter(reponse) {
-    if (enCours || !courant || !courant.question) return;
+    if (!courant || !courant.question) return;
+    if (enCours) { reponseEnAttente = reponse; if (brouillon) rendre(); return; }
     enCours = true;
     try {
       const r = await fetch('/api/quiz/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question_id: courant.question.id, reponse }) });
-      if (r.ok) { maReponse = (await r.json()).ma_reponse; brouillon = null; rendre(); }
+      if (r.ok) { maReponse = (await r.json()).ma_reponse; if (reponseEnAttente === null) brouillon = null; rendre(); }
       else if (r.status === 409) { etatEl.textContent = (await r.json()).detail; await recharger(); }
       else { etatEl.textContent = 'Réponse refusée : ' + ((await r.json()).detail || r.status); }
-    } finally { enCours = false; }
+    } finally {
+      enCours = false;
+      if (reponseEnAttente !== null) { const suivante = reponseEnAttente; reponseEnAttente = null; voter(suivante); }
+    }
   }
 
   // ----- Fin de séance (docs/seance.md, C) --------------------------------------------------------

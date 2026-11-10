@@ -58,6 +58,11 @@
         corps = `<p class="res-note">Médiane : ${r.mediane ?? '–'} ${esc(q.unite || '')} · min ${r.min ?? '–'} · max ${r.max ?? '–'}${q.bonne !== null && q.bonne !== undefined ? ' · réponse attendue : ' + esc(q.bonne) : ''}</p>`;
         if (r.proches && r.proches.length) corps += '<p class="res-note">Plus proches : ' + r.proches.map(p => esc(p.pseudo) + ' (' + esc(p.valeur) + ')').join(', ') + '</p>';
         break;
+      case 'grille':
+        corps = '<div class="res-grille" style="grid-template-columns:repeat(' + (q.lignes || []).length + ',minmax(0,1fr))">' + (q.lignes || []).map((l, i) =>
+          '<div><p class="res-total">' + esc(l) + ' · ' + ((r.repondus || [])[i] || 0) + '</p>'
+          + barres(q.options || [], (r.comptes || [])[i] || [], (r.repondus || [])[i] || 0, Array.isArray(q.bonnes) && Number.isInteger(q.bonnes[i]) ? [q.bonnes[i]] : null) + '</div>').join('') + '</div>';
+        break;
       case 'buzzer':
         corps = '<ol class="res-classement">' + (r.premiers || []).map(p => `<li>${esc(p.pseudo)} <span class="res-note">${p.temps} s</span></li>`).join('') + '</ol>';
         break;

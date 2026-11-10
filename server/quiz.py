@@ -1,7 +1,7 @@
 """Quiz participants : 12 types de questions, points façon Kahoot, classement par pseudo.
 
 Types : qcm, multi, vrai_faux, emoji, rapidite, buzzer, nuage, texte_libre, trou,
-echelle, classement, nombre (voir docs/format-deck.md, section 3).
+echelle, classement, nombre, grille (voir docs/format-deck.md, section 3).
 
 Anonymat : l'identifiant du participant est un jeton aléatoire en cookie ; le pseudo
 est choisi librement (ou généré) et n'est jamais lié à une identité. `purger()` efface
@@ -24,8 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-TYPES = ("qcm", "multi", "vrai_faux", "emoji", "rapidite", "buzzer", "nuage", "texte_libre", "trou", "echelle", "classement", "nombre")
-TYPES_A_OPTIONS = ("qcm", "multi", "emoji", "rapidite", "classement")
+TYPES = ("qcm", "multi", "vrai_faux", "emoji", "rapidite", "buzzer", "nuage", "texte_libre", "trou", "echelle", "classement", "nombre", "grille")
+TYPES_A_OPTIONS = ("qcm", "multi", "emoji", "rapidite", "classement", "grille")
 POINTS_MAX = 1000
 IDENTIFIANT = re.compile(r"^[a-z0-9_-]{1,40}$")
 
@@ -50,6 +50,7 @@ class Question:
     libelle_min: str = ""
     libelle_max: str = ""
     unite: str = ""
+    lignes: list[str] = field(default_factory=list)  # grille : une réponse par ligne, choisie parmi les options (colonnes)
     diapositive: dict | None = None
 
     # --- Validation --------------------------------------------------------------
@@ -81,6 +82,11 @@ class Question:
             raise ValueError(f"question {self.id} : `bonne` doit être une permutation des index")
         if self.type == "nombre" and self.bonne is not None and not isinstance(self.bonne, (int, float)):
             raise ValueError(f"question {self.id} : `bonne` doit être un nombre")
+        if self.type == "grille":
+            if not 1 <= len(self.lignes) <= 8:
+                raise ValueError(f"question {self.id} : 1 à 8 lignes attendues")
+            if self.bonnes and (len(self.bonnes) != len(self.lignes) or any(b is not None and not (isinstance(b, int) and 0 <= b < len(self.options)) for b in self.bonnes)):
+                raise ValueError(f"question {self.id} : `bonnes` doit donner, pour chaque ligne, l'index de la bonne colonne (ou null)")
 
     @property
     def notee(self) -> bool:
@@ -91,8 +97,8 @@ class Question:
             return True
         if self.type == "multi":
             return bool(self.bonnes)
-        if self.type == "trou":
-            return bool(self.bonnes)
+        if self.type in ("trou", "grille"):
+            return any(b is not None for b in self.bonnes)
         return self.bonne is not None
 
     # --- Sérialisation ---------------------------------------------------------------
@@ -112,6 +118,8 @@ class Question:
             d.update(min=self.min, max=self.max, libelle_min=self.libelle_min, libelle_max=self.libelle_max)
         if self.type == "nombre":
             d["unite"] = self.unite
+        if self.type == "grille":
+            d["lignes"] = self.lignes
         return d
 
     def complet(self) -> dict:
@@ -136,6 +144,8 @@ class Question:
             champs["options"] = [str(o) for o in champs["options"]]
         if champs["type"] == "trou":
             champs["bonnes"] = [str(b) for b in champs.get("bonnes", [])]
+        if champs["type"] == "grille":
+            champs["lignes"] = [str(l) for l in champs.get("lignes", [])]
         for entier in ("chrono", "max_mots", "max_longueur", "min", "max"):
             if entier in champs and champs[entier] is not None:
                 champs[entier] = int(champs[entier])
@@ -354,6 +364,13 @@ class Quiz:
             if isinstance(r, bool) or not isinstance(r, (int, float)) or not math.isfinite(r):
                 raise ValueError("nombre attendu")
             return r
+        if t == "grille":
+            # Une réponse par ligne (index de colonne) ; null = ligne pas encore répondue.
+            if not isinstance(r, list) or len(r) != len(q.lignes) or any(x is not None and (isinstance(x, bool) or not isinstance(x, int) or not 0 <= x < len(q.options)) for x in r):
+                raise ValueError("une colonne par ligne attendue")
+            if all(x is None for x in r):
+                raise ValueError("aucune ligne répondue")
+            return r
         raise ValueError("type inconnu")
 
     def reponse_de(self, question_id: str, participant: str) -> dict | None:
@@ -395,6 +412,10 @@ class Quiz:
             if q.bonne is not None:
                 ecart = abs(r - q.bonne) / (abs(q.bonne) or 1.0)
                 justesse = max(0.0, 1.0 - ecart) if r != q.bonne else 1.0
+        elif t == "grille":
+            notees = [(x, b) for x, b in zip(r, q.bonnes) if b is not None]
+            if notees:
+                justesse = sum(1 for x, b in notees if x == b) / len(notees)
         elif t == "buzzer":
             # Le premier prend tout, puis dégressif : 1000, 800, 640…
             return round(POINTS_MAX * 0.8**rang) if rang < 10 else 0
@@ -471,6 +492,10 @@ class Quiz:
                 res["rapides"] = [{"pseudo": pseudo, "temps": round(tp, 2)} for _, r, tp, _, pseudo in sorted(reponses, key=lambda x: x[2]) if r == q.bonne][:5]
         elif t == "vrai_faux":
             res["comptes"] = [sum(1 for _, r, *_ in reponses if r is True), sum(1 for _, r, *_ in reponses if r is False)]
+        elif t == "grille":
+            # comptes[ligne][colonne] ; repondus[ligne] = nombre de réponses à cette ligne
+            res["comptes"] = [[sum(1 for _, r, *_ in reponses if i < len(r) and r[i] == k) for k in range(len(q.options))] for i in range(len(q.lignes))]
+            res["repondus"] = [sum(c) for c in res["comptes"]]
         elif t == "buzzer":
             res["premiers"] = [{"pseudo": pseudo, "temps": round(tp, 2)} for _, _, tp, _, pseudo in sorted(reponses, key=lambda x: x[2])[:5]]
         elif t == "nuage":

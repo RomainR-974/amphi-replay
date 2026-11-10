@@ -80,6 +80,7 @@ Liste de questions. Champs communs : `id` (unique, `[a-z0-9_-]+`), `type`, `ques
 | `echelle` | `min` (1), `max` (5), `libelle_min`, `libelle_max` | entier | distribution + moyenne |
 | `classement` | `options` (2–6), `bonne` (ordre d'index, optionnel) | ordre d'index | rang moyen par option |
 | `nombre` | `bonne` (nombre, optionnel), `unite` | nombre | histogramme + médiane + les plus proches |
+| `grille` | `options` (2–4 colonnes, ex. `["✍️ Humain", "🤖 IA"]`), `lignes` (1–8, ex. `["A", "B", "C"]`), `bonnes` (une colonne ou `null` par ligne, optionnel) | liste d'index de colonne, `null` pour une ligne pas encore répondue ; chaque choix sur le téléphone est envoyé aussitôt | une colonne de barres par ligne, alignées sur une `dsfr-grille` (écart 40 px) : poser un élément `data-amphi="resultats"` de classe `sans-cadre` sous les blocs. Points : part des lignes justes × vitesse |
 
 ## 4. API du serveur (jeton requis sauf mention)
 

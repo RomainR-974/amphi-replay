@@ -227,3 +227,12 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .menu-diapo button.danger { color: var(--rouge); }
 .menu-diapo button.danger:hover { background: var(--rouge); color: #fff; }
 .menu-diapo hr { border: 0; border-top: 1px solid var(--bord); margin: 4px 2px; }
+/* ---- Confirmation de suppression d'une diapositive ---- */
+dialog.confirmation-suppression { background: var(--fond2); color: var(--texte); border: 1px solid var(--bord); border-radius: 12px; padding: 18px 20px; width: min(440px, 92vw); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+dialog.confirmation-suppression::backdrop { background: rgba(0, 0, 0, .55); }
+dialog.confirmation-suppression h3 { margin: 0 0 4px; font-size: 17px; }
+dialog.confirmation-suppression p { margin: 0 0 10px; color: var(--sourd); }
+dialog.confirmation-suppression .apercu-suppression { margin-bottom: 10px; }
+dialog.confirmation-suppression .apercu-suppression .vignette { width: 100%; }
+dialog.confirmation-suppression .actions { display: flex; justify-content: flex-end; gap: 8px; }
+dialog.confirmation-suppression button.danger.plein { background: var(--rouge); border-color: var(--rouge); color: #fff; font-weight: 600; }
