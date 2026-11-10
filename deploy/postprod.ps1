@@ -56,10 +56,10 @@ if ($LASTEXITCODE -ne 0) {
     & $VenvPython -m pip install -q -r requirements.txt 2>&1 | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Host "!! installation des dependances echouee" -ForegroundColor Red; exit 1 }
 }
-# Replay interactif : cadrage de l'intervenant (facultatif, docs/replay-interactif.md)
-& $VenvPython -c "import cv2" 2>&1 | Out-Null
+# Replay interactif (cadrage, OpenCV) et parcours (sous-titres, faster-whisper) : facultatifs, docs/postprod.md
+& $VenvPython -c "import cv2, faster_whisper, openpyxl" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "== installation d'OpenCV (cadrage du replay interactif)"
+    Write-Host "== installation d'OpenCV et de faster-whisper (cadrage, sous-titres)"
     & $VenvPython -m pip install -q -r requirements-postprod.txt 2>&1 | Out-Host
 }
 if (-not (Test-Path (Join-Path $Racine "deck\vendor\reveal"))) {

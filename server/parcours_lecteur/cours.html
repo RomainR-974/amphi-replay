@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITRE}}</title>
+<link rel="icon" href="data:,">
+<style>
+/* Page de cours produite par la post-production (server/parcours.py) : sommaire à gauche, une section par séquence
+   (vidéo sous-titrée, transcription, l'essentiel, images, questions). Aucune ressource externe : s'ouvre hors ligne. */
+:root {
+  --fond: #f5f7fa; --surface: #fff; --encre: #15233b; --doux: #55627a; --trait: #dde3ec;
+  --accent: #0f6f6a; --accent-pale: #e2f2f0; --moodle: #6b3fa0; --moodle-pale: #f1eaf9;
+  --vert: #1d7f45; --vert-pale: #e3f4e9; --rouge: #b3261e; --rouge-pale: #fbe5e3; --brouillon: #8a5a00; --brouillon-pale: #fff4dc;
+  --f-titre: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; --f-texte: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-code: ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --fond: #0e141f; --surface: #151d2b; --encre: #e6ebf3; --doux: #9aa6ba; --trait: #273246; --accent: #4cc3b9; --accent-pale: #12302f;
+  --moodle: #c4a3ee; --moodle-pale: #2a2140; --vert: #5fd08e; --vert-pale: #143223; --rouge: #f28b82; --rouge-pale: #3d1b19;
+  --brouillon: #f2c46b; --brouillon-pale: #33280f; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); color: var(--encre); font-family: var(--f-texte); font-size: 1.05rem; line-height: 1.6; }
+h1, h2, h3 { font-family: var(--f-titre); line-height: 1.15; margin: 0; text-wrap: balance; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; cursor: pointer; }
+.eti { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; color: var(--doux); }
+.page { display: grid; grid-template-columns: 17rem minmax(0, 1fr); gap: 2.5rem; max-width: 76rem; margin: 0 auto; padding: 1.5rem max(16px, env(safe-area-inset-right)) 4rem max(16px, env(safe-area-inset-left)); }
+@media (max-width: 900px) { .page { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; } }
+.index { position: sticky; top: 1rem; align-self: start; display: grid; gap: 1rem; }
+@media (max-width: 900px) { .index { position: static; } }
+.carte { background: var(--surface); border: 1px solid var(--trait); border-radius: 10px; padding: .8rem; }
+.index ol { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: 2px; }
+.index a { display: grid; grid-template-columns: 1.6rem 1fr auto; gap: .5rem; align-items: center; padding: .45rem .5rem; border-radius: 6px; text-decoration: none; color: var(--encre); font-size: .95rem; line-height: 1.3; }
+.index a:hover { background: var(--accent-pale); }
+.index .num { font-family: var(--f-code); font-size: .8rem; color: var(--doux); }
+.coche { width: 1rem; height: 1rem; border-radius: 50%; border: 2px solid var(--trait); }
+.coche.faite { background: var(--accent); border-color: var(--accent); }
+.barre { height: 8px; background: var(--trait); border-radius: 4px; overflow: hidden; margin: .4rem 0; }
+.barre span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+.bascule { display: flex; gap: .6rem; align-items: center; font-size: .9rem; color: var(--doux); }
+.moodle { display: inline-flex; gap: .35rem; font-family: var(--f-code); font-size: .72rem; color: var(--moodle); background: var(--moodle-pale); border-radius: 4px; padding: .15rem .45rem; }
+.moodle::before { content: "M"; font-weight: 700; }
+.note-moodle { font-size: .88rem; color: var(--moodle); background: var(--moodle-pale); border-radius: 8px; padding: .6rem .8rem; margin: 0; }
+body.sans-reperes .moodle, body.sans-reperes .note-moodle, body.sans-reperes .import { display: none; }
+main { display: grid; gap: 3rem; min-width: 0; }
+.entete, .sequence { display: grid; gap: 1.4rem; max-width: 48rem; scroll-margin-top: 1rem; }
+.entete h1 { font-size: clamp(1.9rem, 5vw, 2.9rem); font-weight: 800; letter-spacing: -.02em; }
+.fiche { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1px; background: var(--trait); border: 1px solid var(--trait); border-radius: 10px; overflow: hidden; }
+.fiche div { background: var(--surface); padding: .7rem .9rem; }
+.fiche b { display: block; font-variant-numeric: tabular-nums; }
+.sequence > header { display: grid; gap: .3rem; border-top: 3px solid var(--encre); padding-top: 1rem; }
+.sequence h2 { font-size: clamp(1.5rem, 3.5vw, 2rem); font-weight: 800; }
+.bloc { display: grid; gap: .7rem; }
+.tete { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; }
+.bloc h3 { font-size: 1.2rem; font-weight: 650; }
+.bloc p { margin: 0; }
+video { width: 100%; max-width: 100%; border-radius: 10px; background: #000; display: block; }
+.chapitres { display: flex; flex-wrap: wrap; gap: .4rem; list-style: none; margin: 0; padding: 0; }
+.chapitres button { background: var(--surface); color: var(--encre); border: 1px solid var(--trait); border-radius: 999px; padding: .15rem .65rem; font-size: .82rem; }
+.chapitres button span { font-family: var(--f-code); color: var(--accent); margin-right: .35rem; }
+details { border: 1px solid var(--trait); border-radius: 10px; background: var(--surface); }
+summary { padding: .7rem .9rem; font-weight: 700; cursor: pointer; }
+.transcription { display: grid; gap: .3rem; padding: 0 .9rem .9rem; max-height: 22rem; overflow-y: auto; }
+.transcription p { display: grid; grid-template-columns: 3.2rem 1fr; gap: .6rem; margin: 0; padding: .3rem .4rem; border-radius: 5px; cursor: pointer; }
+.transcription p span { font-family: var(--f-code); font-size: .8rem; color: var(--doux); padding-top: .2rem; }
+.transcription p.actif { background: var(--accent-pale); }
+.brouillon { font-size: .85rem; color: var(--brouillon); background: var(--brouillon-pale); border-radius: 6px; padding: .4rem .7rem; margin: 0; }
+.diapo { display: grid; gap: .3rem; padding: .7rem 0; border-bottom: 1px solid var(--trait); }
+.diapo h4 { margin: 0; font-size: 1.05rem; }
+.diapo ul { margin: 0; padding-left: 1.2rem; }
+.diapo .notes { font-size: .92rem; color: var(--doux); font-style: italic; }
+.images { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .8rem; }
+.images figure { margin: 0; display: grid; gap: .3rem; }
+.images img { width: 100%; border-radius: 8px; border: 1px solid var(--trait); }
+.images figcaption { font-size: .85rem; color: var(--doux); }
+.activite { border: 2px solid var(--encre); border-radius: 10px; padding: 1.1rem; display: grid; gap: .9rem; background: var(--surface); }
+fieldset { display: grid; gap: .45rem; border: 0; padding: 0; margin: 0; }
+legend { font-weight: 700; margin-bottom: .3rem; padding: 0; }
+.choix { display: flex; gap: .6rem; align-items: flex-start; padding: .5rem .7rem; border: 1px solid var(--trait); border-radius: 7px; }
+.choix input { margin-top: .35rem; accent-color: var(--accent); }
+.choix.juste { border-color: var(--vert); background: var(--vert-pale); }
+.choix.faux { border-color: var(--rouge); background: var(--rouge-pale); }
+input[type=text], input[type=number] { font: inherit; padding: .4rem .6rem; border: 1px solid var(--trait); border-radius: 6px; background: var(--fond); color: var(--encre); }
+.retour { font-size: .95rem; padding: .6rem .8rem; border-radius: 7px; background: var(--fond); margin: 0; }
+.btn { justify-self: start; background: var(--encre); color: var(--surface); border: 0; border-radius: 7px; padding: .55rem 1rem; font-weight: 700; }
+.terminer { display: flex; gap: .6rem; align-items: center; font-weight: 700; font-size: .95rem; }
+.terminer input { width: 1.2rem; height: 1.2rem; accent-color: var(--accent); }
+.suite { display: flex; justify-content: space-between; align-items: center; gap: .8rem; padding: 1rem 1.1rem; border-radius: 10px; background: var(--encre); color: var(--fond); text-decoration: none; }
+.suite small { display: block; opacity: .75; font-size: .82rem; }
+.suite b { font-family: var(--f-titre); font-size: 1.1rem; }
+.import table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.import td, .import th { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--trait); vertical-align: top; }
+.import code { font-family: var(--f-code); font-size: .82rem; word-break: break-all; }
+.defile { overflow-x: auto; }
+.vide { color: var(--doux); font-style: italic; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <aside class="index" aria-label="Sommaire du cours">
+    <div class="carte"><span class="eti">Votre progression</span><div class="barre"><span id="barre"></span></div><small id="progres"></small></div>
+    <nav class="carte"><span class="eti">Sommaire</span><ol id="sommaire"></ol></nav>
+    <label class="bascule"><input type="checkbox" id="reperes" checked> Afficher les repères Moodle</label>
+  </aside>
+  <main id="contenu"></main>
+</div>
+<script id="donnees" type="application/json">{{PARCOURS_JSON}}</script>
+<script>
+(() => {
+  'use strict';
+  const P = JSON.parse(document.getElementById('donnees').textContent);
+  const cle = 'parcours-' + P.presentation + '-' + P.replay;
+  const memo = { lire(k, d) { try { const v = localStorage.getItem(cle + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+                 ecrire(k, v) { try { localStorage.setItem(cle + k, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ } } };
+  const pad = n => String(n).padStart(2, '0');
+  const mmss = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600); return (h ? h + ':' + pad(Math.floor(s % 3600 / 60)) : pad(Math.floor(s / 60))) + ':' + pad(s % 60); };
+  function h(tag, attrs, ...enfants) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k.startsWith('on')) el[k] = v; else if (k === 'class') el.className = v; else el.setAttribute(k, v === true ? '' : v);
+    }
+    enfants.flat().forEach(e => { if (e !== null && e !== undefined && e !== false) el.append(e instanceof Node ? e : String(e)); });
+    return el;
+  }
+  const repere = t => h('span', { class: 'moodle' }, t);
+  const note = t => h('p', { class: 'note-moodle' }, t);
+  const contenu = document.getElementById('contenu');
+  const seqs = P.sequences;
+  const nbQuestions = seqs.reduce((n, s) => n + (s.questions ? s.questions.length : 0), 0);
+
+  // En-tête
+  contenu.append(h('section', { class: 'entete', id: 'accueil' },
+    h('span', { class: 'eti' }, 'Parcours de formation'),
+    h('h1', {}, P.titre),
+    h('div', { class: 'fiche' },
+      h('div', {}, h('span', { class: 'eti' }, 'Durée des vidéos'), h('b', {}, mmss(P.duree))),
+      h('div', {}, h('span', { class: 'eti' }, 'Séquences'), h('b', {}, seqs.length)),
+      h('div', {}, h('span', { class: 'eti' }, 'Questions'), h('b', {}, nbQuestions))),
+    note('Une séquence = une section du cours Moodle. Le tableau ci-dessous dit quel fichier déposer dans quelle activité ; les textes « L’essentiel » sont des brouillons à relire.'),
+    tableauImport()));
+
+  function tableauImport() {
+    const lignes = [];
+    seqs.forEach(s => {
+      const f = [];
+      if (s.video) f.push(['Vidéo (Fichier ou H5P Vidéo interactive)', s.video + (s.sous_titres ? ' + ' + s.sous_titres : '')]);
+      if (s.transcription_fichier) f.push(['Page (transcription)', s.transcription_fichier]);
+      if (s.essentiel) f.push(['Page « L’essentiel » (à relire)', s.essentiel]);
+      if (s.images && s.images.length) f.push(['Images de la Page', s.dossier + '/images/ (' + s.images.length + ')']);
+      if (s.gift) f.push(['Test (Banque de questions > Importer > GIFT)', s.gift]);
+      f.forEach(([a, b], i) => lignes.push(h('tr', {}, i === 0 ? h('td', { rowspan: f.length }, h('b', {}, 'Section ' + s.numero), h('br'), s.titre) : null, h('td', {}, a), h('td', {}, h('code', {}, b)))));
+    });
+    if (P.fichiers && P.fichiers.gift) lignes.push(h('tr', {}, h('td', {}, h('b', {}, 'Tout le cours')), h('td', {}, 'Toutes les questions, une catégorie par séquence'), h('td', {}, h('code', {}, P.fichiers.gift))));
+    if (!lignes.length) return null;
+    return h('details', { class: 'import' }, h('summary', {}, 'Fichiers à déposer dans Moodle'),
+      h('div', { class: 'defile', style: 'padding:0 .9rem .9rem' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Section'), h('th', {}, 'Activité'), h('th', {}, 'Fichier'))), h('tbody', {}, lignes))));
+  }
+
+  // Sommaire
+  const sommaire = document.getElementById('sommaire');
+  seqs.forEach(s => sommaire.append(h('li', {}, h('a', { href: '#s' + s.numero }, h('span', { class: 'num' }, pad(s.numero)), s.titre, h('i', { class: 'coche', 'data-s': s.numero })))));
+
+  // Séquences
+  seqs.forEach((s, n) => {
+    const sec = h('section', { class: 'sequence', id: 's' + s.numero },
+      h('header', {}, h('span', { class: 'eti' }, 'Séquence ' + s.numero), h('h2', {}, s.titre), h('p', { class: 'eti', style: 'margin:0;text-transform:none;letter-spacing:0;font-weight:400' }, 'Vidéo ' + mmss(s.duree))));
+    let lecteur = null;
+    if (s.video) {
+      lecteur = h('video', { controls: true, preload: 'metadata', src: s.video, playsinline: true },
+        s.sous_titres ? h('track', { kind: 'subtitles', srclang: 'fr', label: 'Français', src: s.sous_titres, default: true }) : null);
+      const chap = (s.chapitres || []).length > 1 ? h('ol', { class: 'chapitres' }, s.chapitres.map(c => h('li', {}, h('button', { onclick: () => { lecteur.currentTime = c.debut; lecteur.play().catch(() => {}); } }, h('span', {}, mmss(c.debut)), c.titre)))) : null;
+      sec.append(h('div', { class: 'bloc' }, h('div', { class: 'tete' }, h('h3', {}, 'Vidéo'), repere('Fichier vidéo ou H5P Vidéo interactive')), lecteur, chap));
+    }
+    if (s.transcription && s.transcription.length) {
+      const zone = h('div', { class: 'transcription' }, s.transcription.map(p => h('p', { 'data-t': p.debut, onclick: () => { if (lecteur) { lecteur.currentTime = p.debut; } } }, h('span', {}, mmss(p.debut)), h('div', {}, p.texte))));
+      sec.append(h('details', {}, h('summary', {}, 'Transcription de la vidéo'), zone));
+      if (lecteur) lecteur.addEventListener('timeupdate', () => {
+        let actif = null; zone.querySelectorAll('p').forEach(p => { if (+p.dataset.t <= lecteur.currentTime) actif = p; });
+        zone.querySelectorAll('p').forEach(p => p.classList.toggle('actif', p === actif));
+      });
+    }
+    if (s.diapositives && s.diapositives.length) {
+      sec.append(h('div', { class: 'bloc' }, h('div', { class: 'tete' }, h('h3', {}, 'L’essentiel'), repere('Page')),
+        h('p', { class: 'brouillon' }, 'Brouillon issu des diapositives et des notes du présentateur : à réécrire en texte suivi avant publication.'),
+        s.diapositives.map(d => h('div', { class: 'diapo' }, h('h4', {}, d.titre), d.lignes.length ? h('ul', {}, d.lignes.map(l => h('li', {}, l))) : null, d.notes ? h('p', { class: 'notes' }, d.notes) : null))));
+    }
+    if (s.images && s.images.length) {
+      sec.append(h('div', { class: 'bloc' }, h('div', { class: 'tete' }, h('h3', {}, 'Images des diapositives'), repere('Images de la Page')),
+        h('div', { class: 'images' }, s.images.map(i => h('figure', {}, h('img', { src: i.fichier, alt: i.titre, loading: 'lazy' }), h('figcaption', {}, i.titre))))));
+    }
+    if (s.questions && s.questions.length) sec.append(activite(s));
+    sec.append(h('div', { class: 'bloc' }, h('div', { class: 'tete' }, h('h3', {}, 'Pour aller plus loin'), repere('URL')), h('p', { class: 'vide' }, 'À compléter : 2 à 4 ressources facultatives, avec une phrase pour chacune.')));
+    const caseFin = h('input', { type: 'checkbox', 'data-fin': s.numero });
+    sec.append(h('label', { class: 'terminer' }, caseFin, 'J’ai terminé la séquence ' + s.numero));
+    const suivante = seqs[n + 1];
+    if (suivante) sec.append(h('a', { class: 'suite', href: '#s' + suivante.numero }, h('span', {}, h('small', {}, 'Séquence suivante'), h('b', {}, suivante.titre)), h('span', { 'aria-hidden': 'true' }, '→')));
+    contenu.append(sec);
+  });
+
+  function activite(s) {
+    const zone = h('div', { class: 'activite' }, h('div', { class: 'tete' }, h('span', { class: 'eti' }, 'Activité · vérifiez votre compréhension'), repere('Test · ' + s.questions.length + ' question' + (s.questions.length > 1 ? 's' : ''))));
+    const verifs = s.questions.map((q, i) => {
+      const nom = 's' + s.numero + 'q' + i;
+      const f = h('fieldset', {}, h('legend', {}, (i + 1) + '. ' + (q.question || 'Complétez')));
+      zone.append(f);
+      if (q.type === 'qcm' || q.type === 'multi') {
+        const type = q.type === 'qcm' ? 'radio' : 'checkbox';
+        q.options.forEach((o, k) => f.append(h('label', { class: 'choix' }, h('input', { type, name: nom, value: k }), o)));
+        return () => {
+          const bonnes = q.type === 'qcm' ? [q.bonne] : q.bonnes;
+          const coches = [...f.querySelectorAll('input:checked')].map(x => +x.value);
+          f.querySelectorAll('.choix').forEach((c, k) => { c.classList.toggle('juste', bonnes.includes(k)); c.classList.toggle('faux', coches.includes(k) && !bonnes.includes(k)); });
+          return coches.length === bonnes.length && coches.every(k => bonnes.includes(k));
+        };
+      }
+      if (q.type === 'vrai_faux') {
+        [['true', 'Vrai'], ['false', 'Faux']].forEach(([v, l]) => f.append(h('label', { class: 'choix' }, h('input', { type: 'radio', name: nom, value: v }), l)));
+        return () => {
+          const c = f.querySelector('input:checked');
+          f.querySelectorAll('.choix').forEach(x => { const v = x.querySelector('input').value === 'true'; x.classList.toggle('juste', v === q.bonne); x.classList.toggle('faux', !!c && c.parentNode === x && v !== q.bonne); });
+          return !!c && (c.value === 'true') === q.bonne;
+        };
+      }
+      const champ = h('input', { type: q.type === 'nombre' ? 'number' : 'text', step: 'any', 'aria-label': 'Votre réponse' });
+      if (q.type === 'trou') { const [a, b] = q.texte.split('___'); f.append(h('p', { style: 'margin:0' }, a, champ, b || '')); }
+      else f.append(h('p', { style: 'margin:0' }, champ, q.unite ? ' ' + q.unite : ''));
+      const norm = t => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+      return () => {
+        const ok = q.type === 'nombre' ? Number(champ.value) === Number(q.bonne) : q.bonnes.some(b => norm(b) === norm(champ.value));
+        champ.style.borderColor = ok ? 'var(--vert)' : 'var(--rouge)';
+        champ.title = ok ? '' : 'Réponse attendue : ' + (q.type === 'nombre' ? q.bonne : q.bonnes[0]);
+        return ok;
+      };
+    });
+    const retour = h('p', { class: 'retour', hidden: true });
+    zone.append(h('button', { class: 'btn', onclick: () => {
+      const justes = verifs.filter(v => v()).length;
+      retour.hidden = false;
+      retour.textContent = justes === verifs.length ? justes + '/' + verifs.length + ' : bravo, c’est acquis.' : justes + '/' + verifs.length + '. Les bonnes réponses sont en vert : revoyez le passage de la vidéo correspondant.';
+    } }, 'Vérifier mes réponses'), retour);
+    zone.append(note('Moodle : importer questions.gift de la séquence dans la banque de questions, puis un Test sans note, tentatives illimitées, retour immédiat.'));
+    return zone;
+  }
+
+  // Progression et repères
+  const reperes = document.getElementById('reperes');
+  reperes.checked = memo.lire('reperes', true);
+  const appliquer = () => document.body.classList.toggle('sans-reperes', !reperes.checked);
+  reperes.onchange = () => { memo.ecrire('reperes', reperes.checked); appliquer(); };
+  appliquer();
+  const faits = memo.lire('faits', {});
+  const cases = [...document.querySelectorAll('[data-fin]')];
+  const maj = () => {
+    const n = cases.filter(c => c.checked).length;
+    document.getElementById('barre').style.width = (cases.length ? 100 * n / cases.length : 0) + '%';
+    document.getElementById('progres').textContent = n + ' séquence' + (n > 1 ? 's' : '') + ' terminée' + (n > 1 ? 's' : '') + ' sur ' + cases.length;
+    cases.forEach(c => { const p = document.querySelector('.coche[data-s="' + c.dataset.fin + '"]'); if (p) p.classList.toggle('faite', c.checked); });
+  };
+  cases.forEach(c => { c.checked = !!faits[c.dataset.fin]; c.onchange = () => { faits[c.dataset.fin] = c.checked; memo.ecrire('faits', faits); maj(); }; });
+  maj();
+})();
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ Marqueurs sur une section de `slides.html` : `data-obs="demarrer"` ou `data-obs=
 
 - Quand l'état du deck change (message `slide` du remote, ou saut par la séquence Q/R), le serveur regarde la section d'index `h` de la présentation active ; si elle porte `data-obs`, il diffuse sur `/ws/quiz` : `{"type":"obs","action":"StartRecord"|"StopRecord","h":h}`. Une seule diffusion par arrivée sur la diapositive (pas à chaque fragment). Le serveur cache les marqueurs de la présentation active (relus à l'activation et à chaque enregistrement de `slides.html`).
 - `obs/obs_quiz_bridge.py` exécute l'action (`StartRecord` ignoré si déjà en cours, `StopRecord` ignoré si rien ne tourne ; messages console « enregistrement démarré par la diapositive n »). Option `--sans-enregistrement` pour ignorer ces messages. L'arrêt aux Q/R reste.
-- Éditeur, panneau de la diapositive : champ « OBS » (liste : aucun · démarrer l'enregistrement · arrêter l'enregistrement) qui pose/retire `data-obs`.
+- Éditeur : au-dessus de la liste des diapositives, bloc « ⏺ Enregistrement OBS » avec deux listes (« démarre à » / « s'arrête à » : une diapositive, ou « à la main ») ; une seule diapositive porte chaque action. Les diapositives enregistrées ont une bordure rouge, pastilles « ⏺ début » / « ⏹ fin ». Le champ « OBS » du panneau de la diapositive fait la même chose.
 - `docs/format-deck.md` : attribut documenté. `docs/fiche-mise-en-route.md` : phrase « l'enregistrement démarre tout seul à la diapositive X si le pont tourne ; F9 reste le secours ».
 
 Dans `presentations/iag-v2/slides.html` : `data-obs="demarrer"` sur la diapositive qui suit « Avant de commencer » (la nouvelle diapositive « Qui suis-je », voir B) et `data-obs="arreter"` sur « À retenir ». Idem dans `presentations/iag-v1/slides.html` (diapositive 3 « Pour commencer », et « À retenir »).
@@ -60,3 +60,39 @@ et garder **la présentation telle qu'elle était** pendant la séance. Le repla
   une seule fois par début. Hors git (`.gitignore`) ; non copiée quand on duplique une présentation.
 - **Routes** (jeton) : `GET /api/presentations/{slug}/seances` → `[{id, debut_enregistrement, taille}]` (plus récente d'abord) ;
   `GET /api/presentations/{slug}/seances/{id}.zip` → la copie figée en zip (relue par la post-production du PC 2).
+
+## F. Séances jouées : page séance et export PDF
+
+- Page Présentations : chaque carte a une liste déroulante des séances jouées (`GET /api/presentations/{slug}/historique`, jeton) :
+  date, durée, diapositives, questions, 🎬 si un replay est sur ce serveur. Une séance = un groupe du journal (`journal.seances`)
+  contenant au moins un changement de diapositive ; identifiant = epoch entier de son premier événement.
+- `/deck/seance.html?prez=&id=&token=` (`GET /api/presentations/{slug}/historique/{id}`) :
+  - la présentation **telle qu'elle était** : copie figée prise au début de l'enregistrement (§E, rattachée si prise de 15 min
+    avant le premier événement à la fin), servie par `/p/{slug}/seances/{copie}/slides.html | quiz.json | medias/…` ; sans copie,
+    la version actuelle (signalé) ;
+  - rejouée au rythme du journal dans le deck en rôle `seance` (iframe pilotée par `postMessage` : `aller`, `resultats`) ; lecture,
+    curseur, vitesse 1× à 16×, déroulé cliquable (diapositives, Q/R, début / fin d'enregistrement) ;
+  - la vidéo du replay si elle est sur ce serveur (celui dont la vidéo recouvre le plus la séance ; `journal.json` :
+    `debut_enregistrement + decalage` = epoch de l'instant 0) : elle sert alors d'horloge ;
+  - les résultats de chaque question posée, dans la diapositive (emplacement « salle » des quiz générés, ou élément
+    `data-amphi="resultats"`) et dans le panneau de droite (`deck/resultats-statiques.js`, `deck/resultats.css`).
+- Résultats : instantané archivé à chaque fermeture (bouton, chrono, fin de séance) et révélation (table `archives_resultats`,
+  `Quiz.archiver`) ; il survit à « Réinitialiser » et aux séances suivantes. Pour une séance antérieure à cet archivage : recalcul
+  à partir des réponses enregistrées pendant la séance (une réponse remplacée depuis par le même participant est perdue).
+- **Exporter en PDF** : `/deck/?role=impression&prez=&copie=&historique=&token=` : une page par diapositive affichée pendant la
+  séance (`&toutes=1` : toutes), résultats placés dans les diapositives de quiz, pied « n / total · affichée à HH:MM · durée »,
+  puis la boîte d'impression du navigateur (« Enregistrer au format PDF »). Rendu reveal.js `view: 'print'`.
+
+## G. Retour caméra et niveau du micro sur la télécommande
+
+- Sur la première diapositive, la télécommande affiche le retour de la caméra OBS (≈ 10 images/s, JPEG 480 px) avec un trait
+  vertical au centre (et un repère à hauteur des yeux) pour se placer, et un vumètre du micro OBS (zone conseillée -40 à -12 dB
+  en pointillés ; « trop bas » sous -40 dB de crête, « sature » au-dessus de -3 dB). Rien sur les autres diapositives.
+- Chemin : télécommande → `/ws/deck` `{"type":"apercu","actif":true}` toutes les 2,5 s → serveur → `/ws/quiz` (seulement les
+  connexions avec le jeton, rôle « pont ») `{"type":"apercu_demande"}` → pont OBS (`obs/obs_quiz_bridge.py`, classe `Apercu`) :
+  seconde connexion obs-websocket abonnée à `InputVolumeMeters`, `GetSourceScreenshot` toutes les 100 ms → `{"type":"apercu",
+  "image","niveau","crete","camera","micro"}` → serveur → télécommande uniquement. Arrêt 6 s après la dernière demande.
+- Source caméra : `--camera` (défaut : la première webcam d'OBS) ; micro : `--micro` (défaut « Mic/Aux », sinon le premier micro).
+  Il faut le pont lancé avec `--jeton` (fenêtre de lancement). Sans pont : « pont OBS non connecté ».
+- Seule exception à « le serveur ne transporte jamais de vidéo » : quelques images basse définition, seulement sur la
+  première diapositive et seulement vers la télécommande ; la captation n'en dépend pas.

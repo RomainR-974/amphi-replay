@@ -165,6 +165,13 @@ ENCODEURS = {
     "h264_qsv": ["-preset", "medium", "-b:v", "1500k", "-maxrate", "2500k", "-bufsize", "5000k"],
     "libx264": ["-preset", "veryfast", "-crf", "25", "-maxrate", "2500k", "-bufsize", "5000k"],
 }
+# Qualité « légère » (replay de la post-production, parcours Moodle) : qualité constante, débit selon l'image ; sur des
+# diapositives, ≈ 4 fois plus petit que la captation OBS (chapitre caméra de 3 min 48 : 101 → 27 Mo en QuickSync).
+ENCODEURS_LEGERS = {
+    "h264_nvenc": ["-preset", "p5", "-rc", "vbr", "-cq", "32", "-b:v", "0", "-maxrate", "2500k", "-bufsize", "5000k"],
+    "h264_qsv": ["-preset", "medium", "-global_quality", "31", "-look_ahead", "0"],
+    "libx264": ["-preset", "veryfast", "-crf", "30", "-tune", "stillimage", "-maxrate", "2500k", "-bufsize", "5000k"],
+}
 
 
 def encodeur_disponible(nom: str) -> bool:
@@ -188,31 +195,28 @@ def _module_postprod(nom: str):
     return __import__(nom)
 
 
-def encoder_video(source: Path, sortie: Path, *, voix: str | None = "podcast", encodeur: str | None = None, consigner: Journal = _rien) -> str:
-    """source → MP4 web : 30 i/s, ≤ 1080 lignes, H.264 (matériel si possible), voix traitée (AAC 128 kb/s). Renvoie l'encodeur."""
+def encoder_video(source: Path, sortie: Path, *, voix: str | None = "podcast", encodeur: str | None = None, qualite: str = "standard",
+                  image: bool = True, consigner: Journal = _rien) -> str:
+    """source → MP4 web : 30 i/s, ≤ 1080 lignes, H.264 (matériel si possible), voix traitée (AAC 128 kb/s). Renvoie l'encodeur.
+
+    `qualite` : "standard" (débit visé 1,5 Mb/s) ou "leger" (qualité constante, ENCODEURS_LEGERS).
+    `image=False` : image copiée telle quelle (seul le son est traité) ; renvoie alors "copie".
+    """
     info = sonder(source)
+    if not image:
+        return _traiter_son_seul(source, sortie, info, voix, consigner)
     nom = choisir_encodeur(encodeur)
+    reglages = (ENCODEURS_LEGERS if qualite == "leger" else ENCODEURS)[nom]
     fmt = "nv12" if nom == "h264_qsv" else "yuv420p"
     sortie.parent.mkdir(parents=True, exist_ok=True)
     commande = ["ffmpeg", "-y", "-hide_banner", "-v", "error", "-stats", "-i", str(source)]
     filtre_audio = None
     with tempfile.TemporaryDirectory(prefix="interactif-") as t:
         if info["son"] and voix and voix != "aucune":
-            v = _module_postprod("voix")
-            son = v.extraire_wav(source, Path(t) / "son.wav")
-            if v.debruitage_disponible():
-                consigner("voix : débruitage (DeepFilterNet)…")
-                son = v.debruiter(son, Path(t))
-            chaine = v.PRESETS[voix]
-            mesures = v.mesurer(son, chaine)
-            filtre = v.filtre_final(mesures, chaine)
-            ecart = v.CIBLE_I - v.mesurer(son, filtre)["I"]
-            if abs(ecart) > v.TOLERANCE_LU:
-                filtre = v.filtre_final(mesures, chaine, ecart)
-            consigner(f"voix : préréglage {voix}, {mesures['I']:.1f} → {v.CIBLE_I:.0f} LUFS")
+            son, filtre = _preparer_voix(source, Path(t), voix, consigner)
             commande += ["-i", str(son)]
             filtre_audio = f"[1:a]{filtre},aresample=48000[voix]"
-        commande += ["-map", "0:v:0", "-vf", f"fps=30,scale=-2:'min(1080,ih)',format={fmt}", "-c:v", nom, *ENCODEURS[nom],
+        commande += ["-map", "0:v:0", "-vf", f"fps=30,scale=-2:'min(1080,ih)',format={fmt}", "-c:v", nom, *reglages,
                      "-g", "60", "-profile:v", "high"]
         if filtre_audio:
             aac = _module_postprod("voix").encodeur_aac()
@@ -225,9 +229,45 @@ def encoder_video(source: Path, sortie: Path, *, voix: str | None = "podcast", e
         if r.returncode != 0:
             if nom != "libx264":  # encodeur matériel indisponible au dernier moment : repli logiciel
                 consigner(f"{nom} a échoué, repli libx264 : {r.stderr.strip()[-300:]}")
-                return encoder_video(source, sortie, voix=voix, encodeur="libx264", consigner=consigner)
+                return encoder_video(source, sortie, voix=voix, encodeur="libx264", qualite=qualite, consigner=consigner)
             raise RuntimeError(f"ffmpeg a échoué :\n{r.stderr[-1500:]}")
     return nom
+
+
+def _preparer_voix(source: Path, temporaire: Path, voix: str, consigner: Journal) -> tuple[Path, str]:
+    """Son extrait (débruité si DeepFilterNet est là) et chaîne de filtres postprod/voix.py réglée sur -16 LUFS."""
+    v = _module_postprod("voix")
+    son = v.extraire_wav(source, temporaire / "son.wav")
+    if v.debruitage_disponible():
+        consigner("voix : débruitage (DeepFilterNet)…")
+        son = v.debruiter(son, temporaire)
+    chaine = v.PRESETS[voix]
+    mesures = v.mesurer(son, chaine)
+    filtre = v.filtre_final(mesures, chaine)
+    ecart = v.CIBLE_I - v.mesurer(son, filtre)["I"]
+    if abs(ecart) > v.TOLERANCE_LU:
+        filtre = v.filtre_final(mesures, chaine, ecart)
+    consigner(f"voix : préréglage {voix}, {mesures['I']:.1f} → {v.CIBLE_I:.0f} LUFS")
+    return son, filtre
+
+
+def _traiter_son_seul(source: Path, sortie: Path, info: dict, voix: str | None, consigner: Journal) -> str:
+    """Image copiée, son traité (ou copié s'il n'y a rien à faire)."""
+    sortie.parent.mkdir(parents=True, exist_ok=True)
+    commande = ["ffmpeg", "-y", "-hide_banner", "-v", "error", "-i", str(source)]
+    with tempfile.TemporaryDirectory(prefix="voix-") as t:
+        if info["son"] and voix and voix != "aucune":
+            son, filtre = _preparer_voix(source, Path(t), voix, consigner)
+            aac = _module_postprod("voix").encodeur_aac()
+            commande += ["-i", str(son), "-filter_complex", f"[1:a]{filtre},aresample=48000[voix]", "-map", "0:v:0", "-map", "[voix]",
+                         "-c:v", "copy", "-c:a", aac, "-b:a", "128k"]
+        else:
+            commande += ["-map", "0:v:0", "-map", "0:a:0?", "-c", "copy"]
+        commande += ["-movflags", "+faststart", str(sortie)]
+        r = subprocess.run(commande, capture_output=True, text=True, errors="replace")
+        if r.returncode != 0:
+            raise RuntimeError(f"ffmpeg a échoué :\n{r.stderr[-1500:]}")
+    return "copie"
 
 
 # -------------------------------------------------------------------------------------

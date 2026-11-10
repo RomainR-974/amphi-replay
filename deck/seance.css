@@ -1,0 +1,25 @@
+/* Page « séance » (deck/seance.html, docs/seance.md §F) : présentation rejouée au rythme du journal. */
+main.seance { max-width: 1500px; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; flex-direction: initial; }
+@media (max-width: 1000px) { main.seance { grid-template-columns: minmax(0, 1fr); } }
+.scene { display: grid; gap: 10px; min-width: 0; }
+.cadre-deck { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; border: 1px solid var(--bord); }
+.cadre-deck iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.lecteur { display: flex; align-items: center; gap: 10px; background: var(--fond2); border: 1px solid var(--bord); border-radius: 8px; padding: 8px 12px; }
+.lecteur input[type=range] { flex: 1; min-width: 80px; accent-color: var(--accent); }
+.lecteur select { width: auto; }
+.lecteur .temps { font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+#b-lecture { min-width: 44px; font-size: 16px; }
+.cote { display: grid; gap: 12px; position: sticky; top: 12px; max-height: calc(100vh - 90px); overflow: auto; }
+.cote h2 { font-size: 14px; margin: 4px 0 0; }
+.bloc-video video { width: 100%; border-radius: 8px; background: #000; display: block; }
+.resultat-courant { background: #fff; color: #15233b; border-radius: 8px; padding: 12px 14px; }
+.resultat-courant h3 { margin: 0 0 8px; font-size: 14px; }
+.resultat-courant .res { font-size: 13px; }
+.deroule { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.deroule li { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+.deroule li:hover { background: var(--fond3); }
+.deroule li.courant { background: rgba(59, 130, 246, .22); }
+.deroule li .t { font-family: ui-monospace, Consolas, monospace; color: var(--sourd); }
+.deroule li.quiz .titre::before { content: "❓ "; }
+.deroule li.evenement { color: var(--sourd); cursor: default; font-size: 12px; }
+.deroule li.evenement:hover { background: none; }

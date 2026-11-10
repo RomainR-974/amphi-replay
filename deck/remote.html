@@ -25,7 +25,25 @@
   .miniature iframe { width: 1920px; height: 1080px; border: 0; transform-origin: top left; pointer-events: none; }
   .numero { position: absolute; right: 8px; bottom: 6px; background: rgba(0,0,0,.6); padding: 2px 8px; border-radius: 6px; font-size: 14px; }
 
-  .notes { margin: 10px 12px 0; padding: 12px; overflow-y: auto; font-size: 20px; line-height: 1.45; background: #1b1b1b; border-radius: 8px; min-height: 0; }
+  .milieu { margin: 10px 12px 0; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .notes { flex: 1; padding: 12px; overflow-y: auto; font-size: 20px; line-height: 1.45; background: #1b1b1b; border-radius: 8px; min-height: 0; }
+
+  /* Retour caméra + vumètre (première diapositive, docs/seance.md §G) */
+  .apercu { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  .apercu[hidden] { display: none; }
+  .cadre-cam { position: relative; aspect-ratio: 16 / 9; max-height: 34dvh; margin: 0 auto; width: 100%; background: #000; border-radius: 8px; overflow: hidden; }
+  .cadre-cam img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .cadre-cam .axe { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: rgba(239, 68, 68, .85); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); }
+  .cadre-cam .axe::after { content: ''; position: absolute; left: -9px; top: 33%; width: 20px; height: 2px; background: rgba(239, 68, 68, .85); }
+  .apercu-etat { position: absolute; left: 8px; top: 6px; font-size: 13px; background: rgba(0, 0, 0, .6); padding: 2px 8px; border-radius: 6px; color: var(--sourd); }
+  .micro { display: grid; grid-template-columns: auto 1fr 64px; gap: 8px; align-items: center; font-size: 14px; }
+  .vu { position: relative; height: 16px; background: #222; border-radius: 8px; overflow: hidden; }
+  .vu-barre { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--vert); transition: width .08s linear; }
+  .vu-barre.faible { background: #555; } .vu-barre.fort { background: var(--orange); } .vu-barre.sature { background: var(--rouge); }
+  .vu-crete { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; left: 0; }
+  .vu-zone { position: absolute; top: 0; bottom: 0; left: 33.3%; width: 46.7%; border-left: 1px dashed rgba(255, 255, 255, .25); border-right: 1px dashed rgba(255, 255, 255, .25); } /* -40 à -12 dB : zone conseillée */
+  .vu-texte { text-align: right; font-variant-numeric: tabular-nums; color: var(--sourd); }
+  .vu-texte.alerte { color: var(--orange); font-weight: 700; }
   .notes p { margin: 0 0 .6em; }
   .notes:empty::before { content: 'Pas de notes pour cette diapositive.'; color: var(--sourd); }
 
@@ -126,7 +144,21 @@
   <div class="numero" id="numero">– / –</div>
 </div>
 
-<div class="notes" id="notes"></div>
+<div class="milieu">
+  <div class="apercu" id="apercu" hidden>
+    <div class="cadre-cam">
+      <img id="apercu-img" alt="Retour de la caméra OBS">
+      <div class="axe" aria-hidden="true"></div>
+      <span class="apercu-etat" id="apercu-etat">connexion à OBS…</span>
+    </div>
+    <div class="micro" title="Niveau du micro dans OBS">
+      <span class="micro-icone">🎙</span>
+      <div class="vu"><span class="vu-barre" id="vu-barre"></span><span class="vu-crete" id="vu-crete"></span><span class="vu-zone" aria-hidden="true"></span></div>
+      <span class="vu-texte" id="vu-texte">— dB</span>
+    </div>
+  </div>
+  <div class="notes" id="notes"></div>
+</div>
 
 <div class="quiz" id="quiz">
   <div class="titre"><span id="quiz-id">quiz</span><span id="quiz-etat">fermé</span></div>
@@ -204,6 +236,7 @@
           w.AmphiSync.on('ack', m => { acks[m.role] = Date.now(); });
           // Présentation activée ou deck enregistré : l'iframe recharge son contenu (index.html) ; ici, titre, notes et quiz.
           w.AmphiSync.on('recharger', () => { afficherTitre(); setTimeout(rafraichir, 500); });
+          w.AmphiSync.on('apercu', afficherApercu);
         }
         rafraichir();
       }
@@ -246,9 +279,53 @@
     $('quiz').classList.toggle('visible', !!questionCourante);
     if (questionCourante) { $('quiz-id').textContent = `quiz ${questionCourante}`; rendreQuiz(); }
     if (!chronoDebut && (i.h > 0 || i.f >= 0)) demarrerChrono();
+    basculerApercu(i.h === 0 && (i.v || 0) === 0);
     derniere = surDerniere();
     $('suiv').textContent = derniere ? 'Quitter' : 'Suivant ▶';
     $('suiv').classList.toggle('quitter', derniere);
+  }
+
+  // --- Retour caméra + niveau du micro sur la première diapositive (docs/seance.md §G) ----
+  // La demande passe par le WebSocket du deck (iframe) ; le pont OBS du PC 2 envoie ≈ 10 images/s tant qu'elle est renouvelée.
+  let apercuActif = false, renouvellement = null, derniereImage = 0, creteMax = -60, creteA = 0;
+  function demanderApercu(actif) {
+    const w = deck.contentWindow;
+    if (w && w.AmphiSync && w.AmphiSync.envoyer) w.AmphiSync.envoyer({ type: 'apercu', actif });
+  }
+  function basculerApercu(actif) {
+    if (actif === apercuActif) return;
+    apercuActif = actif;
+    $('apercu').hidden = !actif;
+    clearInterval(renouvellement);
+    if (actif) {
+      $('apercu-etat').textContent = 'connexion à OBS…';
+      demanderApercu(true);
+      renouvellement = setInterval(() => {
+        demanderApercu(true);
+        if (Date.now() - derniereImage > 4000 && derniereImage) $('apercu-etat').textContent = 'image figée : OBS ne répond plus';
+      }, 2500);
+    } else demanderApercu(false);
+  }
+  const pourcent = db => Math.max(0, Math.min(100, (db + 60) / 60 * 100)); // -60 dB → 0 %, 0 dB → 100 %
+  function afficherApercu(m) {
+    if (!apercuActif) return;
+    if (m.erreur) { $('apercu-etat').textContent = m.erreur; }
+    if (m.image) {
+      $('apercu-img').src = m.image;
+      derniereImage = Date.now();
+      $('apercu-etat').textContent = m.camera ? '📷 ' + m.camera : '';
+    }
+    if (typeof m.niveau === 'number') {
+      const barre = $('vu-barre'), texte = $('vu-texte');
+      barre.style.width = pourcent(m.niveau) + '%';
+      const crete = typeof m.crete === 'number' ? m.crete : m.niveau;
+      if (crete > creteMax || Date.now() - creteA > 1500) { creteMax = crete; creteA = Date.now(); }
+      $('vu-crete').style.left = pourcent(creteMax) + '%';
+      barre.className = 'vu-barre' + (crete > -3 ? ' sature' : crete > -12 ? ' fort' : m.niveau < -45 ? ' faible' : '');
+      const faible = creteMax < -40;
+      texte.textContent = faible ? 'trop bas' : crete > -3 ? 'sature' : Math.round(m.niveau) + ' dB';
+      texte.classList.toggle('alerte', faible || crete > -3);
+    }
   }
 
   // --- Fin de séance : POST /api/seance/terminer, écran « Séance terminée », chronomètre figé ----

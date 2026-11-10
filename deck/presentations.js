@@ -79,6 +79,30 @@
     requestAnimationFrame(redimensionnerVignettes);
     presentations.forEach(p => chargerVignette(p.slug));
     presentations.forEach(p => chargerReplays(p.slug));
+    presentations.forEach(p => chargerSeances(p.slug));
+  }
+
+  // ---- Séances jouées (docs/seance.md §F) : liste déroulante → page de la séance ----
+  async function chargerSeances(slug) {
+    const zone = document.querySelector('.carte[data-slug="' + slug + '"] .seances');
+    if (!zone) return;
+    let seances;
+    try {
+      seances = await api('/api/presentations/' + encodeURIComponent(slug) + '/historique');
+    } catch (e) { zone.textContent = ''; zone.append(h('span', { class: 'sourd' }, 'séances indisponibles')); return; }
+    zone.textContent = '';
+    if (!seances.length) { zone.append(h('span', { class: 'sourd' }, 'Aucune séance jouée')); return; }
+    const libelle = s => {
+      const d = new Date(s.debut * 1000);
+      return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        + ' · ' + formaterDuree(s.fin - s.debut) + ' · ' + pluriel(s.diapositives, 'diapositive') + (s.questions ? ' · ' + pluriel(s.questions, 'question') : '')
+        + (s.replay ? ' · 🎬 replay' : '');
+    };
+    const ouvrir = valeur => { if (valeur) location.href = '/deck/seance.html?prez=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(valeur) + '&token=' + encodeURIComponent(token); };
+    const liste = h('select', { 'aria-label': 'Séances jouées', onchange: e => ouvrir(e.target.value) },
+      h('option', { value: '' }, '📅 ' + pluriel(seances.length, 'séance') + ' jouée' + (seances.length > 1 ? 's' : '') + ' : choisir…'),
+      seances.map(s => h('option', { value: String(s.id) }, libelle(s))));
+    zone.append(liste);
   }
 
   // ---- Replays de la carte (docs/postprod.md §2) : Lire, Supprimer ----
@@ -137,6 +161,7 @@
           p.theme ? h('span', {}, 'thème ' + p.theme) : null,
           h('code', { title: 'presentations/' + p.slug }, p.slug),
           h('span', { title: 'Dernière modification' }, formaterDate(p.modifie))),
+        h('div', { class: 'seances' }, h('span', { class: 'sourd' }, 'séances…')),
         h('div', { class: 'replays' }, h('span', { class: 'sourd' }, 'replays…'))),
       h('div', { class: 'actions' },
         h('button', { class: 'lancer', disabled: p.active, title: p.active ? 'Déjà active' : 'Rendre active : écran, OBS, télécommande et participants basculent dessus', onclick: () => lancer(p) }, p.active ? '✔ Active' : '▶ Lancer'),

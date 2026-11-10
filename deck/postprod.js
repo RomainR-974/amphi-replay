@@ -280,6 +280,7 @@
   }
 
   function rendreApercu() {
+    if (etatPage.productionPrete) majProduction();  // estimation du temps selon la vidéo choisie
     const corps = $('#apercu tbody');
     corps.textContent = '';
     const f = fichierVideo();
@@ -316,6 +317,76 @@
   }
 
   // ======================================================================
+  // 3. Ce que je veux produire (docs/postprod.md §6)
+  // ======================================================================
+  const ELEMENTS_PARCOURS = ['videos', 'sous_titres', 'transcription', 'images', 'textes', 'questions', 'page', 'synopsis'];
+  const LIBELLES = { videos: 'vidéos par séquence', extraits: 'vidéos par diapositive', sous_titres: 'sous-titres', transcription: 'transcription',
+    textes: 'textes « L\'essentiel »', images: 'images des diapositives', questions: 'questions Moodle (GIFT)', scorm: 'paquet SCORM', page: 'page de cours',
+    synopsis: 'synopsis Excel' };
+  const memoire = {
+    lire(k, d) { try { const v = localStorage.getItem('postprod-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    ecrire(k, v) { try { localStorage.setItem('postprod-' + k, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ } },
+  };
+  const casesElements = () => [...document.querySelectorAll('[data-element]')];
+  const formule = () => (document.querySelector('input[name="formule"]:checked') || {}).value || 'simple';
+  const decoupage = () => (document.querySelector('input[name="decoupage"]:checked') || {}).value || 'partie';
+
+  /** Ce que la formule choisie demande au serveur : {extraits, scorm, parcours: [éléments]}. */
+  function production() {
+    const f = formule(), parPartie = decoupage() === 'partie';
+    if (f === 'simple') return { extraits: false, scorm: false, parcours: [] };
+    if (f === 'chapitre') return parPartie ? { extraits: false, scorm: false, parcours: ['videos', 'synopsis'] } : { extraits: true, scorm: false, parcours: ['synopsis'] };
+    if (f === 'activites') return parPartie ? { extraits: false, scorm: true, parcours: ['videos', 'questions', 'synopsis'] } : { extraits: true, scorm: true, parcours: ['questions', 'synopsis'] };
+    const choisis = casesElements().filter(c => c.checked && !c.disabled).map(c => c.dataset.element);
+    return { extraits: choisis.includes('extraits'), scorm: choisis.includes('scorm'), parcours: ELEMENTS_PARCOURS.filter(e => choisis.includes(e)) };
+  }
+
+  function majProduction() {
+    const f = formule();
+    $('#elements').hidden = f !== 'complet';
+    $('#ligne-decoupage').hidden = f !== 'chapitre' && f !== 'activites';
+    const p = production();
+    const contenu = ['vidéo complète'].concat(p.parcours.includes('videos') ? [LIBELLES.videos] : [], p.extraits ? [LIBELLES.extraits] : [],
+      p.parcours.filter(e => e !== 'videos').map(e => LIBELLES[e]), p.scorm ? [LIBELLES.scorm] : []);
+    $('#resume-production').textContent = 'Sera produit : ' + contenu.join(', ') + '.' + (p.parcours.length ? ' Dossier « parcours » du replay : un sous-dossier par séquence.' : '');
+    const tout = casesElements().filter(c => !c.disabled);
+    $('#b-tout').textContent = tout.length && tout.every(c => c.checked) ? 'Tout désélectionner' : 'Tout sélectionner';
+    // Estimation du temps de traitement (mesures du PC 2 : réencodage ≈ 0,3 × la durée, transcription ≈ 0,5 × sur le processeur).
+    const v = fichierVideo();
+    if (v && v.duree) {
+      let s = 0;
+      if ($('#alleger').checked) s += v.duree * 0.3; else if ($('#voix').checked) s += v.duree * 0.03;
+      if (p.parcours.includes('sous_titres') || p.parcours.includes('transcription')) s += v.duree * 0.5;
+      $('#estimation').textContent = s > 60 ? 'traitement ≈ ' + Math.round(s / 60) + ' min' : '';
+    } else $('#estimation').textContent = '';
+    $('#garder-reference').disabled = $('#voix').checked || $('#alleger').checked;
+    memoire.ecrire('production', { formule: f, decoupage: decoupage(), elements: casesElements().filter(c => c.checked).map(c => c.dataset.element),
+      voix: $('#voix').checked, alleger: $('#alleger').checked });
+  }
+
+  function initialiserProduction(transcription) {
+    const m = memoire.lire('production', { formule: 'complet', decoupage: 'partie', elements: ['videos', 'sous_titres', 'transcription', 'textes', 'images', 'questions', 'scorm', 'page', 'synopsis'], voix: true, alleger: true });
+    (document.querySelector('input[name="formule"][value="' + m.formule + '"]') || document.querySelector('input[name="formule"]')).checked = true;
+    (document.querySelector('input[name="decoupage"][value="' + m.decoupage + '"]') || {}).checked = true;
+    casesElements().forEach(c => { c.checked = (m.elements || []).includes(c.dataset.element); });
+    $('#voix').checked = m.voix !== false;
+    $('#alleger').checked = m.alleger !== false;
+    if (!transcription) {
+      ['sous_titres', 'transcription'].forEach(e => { const c = document.querySelector('[data-element="' + e + '"]'); c.checked = false; c.disabled = true; });
+      $('#aide-transcription').textContent = 'Transcription indisponible sur ce PC : pip install -r requirements-postprod.txt (faster-whisper), puis relancer.';
+    } else $('#aide-transcription').textContent = 'Automatique, sur ce PC (≈ 30 s par minute de vidéo).';
+    document.querySelectorAll('input[name="formule"], input[name="decoupage"], [data-element], #voix, #alleger').forEach(c => { c.onchange = majProduction; });
+    $('#b-tout').onclick = () => {
+      const tout = casesElements().filter(c => !c.disabled);
+      const cocher = !tout.every(c => c.checked);
+      tout.forEach(c => { c.checked = cocher; });
+      majProduction();
+    };
+    etatPage.productionPrete = true;
+    majProduction();
+  }
+
+  // ======================================================================
   // 4. Assemblage et suivi de la tâche
   // ======================================================================
   async function assembler() {
@@ -328,14 +399,18 @@
     if (!seance && !confirm('Aucune séance choisie : le replay sera assemblé sans chapitres. Continuer ?')) return;
     let serveur = ($('#serveur').value || '').trim().replace(/\/+$/, '');
     if (serveur && !/^https?:\/\//i.test(serveur)) serveur = 'https://' + serveur;
+    const p = production();
     const corps = {
       prez, video: etatPage.video, audio: sansAudio ? null : etatPage.audio,
       seance_debut: seance ? seance.debut : null, seance_fin: seance ? seance.fin : null,
       decalage: parseFloat($('#decalage').value) || 0,
       titre: $('#titre').value.trim() || $('#titre').placeholder,
-      garder_reference: $('#garder-reference').checked,
-      extraits: $('#extraits').checked,
-      scorm: $('#scorm').checked,
+      garder_reference: $('#garder-reference').checked && !$('#garder-reference').disabled,
+      extraits: p.extraits,
+      scorm: p.scorm,
+      parcours: p.parcours,
+      voix: $('#voix').checked,
+      alleger: $('#alleger').checked,
       couper_qr: $('#couper-qr').checked && !$('#couper-qr').disabled,
       serveur: seance && serveur ? serveur : null,
       jeton_serveur: seance && serveur ? ($('#jeton-serveur').value || token) : null,
@@ -369,7 +444,9 @@
     if (t.etat === 'en_cours') { etatPage.minuteur = setTimeout(suivre, 2000); return; }
     $('#b-assembler').disabled = false;
     if (t.etat === 'terminee') {
-      afficherResultat(true, 'Replay prêt' + (t.replay && t.replay.chapitres !== undefined ? ' : ' + t.replay.chapitres + ' chapitre' + (t.replay.chapitres > 1 ? 's' : '') : '') + (t.replay && t.replay.scorm ? ', paquet SCORM généré' : ''), t.replay);
+      const r = t.replay || {};
+      afficherResultat(true, 'Replay prêt' + (r.chapitres !== undefined ? ' : ' + r.chapitres + ' chapitre' + (r.chapitres > 1 ? 's' : '') : '') + (r.scorm ? ', paquet SCORM généré' : '')
+        + (r.parcours ? ', parcours de ' + r.parcours.sequences + ' séquence' + (r.parcours.sequences > 1 ? 's' : '') : ''), t.replay);
       etat('replay assemblé', 'ok');
     } else {
       afficherResultat(false, t.erreur || 'erreur inconnue');
@@ -393,6 +470,8 @@
     zone.append(h('span', { class: 'message ' + (ok ? 'ok' : 'erreur') }, (ok ? '✔ ' : '✖ ') + message));
     if (ok && replay && replay.id) {
       zone.append(h('a', { class: 'bouton', href: '/deck/replay.html?prez=' + encodeURIComponent(replay.slug) + '&id=' + encodeURIComponent(replay.id) + '&token=' + encodeURIComponent(token) }, '▶ Lire le replay'));
+      if (replay.parcours && replay.parcours.synopsis) zone.append(h('a', { class: 'bouton', href: '/p/' + encodeURIComponent(replay.slug) + '/replays/' + encodeURIComponent(replay.id) + '/parcours/synopsis.xlsx' }, '📊 Télécharger le synopsis (Excel)'));
+      if (replay.parcours && replay.parcours.page) zone.append(h('a', { class: 'bouton', target: '_blank', href: '/p/' + encodeURIComponent(replay.slug) + '/replays/' + encodeURIComponent(replay.id) + '/parcours/cours.html' }, '📘 Ouvrir la page de cours'));
       zone.append(h('a', { href: '/deck/presentations.html?token=' + encodeURIComponent(token) }, 'Retour aux présentations'));
     }
   }
@@ -414,6 +493,7 @@
         $('#b-assembler').disabled = true;
         $('#lancer-aide').textContent = 'ffmpeg / ffprobe absents : l\'assemblage est impossible.';
       } else etat('');
+      initialiserProduction(!!conf.transcription);
       await chargerPresentations();
       // ?auto=1 (bouton « Fini » du lanceur de séance) : sans son de téléphone, pas de recalage ; séances chargées d'office.
       if (params.get('auto') === '1') {

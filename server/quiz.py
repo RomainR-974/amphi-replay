@@ -203,7 +203,14 @@ class Quiz:
                    CREATE TABLE IF NOT EXISTS participants (
                        participant TEXT PRIMARY KEY,
                        pseudo TEXT NOT NULL,
-                       cree REAL NOT NULL);"""
+                       cree REAL NOT NULL);
+                   CREATE TABLE IF NOT EXISTS archives_resultats (
+                       presentation TEXT NOT NULL,
+                       question_id TEXT NOT NULL,
+                       horodatage REAL NOT NULL,
+                       question TEXT NOT NULL,
+                       resultat TEXT NOT NULL);
+                   CREATE INDEX IF NOT EXISTS archives_par_prez ON archives_resultats (presentation, horodatage);"""
             )
 
     def _connexion(self) -> sqlite3.Connection:
@@ -400,23 +407,48 @@ class Quiz:
 
     # --- Résultats ----------------------------------------------------------------------------
 
-    def _reponses(self, question_id: str) -> list[tuple[str, Any, float, float, str]]:
-        """(participant, réponse, temps, points, pseudo) par ordre d'arrivée."""
+    def _reponses(self, question_id: str, depuis: float | None = None, jusqua: float | None = None) -> list[tuple[str, Any, float, float, str]]:
+        """(participant, réponse, temps, points, pseudo) par ordre d'arrivée ; bornées dans le temps si demandé (epoch, inclusif)."""
+        requete = """SELECT r.participant, r.reponse, r.temps, r.points, p.pseudo FROM reponses r
+                     LEFT JOIN participants p ON p.participant = r.participant WHERE r.question_id = ?"""
+        params: list = [question_id]
+        if depuis is not None:
+            requete += " AND r.horodatage >= ?"
+            params.append(depuis)
+        if jusqua is not None:
+            requete += " AND r.horodatage <= ?"
+            params.append(jusqua)
         with self._connexion() as cnx:
-            return [
-                (p, json.loads(r), t, pts, pseudo or "")
-                for p, r, t, pts, pseudo in cnx.execute(
-                    """SELECT r.participant, r.reponse, r.temps, r.points, p.pseudo FROM reponses r
-                       LEFT JOIN participants p ON p.participant = r.participant
-                       WHERE r.question_id = ? ORDER BY r.horodatage""",
-                    (question_id,),
-                )
-            ]
+            return [(p, json.loads(r), t, pts, pseudo or "") for p, r, t, pts, pseudo in cnx.execute(requete + " ORDER BY r.horodatage", params)]
 
-    def resultat(self, question_id: str) -> dict:
-        """Agrégat affichable, dépendant du type ; jamais de donnée individuelle hors pseudo."""
+    # --- Archives des résultats par séance (docs/seance.md §F) ---------------------------
+
+    def archiver(self, presentation: str | None, question_id: str) -> None:
+        """Instantané du résultat d'une question (à sa fermeture ou à sa révélation) : la page « séance » et l'export PDF
+        le retrouvent même après une remise à zéro des réponses ou une autre séance."""
+        if not presentation or question_id not in self.questions:
+            return
         q = self.questions[question_id]
-        reponses = self._reponses(question_id)
+        with self._verrou, self._connexion() as cnx:
+            cnx.execute("INSERT INTO archives_resultats VALUES (?, ?, ?, ?, ?)",
+                        (presentation, question_id, time.time(), json.dumps(q.complet(), ensure_ascii=False),
+                         json.dumps(self.resultat(question_id), ensure_ascii=False)))
+
+    def archives(self, presentation: str, depuis: float, jusqua: float) -> dict[str, dict]:
+        """{question_id: {question, resultat, horodatage}} : le dernier instantané de chaque question dans l'intervalle."""
+        with self._connexion() as cnx:
+            lignes = cnx.execute("""SELECT question_id, horodatage, question, resultat FROM archives_resultats
+                                    WHERE presentation = ? AND horodatage BETWEEN ? AND ? ORDER BY horodatage""",
+                                 (presentation, depuis, jusqua)).fetchall()
+        return {qid: {"question": json.loads(q), "resultat": json.loads(r), "horodatage": t} for qid, t, q, r in lignes}
+
+    def resultat(self, question_id: str, depuis: float | None = None, jusqua: float | None = None, question: "Question | None" = None) -> dict:
+        """Agrégat affichable, dépendant du type ; jamais de donnée individuelle hors pseudo.
+
+        `depuis` / `jusqua` : seulement les réponses de cet intervalle (une séance) ; `question` : définition à utiliser
+        (une question d'une présentation qui n'est pas l'active)."""
+        q = question or self.questions[question_id]
+        reponses = self._reponses(question_id, depuis, jusqua)
         total = len(reponses)
         t = q.type
         res: dict[str, Any] = {"total": total}

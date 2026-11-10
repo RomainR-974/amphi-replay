@@ -58,7 +58,7 @@ Configuration : `AMPHI_CAPTATIONS` = dossier où OBS enregistre et où l'on copi
 `/deck/postprod.html?token=&prez=slug` :
 1. Présentation (liste déroulante), **enregistrement OBS** et **audio du téléphone** choisis parmi les fichiers du dossier de captations (nom, taille, durée par ffprobe, date), ou uniquement la vidéo si le son OBS suffit (case « pas de recalage audio »).
 2. Serveur de la séance (URL + jeton, préremplis depuis `AMPHI_SEANCE_URL` / le jeton courant) → bouton **Charger les séances** → liste des séances du journal ; sélection d'une séance. Le début de l'enregistrement est estimé = `mtime(fichier) − durée` et peut être corrigé par un **décalage manuel** (secondes, ±) ; un aperçu des chapitres calculés s'affiche avant lancement.
-3. Options : titre du replay (défaut : titre de la présentation + date de la séance), garder la piste de référence OBS, générer les extraits par chapitre, générer le paquet SCORM (cochée ; étape « scorm » après les extraits, qui sont alors découpés dans tous les cas ; voir [scorm.md](scorm.md)).
+3. **Ce que je veux produire** (§5 bis) : formule (replay simple, chapitré, chapitré + activités, parcours complet), qualité (voix, vidéo allégée), titre du replay (défaut : titre de la présentation + date de la séance), coupe avant les questions-réponses, piste de référence OBS. Paquet SCORM : voir [scorm.md](scorm.md).
 4. **Assembler** → `POST /api/postprod/assembler` `{prez, video, audio?, seance_debut?, seance_fin?, decalage?, titre?, garder_reference?, extraits?, serveur?, jeton_serveur?}` → `{tache}` ; la tâche tourne en arrière-plan (thread + sous-processus) : `postprod/assembler.py` (ou remux simple sans audio) → chapitrage (ffmpeg `-i replay.mp4 -i ffmetadata -map_metadata 1 -c copy`) → VTT/TXT → extraits (`ffmpeg -ss -to -c copy`). `GET /api/postprod/taches/{id}` renvoie `{etat: en_cours|terminee|erreur, etapes: [...], journal: [lignes], replay?: {slug, id}}` ; la page interroge toutes les 2 s et affiche la progression (étapes et lignes du journal) puis un lien **Lire le replay**.
 5. `GET /api/postprod/captations` (jeton) liste les fichiers du dossier (`{nom, taille, modifie, duree, genre: video|audio}`), triés du plus récent au plus ancien.
 6. `POST /api/presentations/{slug}/replays/{id}/extraits` `{chapitres: [indices]}` découpe a posteriori.
@@ -82,6 +82,52 @@ avertissement) → coupe-bas 80 Hz → égalisation (chaleur, moins de « boue �
 - Vidéo : image copiée sans réencodage, son en AAC 192 kb/s par `aac_mf` (Media Foundation, Windows, ≈ 5× plus rapide que
   l'encodeur `aac` de ffmpeg ; `aac` ailleurs). Sortie : `<dossier>/traite_<preset>/<nom>.mp4` (audio seul : `.wav` 48 kHz).
 - Mesuré sur une captation de 7 min 50 (PC 2) : 35 s, -16,7 LUFS, crête -1,7 dBFS (sans débruitage) ; ≈ 9 min pour 2 h.
+
+## 5 bis. Ce que je veux produire (étape 3 de la page)
+
+Quatre formules ; le choix (et les cases cochées) est mémorisé dans le navigateur.
+
+| Formule | Produit | Requête `POST /api/postprod/assembler` |
+| --- | --- | --- |
+| Replay simple | `replay.mp4` (chapitres intégrés) | `extraits: false, scorm: false, parcours: []` |
+| Replay chapitré | + une vidéo par partie (`parcours/NN-titre/video.mp4`) ou par diapositive (`extraits/`) | `parcours: ["videos"]` ou `extraits: true` |
+| Chapitré + activités | + questions Moodle (GIFT) + paquet SCORM | `parcours: ["videos", "questions"], scorm: true` |
+| Parcours complet | éléments cochés un à un (bouton « Tout sélectionner ») | `parcours: [...]`, `extraits`, `scorm` |
+
+Qualité, pour toutes les formules : **Voix traitée** (`voix: true`, chaîne podcast de §4, -16 LUFS) et **Vidéo allégée**
+(`alleger: true`, 30 i/s à qualité constante : QuickSync `-global_quality 31`, NVENC `-cq 32` ou x264 CRF 30 ; ≈ 4 fois plus
+léger que la captation OBS, pour rester sous les 512 Mo de dépôt de Moodle). Étape de tâche « vidéo », juste après la coupe ;
+`replay.mp4` est remplacé (la piste de référence OBS n'est alors pas gardée).
+
+## 6. Parcours de formation (`server/parcours.py`)
+
+Une **séquence** par partie de la présentation : coupure à chaque diapositive de partie (section `dsfr-chapitre`, ou
+attribut `data-partie`) ; avant la première partie, séquence « Introduction » ; sans partie, blocs d'au moins 8 minutes.
+Une séquence = une section du cours Moodle.
+
+```
+<replay>/parcours/
+  synopsis.xlsx       synopsis Excel (une ligne par activité)
+  cours.html          page de cours autonome (aperçu du parcours ; tableau « fichiers à déposer dans Moodle »)
+  parcours.json       description de ce qui a été produit
+  questions.gift      toutes les questions, une catégorie par séquence (Banque de questions > Importer > GIFT)
+  sous-titres.vtt · transcription.txt   replay complet
+  NN-titre/           video.mp4 · sous-titres.vtt · transcription.txt · essentiel.md · images/NN-titre.jpg · questions.gift
+```
+
+| Élément (`parcours`) | Contenu |
+| --- | --- |
+| `videos` | découpe sans réencodage, du début de la séquence (image clé précédente) à la suivante |
+| `sous_titres`, `transcription` | `postprod/transcrire.py` : faster-whisper (modèle `small`, `AMPHI_WHISPER_MODELE`), en local ; ≈ 30 s par minute de son sur le processeur du PC 2 (mesuré : 19 min pour 41 min ; ≈ 1 h pour 2 h). Étape de tâche « transcription ». Absent → éléments sautés, cases grisées dans la page |
+| `textes` | `essentiel.md` : texte des diapositives et notes du présentateur, **brouillon à réécrire** |
+| `images` | une image par chapitre (≥ 4 s, hors quiz), prise 1,5 s avant la fin du chapitre (diapositive entièrement affichée) |
+| `questions` | questions auto-évaluables (mêmes types que le SCORM) des diapositives de la séquence, en GIFT |
+| `synopsis` | `synopsis.xlsx` (server/synopsis.py) : grille du synopsis de digitalisation (bloc, séquence, durée, modalité, type d'activité, ressource, modification, format, livrable…), une ligne par activité de chaque séquence, onglet « synthèse » (heures par type). Durées : vidéo réelle, lecture à 200 mots/min, 1 min par question, 0,5 min par image, en heures au centième. Les formules « chapitré » et « chapitré + activités » l'incluent |
+| `page` | `cours.html` : vidéo sous-titrée, chapitres, transcription synchronisée, l'essentiel, images, questions corrigées, progression |
+
+Les fichiers sont servis par `GET /p/{slug}/replays/{id}/parcours/...` (liste fermée de noms, `CHEMIN_PARCOURS` dans
+`server/replays.py`) ; la post-production affiche **Ouvrir la page de cours** à la fin. Ouverte depuis le disque, la page
+fonctionne, mais Chrome n'y charge pas les sous-titres (`file://`).
 
 ## 5. Bouton « Fini » de la fenêtre de lancement (PC 2)
 

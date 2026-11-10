@@ -35,6 +35,8 @@ from .presentations import Bibliotheque, normaliser_contact, valider_slug
 from .questions import Questions, SequenceQR, question_publique
 from .quiz import Quiz, charger_questions, questions_depuis_liste
 from .replays import Captations, Replays, Taches, assembler_replay, outils_presents
+from . import historique
+from .parcours import ELEMENTS as ELEMENTS_PARCOURS, transcription_disponible
 from .scorm import construire_scorm
 
 journal = logging.getLogger("amphi")
@@ -226,6 +228,15 @@ async def prez_media(slug: str, chemin: str) -> Response:
     return reponse_media(resoudre_prez(slug), chemin)
 
 
+@app.get("/p/{slug}/seances/{id_copie}/{chemin:path}")
+async def prez_copie_figee(slug: str, id_copie: str, chemin: str) -> Response:
+    """Présentation telle qu'elle était pendant une séance (copie figée : slides.html, quiz.json, medias/…), pour la page séance."""
+    fichier = historique.fichier_copie(biblio, resoudre_prez(slug), id_copie, chemin)
+    if fichier is None:
+        raise HTTPException(status_code=404)
+    return FileResponse(fichier, headers={"Cache-Control": "no-cache"})
+
+
 app.mount("/deck", StaticFiles(directory=config.DOSSIER_DECK, html=True), name="deck")
 app.mount("/static", StaticFiles(directory=config.DOSSIER_STATIQUE), name="static")
 
@@ -320,6 +331,12 @@ async def ws_deck(ws: WebSocket, role: str = Query(default="scene"), token: str 
                     {"type": "ack", "role": role, "h": message.get("h"), "v": message.get("v"), "f": message.get("f")},
                     roles=("remote",),
                 )
+            elif role == "remote" and genre == "apercu":
+                # Retour caméra + niveau du micro (docs/seance.md §G) : demande relayée au pont OBS, qui répond par /ws/quiz.
+                if not quiz_ws.compter("pont"):
+                    await ws.send_json({"type": "apercu", "erreur": "pont OBS non connecté (fenêtre de lancement du PC 2)"})
+                else:
+                    await quiz_ws.diffuser({"type": "apercu_demande", "actif": bool(message.get("actif"))}, roles=("pont",))
             elif genre == "ping":
                 await ws.send_json({"type": "pong"})
     except WebSocketDisconnect:
@@ -636,6 +653,23 @@ def replay_ou_404(slug: str, id: str) -> None:
 # ---------------------------------------------------------------------------------
 
 
+@app.get("/api/presentations/{slug}/historique", dependencies=[Depends(verifier_jeton)])
+async def historique_liste(slug: str) -> list[dict]:
+    """Séances jouées (journal), avec leur copie figée et leur replay s'ils existent (docs/seance.md §F)."""
+    slug_ou_404(slug)
+    return await asyncio.to_thread(historique.liste, biblio, journal_bd, replays, slug)
+
+
+@app.get("/api/presentations/{slug}/historique/{id_seance}", dependencies=[Depends(verifier_jeton)])
+async def historique_detail(slug: str, id_seance: int) -> dict:
+    """Une séance : événements, titres, copie figée, replay, résultats de chaque question posée."""
+    slug_ou_404(slug)
+    try:
+        return await asyncio.to_thread(historique.detail, biblio, journal_bd, replays, quiz, slug, id_seance)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="séance inconnue")
+
+
 @app.get("/api/presentations/{slug}/seances", dependencies=[Depends(verifier_jeton)])
 async def seances_figees(slug: str) -> list[dict]:
     slug_ou_404(slug)
@@ -737,7 +771,9 @@ async def replays_scorm_supprimer(slug: str, id: str) -> dict:
     return {"ok": True}
 
 
-TYPES_REPLAY = {".mp4": "video/mp4", ".vtt": "text/vtt; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json", ".zip": "application/zip"}
+TYPES_REPLAY = {".mp4": "video/mp4", ".vtt": "text/vtt; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json", ".zip": "application/zip",
+                ".html": "text/html; charset=utf-8", ".md": "text/plain; charset=utf-8", ".gift": "text/plain; charset=utf-8", ".jpg": "image/jpeg",
+                ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
 
 
 @app.get("/p/{slug}/replays/{id}/{chemin:path}")
@@ -754,7 +790,7 @@ async def replay_fichier(slug: str, id: str, chemin: str) -> Response:
     if fichier is None:
         raise HTTPException(status_code=404)
     entetes = {"Accept-Ranges": "bytes", "Cache-Control": "no-cache"}
-    if chemin.startswith(("extraits/", "scorm/")) or chemin == "chapitres.txt":
+    if chemin.startswith(("extraits/", "scorm/")) or chemin in ("chapitres.txt", "parcours/synopsis.xlsx"):
         entetes["Content-Disposition"] = f'attachment; filename="{fichier.name}"'
     return FileResponse(fichier, media_type=TYPES_REPLAY.get(fichier.suffix.lower(), "application/octet-stream"), headers=entetes)
 
@@ -778,13 +814,16 @@ class DemandeAssemblage(BaseModel):
     jeton_serveur: str | None = None
     couper_qr: bool = True  # tronquer la vidéo au `qr_ouvrir` de la séance (séquence questions-réponses hors replay)
     scorm: bool = True  # paquet SCORM 1.2 après les extraits (docs/scorm.md) ; les extraits sont alors découpés même si `extraits` est faux
+    voix: bool = False  # voix traitée, -16 LUFS (postprod/voix.py)
+    alleger: bool = False  # image réencodée en qualité légère (30 i/s)
+    parcours: list[str] = []  # éléments du parcours de formation (server/parcours.py, ELEMENTS ; docs/postprod.md §6)
 
 
 @app.get("/api/postprod/configuration", dependencies=[Depends(verifier_jeton)])
 async def postprod_configuration() -> dict:
     """Ce que la page de post-production préremplit : dossier de captations, URL du serveur de séance, présence de ffmpeg."""
     return {"captations": str(config.DOSSIER_CAPTATIONS), "seance_url": config.SEANCE_URL, "seance_jeton": config.SEANCE_JETON,
-            "ffmpeg": outils_presents()}
+            "ffmpeg": outils_presents(), "transcription": await asyncio.to_thread(transcription_disponible)}
 
 
 @app.get("/api/postprod/captations", dependencies=[Depends(verifier_jeton)])
@@ -803,7 +842,12 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             captations.fichier(corps.audio)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    etapes = ["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + ["chapitrage"] + (["extraits"] if corps.extraits or corps.scorm else []) + (["scorm"] if corps.scorm else [])
+    inconnus = [e for e in corps.parcours if e not in ELEMENTS_PARCOURS]
+    if inconnus:
+        raise HTTPException(status_code=422, detail=f"éléments de parcours inconnus : {', '.join(inconnus)}")
+    etapes = (["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + (["vidéo"] if corps.voix or corps.alleger else []) + ["chapitrage"]
+              + (["extraits"] if corps.extraits or corps.scorm else []) + (["scorm"] if corps.scorm else [])
+              + (["transcription"] if {"sous_titres", "transcription"} & set(corps.parcours) else []) + (["parcours"] if corps.parcours else []))
     serveur = (corps.serveur or "").strip() or None
 
     def travail(tache):
@@ -812,6 +856,7 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             prez=corps.prez, video=corps.video, audio=corps.audio or None, seance_debut=corps.seance_debut, seance_fin=corps.seance_fin,
             decalage=corps.decalage or 0.0, titre=corps.titre, garder_reference=corps.garder_reference, extraits=corps.extraits,
             serveur=serveur, jeton_serveur=corps.jeton_serveur, couper_qr=corps.couper_qr, scorm=corps.scorm,
+            voix=corps.voix, alleger=corps.alleger, parcours=corps.parcours,
         )
 
     return {"tache": taches.lancer(etapes, travail).id}
@@ -875,6 +920,9 @@ async def boucle_de_fond() -> None:
                 await publier_quiz()
             if quiz.ouverte and quiz.reste == 0.0:
                 derniere = quiz.fermer()
+                if derniere:
+                    journal_bd.ajouter(biblio.active(), "quiz_fermer", question=derniere)
+                    quiz.archiver(biblio.active(), derniere)
                 await publier_quiz(derniere)
         except asyncio.CancelledError:
             raise
@@ -971,6 +1019,7 @@ async def quiz_fermer() -> dict:
     derniere = quiz.fermer()
     if derniere:
         journal_bd.ajouter(biblio.active(), "quiz_fermer", question=derniere)
+        quiz.archiver(biblio.active(), derniere)
     await publier_quiz(derniere)
     return quiz.etat(derniere)
 
@@ -982,6 +1031,7 @@ async def quiz_reveler(cible: Cible) -> dict:
     except KeyError:
         raise HTTPException(status_code=404, detail="question inconnue")
     journal_bd.ajouter(biblio.active(), "quiz_reveler", question=cible.question_id)
+    quiz.archiver(biblio.active(), cible.question_id)
     await publier_quiz(cible.question_id)
     return quiz.etat(cible.question_id)
 
@@ -1266,6 +1316,7 @@ async def seance_terminer() -> dict:
     derniere = quiz.fermer()
     if derniere:
         journal_bd.ajouter(biblio.active(), "quiz_fermer", question=derniere)
+        quiz.archiver(biblio.active(), derniere)
         await publier_quiz(derniere)
     if qr.actif:
         courante = questions_bd.en_cours()
@@ -1329,7 +1380,7 @@ async def ws_quiz(ws: WebSocket, token: str = Query(default="")) -> None:
     Avec le jeton (pont OBS), accepte aussi `{"type": "enregistrement", "actif": bool, "duree_ms": n}`.
     """
     autorise = bool(token) and jeton_valide(token)
-    await quiz_ws.ajouter(ws, "quiz")
+    await quiz_ws.ajouter(ws, "pont" if autorise else "quiz")  # avec le jeton : le pont OBS du PC 2
     try:
         await ws.send_json({"type": "quiz", **quiz.etat()})  # l'état des questions / de la séquence Q/R est relu par HTTP à la connexion (GET /api/qr)
         while True:
@@ -1343,6 +1394,13 @@ async def ws_quiz(ws: WebSocket, token: str = Query(default="")) -> None:
                     continue
                 reponse = await asyncio.to_thread(signaler_enregistrement, bool(message.get("actif")), duree_ms)
                 await ws.send_json(reponse)
+            elif message.get("type") == "apercu" and autorise:
+                # Image JPEG (data URI, ≈ 15 ko) et niveau du micro venus d'OBS : seulement vers la télécommande.
+                image = message.get("image")
+                if image is not None and not (isinstance(image, str) and image.startswith("data:image/") and len(image) < 400_000):
+                    continue
+                await deck_ws.diffuser({"type": "apercu", "image": image, "niveau": message.get("niveau"), "crete": message.get("crete"),
+                                        "camera": message.get("camera"), "micro": message.get("micro"), "erreur": message.get("erreur")}, roles=("remote",))
     except WebSocketDisconnect:
         pass
     finally:

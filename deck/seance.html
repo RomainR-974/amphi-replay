@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Séance</title>
+<link rel="stylesheet" href="postprod.css">
+<link rel="stylesheet" href="resultats.css">
+<link rel="stylesheet" href="seance.css">
+</head>
+<body>
+
+<header id="barre">
+  <div class="groupe">
+    <a id="l-presentations" href="/deck/presentations.html">← Présentations</a>
+    <h1 id="titre">Séance</h1>
+    <span id="etat" class="etat">chargement…</span>
+  </div>
+  <div class="groupe">
+    <button id="b-pdf" class="principal" title="Une page par diapositive jouée, avec les questions et leurs résultats">⤓ Exporter en PDF</button>
+  </div>
+</header>
+
+<main class="seance">
+  <section class="scene">
+    <div class="cadre-deck"><iframe id="deck" title="Présentation rejouée"></iframe></div>
+    <div class="lecteur">
+      <button id="b-lecture" aria-label="Lecture">▶</button>
+      <span id="temps" class="temps">00:00</span>
+      <input type="range" id="curseur" min="0" max="1" step="1" value="0" aria-label="Position dans la séance">
+      <span id="duree" class="temps">00:00</span>
+      <label class="sourd" for="vitesse">Vitesse</label>
+      <select id="vitesse"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option><option value="16">16×</option></select>
+    </div>
+    <p id="info-version" class="aide"></p>
+  </section>
+
+  <aside class="cote">
+    <div id="bloc-video" class="bloc-video" hidden>
+      <video id="video" playsinline preload="metadata"></video>
+      <p class="aide" id="info-video"></p>
+    </div>
+    <div id="resultat-courant" class="resultat-courant" hidden></div>
+    <h2>Déroulé <small id="resume" class="sourd"></small></h2>
+    <ol id="deroule" class="deroule"></ol>
+  </aside>
+</main>
+
+<script src="resultats-statiques.js"></script>
+<script src="seance.js"></script>
+</body>
+</html>

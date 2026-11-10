@@ -104,3 +104,8 @@ dialog .erreur { color: var(--rouge); font-size: 13px; margin-top: 8px; }
 @keyframes glisser { to { left: 100%; } }
 .avertissements { max-height: 40vh; overflow: auto; font-size: 13px; color: var(--orange); padding-left: 20px; margin: 8px 0 0; }
 .avertissements:empty::before { content: 'Aucun avertissement.'; color: var(--vert); margin-left: -20px; }
+
+/* Séances jouées : liste déroulante vers la page séance (docs/seance.md §F) */
+.carte .seances { border-top: 1px dashed var(--bord); margin-top: 4px; padding-top: 8px; font-size: 12px; }
+.carte .seances select { width: 100%; font-size: 12px; }
+.carte .seances .sourd { color: var(--sourd); }

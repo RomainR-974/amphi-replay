@@ -22,6 +22,10 @@ vérifie d'abord `GetRecordStatus` (rien si l'état voulu est déjà atteint). O
 Ancre du replay interactif (docs/seance.md §E) : avec `--jeton`, le pont lit `GetRecordStatus` chaque seconde et signale au
 serveur chaque début d'enregistrement (`{"type": "enregistrement", "actif": true, "duree_ms": n}`, y compris un F9 manuel)
 et chaque fin ; le serveur date le début avec sa propre horloge et fige la présentation active.
+
+Retour télécommande (docs/seance.md §G, avec `--jeton`) : sur la première diapositive, la télécommande demande un retour
+caméra et le niveau du micro ; le pont ouvre une seconde connexion OBS et envoie ≈ 10 images/s (JPEG 480 px de la source
+caméra) et le niveau de l'entrée micro, tant que la demande est renouvelée. Options `--camera`, `--micro`.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import math
 import sys
 
 import websockets
@@ -46,6 +51,20 @@ def connexion_ouverte(ws) -> bool:
     return not getattr(ws, "closed", True)
 
 
+async def identifier(ws, mot_de_passe: str, abonnements: int) -> None:
+    """Hello → Identify (avec l'authentification si OBS la demande) → Identified ; RuntimeError sinon."""
+    bonjour = json.loads(await ws.recv())
+    identification: dict = {"rpcVersion": 1, "eventSubscriptions": abonnements}
+    auth = bonjour["d"].get("authentication")
+    if auth:
+        secret = base64.b64encode(hashlib.sha256((mot_de_passe + auth["salt"]).encode()).digest()).decode()
+        identification["authentication"] = base64.b64encode(hashlib.sha256((secret + auth["challenge"]).encode()).digest()).decode()
+    await ws.send(json.dumps({"op": 1, "d": identification}))
+    reponse = json.loads(await ws.recv())
+    if reponse.get("op") != 2:
+        raise RuntimeError(f"identification OBS refusée : {reponse}")
+
+
 class Obs:
     """Client minimal obs-websocket v5 (identification + requêtes)."""
 
@@ -55,16 +74,7 @@ class Obs:
 
     async def connecter(self) -> None:
         self.ws = await websockets.connect(self.url, open_timeout=5)
-        bonjour = json.loads(await self.ws.recv())
-        identification: dict = {"rpcVersion": 1, "eventSubscriptions": 0}
-        auth = bonjour["d"].get("authentication")
-        if auth:
-            secret = base64.b64encode(hashlib.sha256((self.mot_de_passe + auth["salt"]).encode()).digest()).decode()
-            identification["authentication"] = base64.b64encode(hashlib.sha256((secret + auth["challenge"]).encode()).digest()).decode()
-        await self.ws.send(json.dumps({"op": 1, "d": identification}))
-        reponse = json.loads(await self.ws.recv())
-        if reponse.get("op") != 2:
-            raise RuntimeError(f"identification OBS refusée : {reponse}")
+        await identifier(self.ws, self.mot_de_passe, 0)
 
     async def requete(self, type_: str, donnees: dict | None = None) -> dict:
         async with self._verrou:
@@ -151,6 +161,120 @@ async def suivre_enregistrement(obs: Obs, serveur) -> None:
         await asyncio.sleep(PERIODE_ANCRE_S)
 
 
+PERIODE_APERCU_S = 0.1          # 10 images par seconde
+DUREE_DEMANDE_APERCU_S = 6.0    # la télécommande renouvelle sa demande toutes les 2,5 s ; sans nouvelle, on s'arrête
+LARGEUR_APERCU = 480
+EVENEMENT_VOLUME = 1 << 16      # obs-websocket v5 : InputVolumeMeters (événement à haut débit, toutes les 50 ms)
+GENRES_CAMERA = ("dshow_input", "av_capture_input", "av_capture_input_v2", "v4l2_input")
+GENRES_MICRO = ("wasapi_input_capture", "coreaudio_input_capture", "pulse_input_capture", "alsa_input_capture")
+
+
+def decibels(valeur: float) -> float:
+    return round(20 * math.log10(max(valeur, 1e-6)), 1)
+
+
+def niveaux_micro(evenement: dict, micro: str) -> tuple[float, float] | None:
+    """InputVolumeMeters → (niveau RMS, crête) en dBFS de l'entrée `micro` ; None si elle n'y est pas.
+
+    inputLevelsMul : une ligne par canal, [magnitude, crête, crête d'entrée] en valeurs linéaires (0 à 1)."""
+    for entree in evenement.get("inputs", []):
+        if entree.get("inputName") == micro:
+            canaux = entree.get("inputLevelsMul") or []
+            if not canaux:
+                return decibels(0), decibels(0)
+            return decibels(max(c[0] for c in canaux)), decibels(max(c[1] for c in canaux))
+    return None
+
+
+class Apercu:
+    """Retour caméra et niveau du micro pour la télécommande (docs/seance.md §G).
+
+    Connexion OBS dédiée, abonnée aux niveaux audio, ouverte seulement pendant qu'on le demande : une capture de la source
+    caméra (GetSourceScreenshot, JPEG 480 px) toutes les 100 ms et le dernier niveau du micro, envoyés au serveur qui
+    les relaie à la télécommande. La connexion principale du pont (scènes, enregistrement) n'est pas touchée.
+    """
+
+    def __init__(self, url: str, mot_de_passe: str, camera: str | None = None, micro: str | None = None) -> None:
+        self.url, self.mot_de_passe, self.camera, self.micro = url, mot_de_passe, camera, micro
+        self.jusqua = 0.0
+        self.tache: asyncio.Task | None = None
+        self.niveau: tuple[float, float] | None = None
+
+    def demander(self, serveur, actif: bool) -> None:
+        boucle = asyncio.get_running_loop()
+        self.jusqua = boucle.time() + DUREE_DEMANDE_APERCU_S if actif else 0.0
+        if actif and (self.tache is None or self.tache.done()):
+            self.tache = asyncio.create_task(self._tourner(serveur))
+
+    async def _tourner(self, serveur) -> None:
+        boucle = asyncio.get_running_loop()
+        attente: dict[str, asyncio.Future] = {}
+        compteur = 0
+        ws = None
+        lecteur = None
+        try:
+            ws = await websockets.connect(self.url, open_timeout=5, max_size=None)
+            await identifier(ws, self.mot_de_passe, EVENEMENT_VOLUME)
+
+            async def lire() -> None:
+                async for brut in ws:
+                    m = json.loads(brut)
+                    if m.get("op") == 7:
+                        fut = attente.pop(m["d"].get("requestId"), None)
+                        if fut and not fut.done():
+                            fut.set_result(m["d"])
+                    elif m.get("op") == 5 and m["d"].get("eventType") == "InputVolumeMeters" and self.micro:
+                        n = niveaux_micro(m["d"].get("eventData") or {}, self.micro)
+                        if n is not None:
+                            self.niveau = n
+
+            lecteur = asyncio.create_task(lire())
+
+            async def requete(type_: str, donnees: dict | None = None) -> dict:
+                nonlocal compteur
+                compteur += 1
+                ident = f"apercu-{compteur}"
+                attente[ident] = boucle.create_future()
+                await ws.send(json.dumps({"op": 6, "d": {"requestType": type_, "requestId": ident, "requestData": donnees or {}}}))
+                d = await asyncio.wait_for(attente[ident], 5)
+                if not d["requestStatus"]["result"]:
+                    raise RuntimeError(d["requestStatus"].get("comment", type_))
+                return d.get("responseData", {})
+
+            if not self.camera or not self.micro:
+                entrees = (await requete("GetInputList")).get("inputs", [])
+                if not self.camera:
+                    self.camera = next((e["inputName"] for e in entrees if e.get("inputKind") in GENRES_CAMERA), None)
+                if not self.micro:
+                    noms = [e["inputName"] for e in entrees if e.get("inputKind") in GENRES_MICRO]
+                    self.micro = "Mic/Aux" if "Mic/Aux" in noms else (noms[0] if noms else None)
+            print(f"retour télécommande : caméra « {self.camera or 'introuvable'} », micro « {self.micro or 'introuvable'} »")
+            while boucle.time() < self.jusqua and connexion_ouverte(serveur):
+                debut = boucle.time()
+                image = None
+                if self.camera:
+                    r = await requete("GetSourceScreenshot", {"sourceName": self.camera, "imageFormat": "jpg", "imageWidth": LARGEUR_APERCU,
+                                                              "imageCompressionQuality": 55})
+                    image = r.get("imageData")
+                niveau, crete = self.niveau if self.niveau else (None, None)
+                await serveur.send(json.dumps({"type": "apercu", "image": image, "niveau": niveau, "crete": crete, "camera": self.camera, "micro": self.micro,
+                                               "erreur": None if self.camera else "aucune source caméra dans OBS (option --camera)"}))
+                await asyncio.sleep(max(0.0, PERIODE_APERCU_S - (boucle.time() - debut)))
+            print("retour télécommande arrêté")
+        except (OSError, websockets.WebSocketException, RuntimeError, asyncio.TimeoutError) as e:
+            print("retour télécommande impossible :", e, file=sys.stderr)
+            if connexion_ouverte(serveur):
+                try:
+                    await serveur.send(json.dumps({"type": "apercu", "image": None, "erreur": f"OBS : {e}"}))
+                except websockets.WebSocketException:
+                    pass
+        finally:
+            if lecteur:
+                lecteur.cancel()
+            if ws is not None:
+                await ws.close()
+
+
 async def arreter_apres_delai(obs: Obs) -> None:
     await asyncio.sleep(DELAI_ARRET_S)
     if await obs.arreter_enregistrement():
@@ -183,11 +307,14 @@ async def principal() -> int:
     p.add_argument("--scene", default="Diapositives + vignette", help="scène forcée pendant une question ouverte")
     p.add_argument("--sans-arret", action="store_true", help="ne pas arrêter l'enregistrement OBS à l'ouverture des questions-réponses")
     p.add_argument("--sans-enregistrement", action="store_true", help="ignorer les messages d'enregistrement envoyés par les diapositives (data-obs) et la fin de séance")
+    p.add_argument("--camera", default=None, help="source OBS du retour caméra de la télécommande (défaut : la première webcam)")
+    p.add_argument("--micro", default=None, help="entrée audio OBS du vumètre de la télécommande (défaut : « Mic/Aux », sinon le premier micro)")
     args = p.parse_args()
     url_quiz = args.serveur.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + "/ws/quiz"
     url_connexion = url_quiz + (f"?token={args.jeton}" if args.jeton else "")
 
     obs = Obs(args.obs, args.obs_mdp)
+    apercu = Apercu(args.obs, args.obs_mdp, args.camera, args.micro)
     scene_avant: str | None = None
     qr_arretee = False  # StopRecord déjà demandé pour la séquence Q/R en cours
     delai = 1
@@ -204,6 +331,9 @@ async def principal() -> int:
                     nonlocal scene_avant, qr_arretee
                     async for brut in ws:
                         m = json.loads(brut)
+                        if m.get("type") == "apercu_demande":
+                            apercu.demander(ws, bool(m.get("actif")))
+                            continue
                         if m.get("type") == "enregistrement":
                             if m.get("ok") and m.get("actif"):
                                 print(f"serveur : ancre enregistrée, présentation « {m.get('presentation')} » figée ({m.get('seance')})")

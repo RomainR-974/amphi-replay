@@ -72,20 +72,69 @@
     </div>
   </section>
 
-  <!-- 3. Options -->
+  <!-- 3. Ce que je veux produire -->
   <section class="etape" id="etape-options">
-    <h2><span class="numero">3</span> Options</h2>
+    <h2><span class="numero">3</span> Ce que je veux produire <span class="espace"></span><small id="estimation"></small></h2>
+    <div class="formules" role="radiogroup" aria-label="Formule">
+      <label class="formule"><input type="radio" name="formule" value="simple">
+        <b>Replay simple</b><span>Une seule vidéo, chapitres intégrés.</span></label>
+      <label class="formule"><input type="radio" name="formule" value="chapitre">
+        <b>Replay chapitré</b><span>Plusieurs vidéos courtes et leur synopsis Excel.</span></label>
+      <label class="formule"><input type="radio" name="formule" value="activites">
+        <b>Chapitré + activités</b><span>Vidéos, questions Moodle (GIFT), paquet SCORM et synopsis Excel.</span></label>
+      <label class="formule"><input type="radio" name="formule" value="complet">
+        <b>Parcours complet</b><span>Choisir chaque élément : sous-titres, textes, images, questions, page de cours…</span></label>
+    </div>
+
+    <div class="ligne" id="ligne-decoupage">
+      <label>Découper</label>
+      <label class="case"><input type="radio" name="decoupage" value="partie" checked> par partie de la présentation <span class="sourd">(séquences de cours)</span></label>
+      <label class="case"><input type="radio" name="decoupage" value="diapositive"> par diapositive <span class="sourd">(capsules)</span></label>
+    </div>
+
+    <div id="elements" hidden>
+      <div class="tete-elements">
+        <span class="sourd">Éléments du parcours (un dossier par séquence = une section Moodle)</span>
+        <button type="button" id="b-tout">Tout sélectionner</button>
+      </div>
+      <div class="groupes-elements">
+        <fieldset><legend>Vidéo</legend>
+          <label class="case"><input type="checkbox" data-element="videos"> Une vidéo par séquence</label>
+          <label class="case"><input type="checkbox" data-element="extraits"> Une vidéo par diapositive <span class="sourd">(capsules)</span></label>
+        </fieldset>
+        <fieldset><legend>Accessibilité</legend>
+          <label class="case"><input type="checkbox" data-element="sous_titres"> Sous-titres <span class="sourd">(.vtt)</span></label>
+          <label class="case"><input type="checkbox" data-element="transcription"> Transcription écrite</label>
+          <p class="aide" id="aide-transcription"></p>
+        </fieldset>
+        <fieldset><legend>Contenus</legend>
+          <label class="case"><input type="checkbox" data-element="textes"> L'essentiel <span class="sourd">(brouillon de texte par séquence)</span></label>
+          <label class="case"><input type="checkbox" data-element="images"> Images des diapositives</label>
+        </fieldset>
+        <fieldset><legend>Activités</legend>
+          <label class="case"><input type="checkbox" data-element="questions"> Questions Moodle <span class="sourd">(GIFT)</span></label>
+          <label class="case"><input type="checkbox" data-element="scorm"> Paquet SCORM <span class="sourd">(vidéos + quiz, suivi)</span></label>
+        </fieldset>
+        <fieldset><legend>Parcours</legend>
+          <label class="case"><input type="checkbox" data-element="synopsis"> Synopsis <span class="sourd">(Excel : séquences, activités, durées)</span></label>
+          <label class="case"><input type="checkbox" data-element="page"> Page de cours <span class="sourd">(aperçu du parcours)</span></label>
+        </fieldset>
+      </div>
+    </div>
+    <p class="aide" id="resume-production"></p>
+
+    <div class="ligne qualite">
+      <label>Qualité</label>
+      <label class="case" title="Débruitage si DeepFilterNet est installé, égalisation, compression, volume à -16 LUFS (postprod/voix.py)"><input type="checkbox" id="voix" checked> Voix traitée et plus forte</label>
+      <label class="case" title="Image réencodée en 30 images/s à qualité constante : environ 4 fois plus léger, pour rester sous les limites de dépôt de Moodle"><input type="checkbox" id="alleger" checked> Vidéo allégée</label>
+    </div>
     <div class="ligne">
-      <label for="titre">Titre du replay</label>
+      <label for="titre">Titre</label>
       <div class="champ"><input type="text" id="titre" placeholder="Titre de la présentation + date de la séance"></div>
     </div>
     <div class="ligne">
-      <label class="case"><input type="checkbox" id="garder-reference"> Garder la piste de référence OBS (seconde piste audio)</label>
-      <label class="case"><input type="checkbox" id="extraits" checked> Générer les extraits par chapitre</label>
-      <label class="case" title="Paquet SCORM 1.2 (Moodle…) : un chapitre par étape, avec les quiz en auto-évaluation ; les extraits sont découpés dans tous les cas"><input type="checkbox" id="scorm" checked> Générer le paquet SCORM</label>
-    </div>
-    <div class="ligne">
       <label class="case" title="La séquence questions-réponses (bouton Q/R de la télécommande) n'est pas dans le replay : la vidéo est tronquée à l'instant où elle a été ouverte"><input type="checkbox" id="couper-qr" checked> Couper avant les questions-réponses <span class="sourd" id="couper-qr-aide"></span></label>
+      <label class="case"><input type="checkbox" id="garder-reference"> Garder la piste de référence OBS <span class="sourd">(seconde piste audio, sans « Qualité »)</span></label>
     </div>
   </section>
 

@@ -330,6 +330,7 @@
   // Rendu général
   // ======================================================================
   function rendreTout() {
+    rendreObsPlage();
     rendreListe();
     rendreScene();
     rendrePanneau();
@@ -342,11 +343,14 @@
     const ol = $('#liste-diapos');
     ol.textContent = '';
     requestAnimationFrame(redimensionnerVignettes);
+    const debut = indexObs('demarrer'), fin = indexObs('arreter');
     etat.sections.forEach((s, i) => {
-      const li = h('li', { class: i === etat.courant ? 'courante' : '', draggable: 'true', 'data-index': i,
+      const enregistree = debut >= 0 && i >= debut && (fin < 0 || fin <= debut || i <= fin);
+      const li = h('li', { class: (i === etat.courant ? 'courante' : '') + (enregistree ? ' enregistree' : ''), draggable: 'true', 'data-index': i,
         onclick: () => { if (i !== etat.courant) { terminerEdition(true); etat.courant = i; etat.selection = null; rendreTout(); } } },
         h('div', { class: 'numero' }, String(i + 1)),
-        h('div', {}, vignette(s), h('div', { class: 'type' }, libelleSection(s), badgeCamera(s))));
+        h('div', {}, vignette(s), h('div', { class: 'type' }, libelleSection(s), badgeCamera(s), badgeObs(s))));
+      li.addEventListener('contextmenu', e => menuDiapo(e, i));
       li.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.effectAllowed = 'move'; });
       li.addEventListener('dragover', e => { e.preventDefault(); li.classList.add('cible'); });
       li.addEventListener('dragleave', () => li.classList.remove('cible'));
@@ -378,7 +382,55 @@
     const ancien = li.querySelector('.vignette');
     if (ancien) ancien.replaceWith(vignette(etat.sections[i]));
     const type = li.querySelector('.type');
-    if (type) { type.textContent = libelleSection(etat.sections[i]); type.append(badgeCamera(etat.sections[i])); }
+    if (type) { type.textContent = libelleSection(etat.sections[i]); type.append(badgeCamera(etat.sections[i]) || '', badgeObs(etat.sections[i]) || ''); }
+  }
+
+  // ---- Enregistrement OBS : diapositive de démarrage et d'arrêt (data-obs, docs/seance.md) ----
+  function indexObs(action) { return etat.sections.findIndex(s => s.dataset.obs === action); }
+  function badgeObs(s) {
+    if (s.dataset.obs === 'demarrer') return h('span', { class: 'badge-obs debut', title: 'L\'enregistrement OBS démarre à l\'arrivée sur cette diapositive' }, '⏺ début');
+    if (s.dataset.obs === 'arreter') return h('span', { class: 'badge-obs fin', title: 'L\'enregistrement OBS s\'arrête à l\'arrivée sur cette diapositive' }, '⏹ fin');
+    return null;
+  }
+  function titreCourt(s) {
+    const t = s.querySelector('h1, h2, h3, .dsfr-titre');
+    // Un espace entre les blocs du titre (un <br> ou une balise ne doivent pas coller deux mots).
+    const mots = t ? [...t.childNodes].map(n => n.textContent).join(' ') : '';
+    const texte = mots.replace(/\s+/g, ' ').replace(/\s+([,.])/g, '$1').trim() || libelleSection(s);
+    return texte.length > 42 ? texte.slice(0, 41) + '…' : texte;
+  }
+  function rendreObsPlage() {
+    const zone = $('#obs-plage');
+    if (!zone) return;
+    zone.textContent = '';
+    const debut = indexObs('demarrer'), fin = indexObs('arreter');
+    const liste = (action, valeur) => {
+      const sel = h('select', { 'aria-label': action === 'demarrer' ? 'Diapositive qui démarre l\'enregistrement' : 'Diapositive qui arrête l\'enregistrement', onchange: e => fixerObs(action, e.target.value) },
+        h('option', { value: '' }, action === 'demarrer' ? '— à la main (F9 dans OBS)' : '— à la main, ou fin de séance'),
+        etat.sections.map((s, i) => h('option', { value: String(i) }, (i + 1) + ' · ' + titreCourt(s))));
+      sel.value = valeur >= 0 ? String(valeur) : '';
+      return sel;
+    };
+    zone.append(h('div', { class: 'obs-titre' }, '⏺ Enregistrement OBS'),
+      h('label', {}, h('span', {}, 'démarre à'), liste('demarrer', debut)),
+      h('label', {}, h('span', {}, 's\'arrête à'), liste('arreter', fin)));
+    if (debut >= 0 && fin >= 0 && fin <= debut) zone.append(h('p', { class: 'obs-alerte' }, 'L\'arrêt est placé avant le démarrage : l\'enregistrement ne s\'arrêtera pas tout seul.'));
+    else if (debut >= 0) zone.append(h('p', { class: 'obs-resume' }, (fin >= 0 ? (fin - debut + 1) : etat.sections.length - debut) + ' diapositive' + ((fin >= 0 ? fin - debut + 1 : etat.sections.length - debut) > 1 ? 's' : '') + ' enregistrée' + ((fin >= 0 ? fin - debut + 1 : etat.sections.length - debut) > 1 ? 's' : '') + ' (bordure rouge dans la liste)'));
+  }
+  /** Une seule diapositive porte chaque action : pose data-obs sur `valeur` (index, ou '' pour aucune) et le retire ailleurs. */
+  function fixerObs(action, valeur) {
+    const cible = valeur === '' ? -1 : parseInt(valeur, 10);
+    terminerEdition(true);
+    etat.sections.forEach((s, i) => {
+      const doit = i === cible;
+      if ((s.dataset.obs === action) === doit) return;
+      historique.passe.push({ i, html: sectionPropre(s).outerHTML });
+      if (doit) s.dataset.obs = action; else delete s.dataset.obs;
+    });
+    while (historique.passe.length > LIMITE_HISTORIQUE) historique.passe.shift();
+    historique.futur = [];
+    marquer();
+    rendreTout();
   }
   /** Badge « 🎥 n » : n éléments de la section chevauchent la zone caméra (calque activé). */
   function badgeCamera(s) {
@@ -932,6 +984,7 @@
     terminerEdition(true);
     const c = sectionCourante().cloneNode(true);
     c.dataset.id = nouvelIdSection();
+    delete c.dataset.obs; // une seule diapositive démarre / arrête l'enregistrement OBS
     etat.sections.splice(etat.courant + 1, 0, c);
     etat.courant++;
     etat.selection = null;
@@ -946,6 +999,63 @@
     etat.selection = null;
     changementStructurel();
   }
+  // ---- Clic droit sur une diapositive de la liste : dupliquer, copier, coller, monter, descendre, supprimer ----
+  // Le presse-papiers est gardé dans le navigateur : on peut coller dans une autre présentation.
+  const CLE_PRESSE_PAPIERS = 'amphi-editeur-diapositive';
+  function lirePressePapiers() { try { return localStorage.getItem(CLE_PRESSE_PAPIERS); } catch (e) { return etat.pressePapiers || null; } }
+  function copierSection(i) {
+    const html = sectionPropre(etat.sections[i]).outerHTML;
+    etat.pressePapiers = html;
+    try { localStorage.setItem(CLE_PRESSE_PAPIERS, html); } catch (e) { /* stockage indisponible : copie gardée pour cette page */ }
+  }
+  function collerSection() {
+    const html = lirePressePapiers();
+    if (!html) return;
+    const { sections } = parserDeck(html);
+    if (!sections.length) return;
+    terminerEdition(true);
+    const c = sections[0];
+    c.dataset.id = nouvelIdSection();
+    delete c.dataset.obs;
+    etat.sections.splice(etat.courant + 1, 0, c);
+    etat.courant++;
+    etat.selection = null;
+    changementStructurel();
+  }
+  function fermerMenuDiapo() {
+    const m = document.getElementById('menu-diapo');
+    if (m) m.remove();
+    document.removeEventListener('keydown', echapMenuDiapo);
+  }
+  function echapMenuDiapo(e) { if (e.key === 'Escape') fermerMenuDiapo(); }
+  function menuDiapo(e, i) {
+    e.preventDefault();
+    fermerMenuDiapo();
+    if (i !== etat.courant) { terminerEdition(true); etat.courant = i; etat.selection = null; rendreTout(); }
+    const dernier = etat.sections.length - 1;
+    const entrees = [
+      ['⧉ Dupliquer', dupliquerSection],
+      ['📋 Copier', () => copierSection(i)],
+      ['📥 Coller après', collerSection, !lirePressePapiers()],
+      null,
+      ['↑ Monter', () => deplacerSection(i, i - 1), i === 0],
+      ['↓ Descendre', () => deplacerSection(i, i + 1), i === dernier],
+      null,
+      ['🗑 Supprimer', supprimerSection, false, 'danger'],
+    ];
+    const menu = h('div', { id: 'menu-diapo', class: 'menu-diapo', role: 'menu', 'aria-label': 'Diapositive ' + (i + 1) },
+      h('div', { class: 'menu-diapo-titre' }, 'Diapositive ' + (i + 1)),
+      entrees.map(x => x ? h('button', { role: 'menuitem', class: x[3] || '', disabled: !!x[2], onclick: () => { fermerMenuDiapo(); x[1](); } }, x[0]) : h('hr')));
+    document.body.append(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px';
+    menu.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+    const premier = menu.querySelector('button:not(:disabled)');
+    if (premier) premier.focus();
+    setTimeout(() => document.addEventListener('click', fermerMenuDiapo, { once: true }));
+    document.addEventListener('keydown', echapMenuDiapo);
+  }
+
   function deplacerSection(de, vers) {
     terminerEdition(true);
     const [s] = etat.sections.splice(de, 1);
@@ -1276,7 +1386,11 @@
   }
   /** Champ « OBS » : pose ou retire data-obs (démarrer / arrêter l'enregistrement à l'arrivée sur la diapositive). */
   function champObs(s) {
-    return champSelect('OBS', () => s.dataset.obs || '', OBS_OPTIONS, v => { if (v) s.dataset.obs = v; else delete s.dataset.obs; });
+    return champSelect('OBS', () => s.dataset.obs || '', OBS_OPTIONS, v => {
+      if (v) etat.sections.forEach(x => { if (x !== s && x.dataset.obs === v) delete x.dataset.obs; });  // une seule diapositive par action
+      if (v) s.dataset.obs = v; else delete s.dataset.obs;
+      rendreObsPlage(); rendreListe();
+    });
   }
   function blocsCommunsSection(s) {
     const blocs = [h('h4', {}, 'Notes de l\'orateur')];

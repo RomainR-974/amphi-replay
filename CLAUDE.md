@@ -8,9 +8,9 @@ Tout est en **français** : code, noms, commentaires, messages, commits.
 
 | Dossier | Contenu |
 | --- | --- |
-| `server/` | FastAPI + SQLite. `app.py` (routes, WebSockets `/ws/deck` et `/ws/quiz`), `quiz.py` (12 types, points, classement), `presentations.py` (bibliothèque), `journal.py` (journal de séance, titres et marqueurs des diapos), `questions.py` (questions des participants, séquence Q/R), `replays.py` (assemblage, chapitres, extraits, tâches), `scorm.py` + `scorm_lecteur/`, `interactif.py` + `interactif_lecteur/` (replay interactif) |
+| `server/` | FastAPI + SQLite. `app.py` (routes, WebSockets `/ws/deck` et `/ws/quiz`), `quiz.py` (12 types, points, classement), `presentations.py` (bibliothèque), `journal.py` (journal de séance, titres et marqueurs des diapos), `questions.py` (questions des participants, séquence Q/R), `replays.py` (assemblage, chapitres, extraits, tâches), `scorm.py` + `scorm_lecteur/`, `interactif.py` + `interactif_lecteur/` (replay interactif), `parcours.py` + `parcours_lecteur/` + `synopsis.py` (parcours Moodle, synopsis Excel), `historique.py` (séances jouées) |
 | `server/static/` | pages publiques : `participant.html` (/q), `resultats.html`, `classement.html` (dont la cérémonie) |
-| `deck/` | runtime commun du deck : `index.html` (rôles scene/obs/remote), `sync.js`, `quiz-deck.js`, `camera.js`, `remote.html`, `editeur.*`, `presentations.*`, `postprod.*`, `replay.*`, `theme.css`, `themes/dsfr.css` |
+| `deck/` | runtime commun du deck : `index.html` (rôles scene/obs/remote), `sync.js`, `quiz-deck.js`, `camera.js`, `remote.html`, `editeur.*`, `presentations.*`, `postprod.*`, `replay.*`, `seance.*` (relecture d'une séance, export PDF), `resultats-statiques.js`, `theme.css`, `themes/dsfr.css` |
 | `presentations/<slug>/` | une présentation : `presentation.json`, `slides.html`, `quiz.json`, `medias/`, `replays/` (hors git) |
 | `tools/` | `lanceur_seance.py` (fenêtre de lancement PC 2, via `lancer-seance.bat`), `replay_interactif.py` (replay interactif + SCORM), `pptx2reveal.py` (import PowerPoint), `pdf2reveal.py`, `inserer_quiz.py`, `seance_iag.py`, `reserver_camera.py`, `exporter_scorm.py`, `charge.py`, `fetch_reveal.sh` |
 | `postprod/assembler.py` | recalage son téléphone ↔ vidéo OBS ; `postprod/voix.py` : voix podcast/radio (débruitage, EQ, compression, -16 LUFS) ; `postprod/cadrage.py` : suivi de l'intervenant |
@@ -40,6 +40,6 @@ Lire la spécification concernée dans `docs/` avant de modifier une fonction.
 - Windows PowerShell 5 : pas de `&&` ; dans les `.ps1`, `$ErrorActionPreference = "Continue"` (sinon stderr des programmes devient fatal).
 - Fins de ligne : `.gitattributes` force LF (sauf `.ps1`) ; un `.sh` en CRLF casse `set -o pipefail`.
 - Zone caméra OBS : 300×300 en bas à droite (zone réservée `x ≥ 1600, y ≥ 760`) ; rien d'important dedans (`tools/reserver_camera.py`, calque « Caméra » de l'éditeur).
-- Le serveur ne transporte jamais de vidéo ; la captation ne doit pas dépendre du serveur (F9 dans OBS reste le secours).
+- Le serveur ne transporte jamais de vidéo (seule exception : le retour caméra basse définition de la télécommande, première diapositive, docs/seance.md §G) ; la captation ne doit pas dépendre du serveur (F9 dans OBS reste le secours).
 - Après une modification de l'interface, vérifier dans un vrai navigateur (Playwright) en plus des tests.
 - Le Chromium de Playwright ne lit pas le H.264 : tester les lecteurs vidéo avec `channel="chrome"`. Le `http.server` de Python ne gère pas les requêtes `Range` : impossible d'avancer dans une vidéo servie ainsi.

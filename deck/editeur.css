@@ -207,3 +207,23 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   #vue-deck { grid-template-columns: 200px 1fr 290px; }
   .barre-outils button { padding: 3px 6px; font-size: 12px; }
 }
+
+/* ---- Enregistrement OBS : plage de diapositives enregistrées (data-obs) ---- */
+.obs-plage { margin: 8px 8px 4px; padding: 8px 10px; border: 1px solid var(--bord); border-radius: 8px; background: var(--fond3); display: grid; gap: 6px; font-size: 12px; }
+.obs-plage .obs-titre { font-weight: 600; color: var(--rouge); }
+.obs-plage label { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 6px; color: var(--sourd); }
+.obs-plage select { min-width: 0; width: 100%; font-size: 12px; }
+.obs-plage p { margin: 0; color: var(--sourd); }
+.obs-plage .obs-alerte { color: var(--orange); }
+#liste-diapos li.enregistree { box-shadow: inset 3px 0 0 var(--rouge); }
+#liste-diapos .badge-obs { margin-left: 6px; font-weight: 600; cursor: help; }
+#liste-diapos .badge-obs.debut { color: var(--rouge); }
+#liste-diapos .badge-obs.fin { color: var(--sourd); }
+/* ---- Clic droit sur une diapositive de la liste ---- */
+.menu-diapo { position: fixed; z-index: 1000; min-width: 190px; background: var(--fond2); border: 1px solid var(--bord); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); padding: 4px; display: grid; }
+.menu-diapo-titre { padding: 4px 10px 6px; font-size: 11px; color: var(--sourd); text-transform: uppercase; letter-spacing: .04em; }
+.menu-diapo button { background: none; border: 0; border-radius: 5px; text-align: left; padding: 7px 10px; font-size: 13px; }
+.menu-diapo button:hover:not(:disabled), .menu-diapo button:focus-visible { background: var(--fond3); outline: none; }
+.menu-diapo button.danger { color: var(--rouge); }
+.menu-diapo button.danger:hover { background: var(--rouge); color: #fff; }
+.menu-diapo hr { border: 0; border-top: 1px solid var(--bord); margin: 4px 2px; }

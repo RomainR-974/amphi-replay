@@ -32,7 +32,7 @@ if ! .venv/bin/python -c "import fastapi, uvicorn, numpy" 2>/dev/null; then
   .venv/bin/pip install -q -r requirements.txt
 fi
 # Replay interactif : cadrage de l'intervenant (facultatif, docs/replay-interactif.md)
-.venv/bin/python -c "import cv2" 2>/dev/null || .venv/bin/pip install -q -r requirements-postprod.txt || echo "!! OpenCV non installé : replay interactif sans cadrage"
+.venv/bin/python -c "import cv2, faster_whisper, openpyxl" 2>/dev/null || .venv/bin/pip install -q -r requirements-postprod.txt || echo "!! OpenCV / faster-whisper non installés : replay interactif sans cadrage, parcours sans sous-titres"
 [ -d deck/vendor/reveal ] || bash tools/fetch_reveal.sh || echo "!! reveal.js non téléchargé : les vignettes de la page Présentations seront vides"
 
 if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then

@@ -47,6 +47,11 @@ ASSEMBLEUR = RACINE / "postprod" / "assembler.py"
 ID_REPLAY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 NOM_EXTRAIT = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}\.mp4$")
 NOM_SCORM = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,120}\.zip$")
+# Fichiers du parcours de formation (server/parcours.py) : page, description, questions, sous-titres, et par séquence
+# (NN-titre/) la vidéo, ses textes et ses images.
+CHEMIN_PARCOURS = re.compile(
+    r"^parcours/(?:(?:cours\.html|parcours\.json|questions\.gift|sous-titres\.vtt|transcription\.txt|synopsis\.xlsx)"
+    r"|\d{2}-[a-z0-9-]{1,60}/(?:video\.mp4|sous-titres\.vtt|transcription\.txt|essentiel\.md|questions\.gift|images/\d{2}-[a-z0-9-]{1,60}\.jpg))$")
 EXTENSIONS_VIDEO = {".mkv", ".mp4", ".mov", ".webm", ".m4v", ".ts", ".avi"}
 EXTENSIONS_AUDIO = {".wav", ".m4a", ".mp3", ".aac", ".flac", ".ogg", ".opus", ".aiff"}
 FUSION_CHAPITRES_S = 20.0
@@ -304,7 +309,7 @@ class Replays:
         if chemin not in ("replay.mp4", "chapitres.vtt", "chapitres.txt", "journal.json"):
             extrait = chemin.startswith("extraits/") and NOM_EXTRAIT.match(chemin[len("extraits/") :])
             paquet = chemin.startswith("scorm/") and NOM_SCORM.match(chemin[len("scorm/") :])
-            if not extrait and not paquet:
+            if not extrait and not paquet and not CHEMIN_PARCOURS.match(chemin):
                 return None
         f = _confiner(d, chemin)
         return f if f is not None and f.is_file() else None
@@ -399,6 +404,7 @@ class Replays:
             "extraits": len(self.extraits(slug, id)),
             "taille": video.stat().st_size if video.is_file() else 0,
             "scorm": paquet["fichier"] if paquet else None,
+            "parcours": "parcours/cours.html" if (d / "parcours" / "cours.html").is_file() else None,
         }
 
     def detail(self, slug: str, id: str) -> dict:
@@ -627,10 +633,14 @@ def telecharger_questions(serveur: str, jeton: str, destination: Path, consigner
 def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lire_journal_local: Callable[[str, float | None, float | None], list[dict]],
                      *, prez: str, video: str, audio: str | None = None, seance_debut: float | None = None, seance_fin: float | None = None,
                      decalage: float = 0.0, titre: str | None = None, garder_reference: bool = False, extraits: bool = False,
-                     serveur: str | None = None, jeton_serveur: str | None = None, couper_qr: bool = True, scorm: bool = False) -> dict:
-    """Corps d'une tâche : assemblage (ou remux), coupe avant les questions-réponses, chapitrage, VTT/TXT, extraits, paquet SCORM. Renvoie {slug, id}.
+                     serveur: str | None = None, jeton_serveur: str | None = None, couper_qr: bool = True, scorm: bool = False,
+                     voix: bool = False, alleger: bool = False, parcours: list[str] | None = None) -> dict:
+    """Corps d'une tâche : assemblage (ou remux), coupe avant les questions-réponses, vidéo (voix, allègement), chapitrage, VTT/TXT,
+    extraits, paquet SCORM, parcours. Renvoie {slug, id}.
 
     `scorm` : construit le paquet SCORM 1.2 (docs/scorm.md) après les extraits ; ceux-ci sont alors découpés même si `extraits` est faux.
+    `voix` : voix traitée (postprod/voix.py, -16 LUFS) ; `alleger` : image réencodée en qualité légère (30 i/s, ≈ 4 fois plus petit).
+    `parcours` : éléments du parcours de formation (server/parcours.py, ELEMENTS) produits dans `<replay>/parcours/`.
 
     `couper_qr` : si la séance contient un événement `qr_ouvrir` qui tombe dans la vidéo, celle-ci est tronquée à cet instant
     (la séquence questions-réponses n'est pas dans le replay) ; journal.json porte alors `coupe_qr_s`.
@@ -713,6 +723,19 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
                 coupe = None
                 tache.consigner("pas de questions-réponses dans la séance : vidéo complète")
 
+        if voix or alleger:
+            from .interactif import encoder_video
+
+            tache.etape("vidéo")
+            if garder_reference:
+                tache.consigner("piste de référence OBS non conservée : la vidéo est réécrite avec une seule piste son")
+            temporaire = dossier / "replay-traite.mp4"
+            nom = encoder_video(sortie, temporaire, voix="podcast" if voix else None, qualite="leger", image=alleger, consigner=tache.consigner)
+            avant = sortie.stat().st_size
+            os.replace(temporaire, sortie)
+            duree_sortie = duree_fichier(sortie) or duree_sortie
+            tache.consigner(f"vidéo : {nom}, {avant / 1e6:.0f} → {sortie.stat().st_size / 1e6:.0f} Mo")
+
         tache.etape("chapitrage")
         chapitres = [c for c in chapitres if c["debut"] <= duree_sortie]
         if chapitres:
@@ -748,7 +771,14 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
 
             tache.etape("scorm")
             paquet = construire_scorm(replays.biblio.exiger(prez), dossier, titre=titre_final, journal=tache.consigner).name
+        resume_parcours = None
+        if parcours:
+            from .parcours import produire_parcours
+
+            p = produire_parcours(replays.biblio.exiger(prez), dossier, parcours, titre=titre_final, consigner=tache.consigner, etape=tache.etape)
+            resume_parcours = {"sequences": len(p["sequences"]), "page": "page" in p["elements"],
+                               "synopsis": (dossier / "parcours" / "synopsis.xlsx").is_file()}
     except Exception:
         shutil.rmtree(dossier, ignore_errors=True)
         raise
-    return {"slug": prez, "id": id, "titre": titre_final, "chapitres": len(chapitres), "scorm": paquet}
+    return {"slug": prez, "id": id, "titre": titre_final, "chapitres": len(chapitres), "scorm": paquet, "parcours": resume_parcours}
