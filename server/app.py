@@ -30,7 +30,7 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel
 
 from . import config
-from .journal import ACTIONS_OBS, Journal, marqueurs_obs, titres_presentation
+from .journal import ACTIONS_OBS, Journal, diapositives_hors_montage, marqueurs_obs, titres_presentation
 from .presentations import Bibliotheque, normaliser_contact, valider_slug
 from .questions import Questions, SequenceQR, question_publique
 from .quiz import Quiz, charger_questions, questions_depuis_liste
@@ -618,7 +618,9 @@ async def journal_seances(prez: str, token: str = Query(default="")) -> JSONResp
     if not biblio.existe(prez):
         return reponse_cors({"detail": "présentation inconnue"}, 404)
     titres = titres_presentation(biblio.exiger(prez))
-    return reponse_cors({"prez": prez, "titre": biblio.lire(prez)["titre"], "titres": titres, "seances": journal_bd.seances(prez)})
+    slides = biblio.fichier_slides(prez)
+    hors = diapositives_hors_montage(slides.read_text(encoding="utf-8")) if slides.is_file() else []
+    return reponse_cors({"prez": prez, "titre": biblio.lire(prez)["titre"], "titres": titres, "hors_montage": hors, "seances": journal_bd.seances(prez)})
 
 
 # ---------------------------------------------------------------------------------
@@ -817,6 +819,7 @@ class DemandeAssemblage(BaseModel):
     voix: bool = False  # voix traitée, -16 LUFS (postprod/voix.py)
     alleger: bool = False  # image réencodée en qualité légère (30 i/s)
     parcours: list[str] = []  # éléments du parcours de formation (server/parcours.py, ELEMENTS ; docs/postprod.md §6)
+    hors_montage: list[int] | None = None  # diapositives « hors montage » du serveur de séance ; None = slides.html local
 
 
 @app.get("/api/postprod/configuration", dependencies=[Depends(verifier_jeton)])
@@ -845,7 +848,8 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
     inconnus = [e for e in corps.parcours if e not in ELEMENTS_PARCOURS]
     if inconnus:
         raise HTTPException(status_code=422, detail=f"éléments de parcours inconnus : {', '.join(inconnus)}")
-    etapes = (["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + (["vidéo"] if corps.voix or corps.alleger else []) + ["chapitrage"]
+    etapes = (["préparation", "assemblage"] + (["coupe"] if corps.couper_qr else []) + (["hors montage"] if corps.hors_montage else [])
+              + (["vidéo"] if corps.voix or corps.alleger else []) + ["chapitrage"]
               + (["extraits"] if corps.extraits or corps.scorm else []) + (["scorm"] if corps.scorm else [])
               + (["transcription"] if {"sous_titres", "transcription"} & set(corps.parcours) else []) + (["parcours"] if corps.parcours else []))
     serveur = (corps.serveur or "").strip() or None
@@ -856,7 +860,7 @@ async def postprod_assembler(corps: DemandeAssemblage) -> dict:
             prez=corps.prez, video=corps.video, audio=corps.audio or None, seance_debut=corps.seance_debut, seance_fin=corps.seance_fin,
             decalage=corps.decalage or 0.0, titre=corps.titre, garder_reference=corps.garder_reference, extraits=corps.extraits,
             serveur=serveur, jeton_serveur=corps.jeton_serveur, couper_qr=corps.couper_qr, scorm=corps.scorm,
-            voix=corps.voix, alleger=corps.alleger, parcours=corps.parcours,
+            voix=corps.voix, alleger=corps.alleger, parcours=corps.parcours, hors_montage=corps.hors_montage,
         )
 
     return {"tache": taches.lancer(etapes, travail).id}

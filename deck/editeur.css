@@ -229,4 +229,5 @@ dialog.confirmation-suppression p { margin: 0 0 10px; color: var(--sourd); }
 dialog.confirmation-suppression .apercu-suppression { margin-bottom: 10px; }
 dialog.confirmation-suppression .apercu-suppression .vignette { width: 100%; }
 dialog.confirmation-suppression .actions { display: flex; justify-content: flex-end; gap: 8px; }
-dialog.confirmation-suppression button.danger.plein { background: var(--rouge); border-color: var(--rouge); color: #fff; font-weight: 600; }
+dialog.confirmation-suppression button.danger.plein { background: var(--rouge); border-color: var(--rouge); color: #fff; font-weight: 600; }#liste-diapos .badge-obs.hors { color: var(--orange); }
+#liste-diapos li.hors-montage .vignette { opacity: .45; background-image: repeating-linear-gradient(135deg, transparent 0 10px, rgba(245, 158, 11, .25) 10px 20px); }

@@ -26,6 +26,19 @@
   let positionEnvoyee = '';
   const deck = $('#deck'), video = $('#video');
 
+  // Replay monté : des passages « hors montage » ont été retirés ; conversion entre temps de la vidéo et temps d'origine.
+  const coupes = () => (S && S.replay && S.replay.coupes) || [];
+  function videoVersOrigine(tv) {
+    let o = tv;
+    for (const [a, b] of coupes()) { if (o >= a) o += b - a; else break; }
+    return o;
+  }
+  function origineVersVideo(o) {
+    let retire = 0;
+    for (const [a, b] of coupes()) { if (o >= b) retire += b - a; else if (o >= a) return null; }
+    return o - retire;
+  }
+
   function etat(texte, classe) { const el = $('#etat'); el.textContent = texte; el.className = 'etat' + (classe ? ' ' + classe : ''); }
 
   async function charger() {
@@ -50,7 +63,8 @@
       $('#bloc-video').hidden = false;
       video.src = '/p/' + encodeURIComponent(prez) + '/replays/' + encodeURIComponent(S.replay.id) + '/replay.mp4';
       $('#info-video').textContent = 'Replay « ' + S.replay.titre + ' » : la vidéo commande la relecture.';
-      video.addEventListener('timeupdate', () => { if (!video.paused || video.seeking) placer(S.replay.debut_video - S.debut + video.currentTime, false); });
+      if (S.replay.coupes && S.replay.coupes.length) $('#info-video').textContent += ' Passages hors montage coupés : la vidéo les saute.';
+      video.addEventListener('timeupdate', () => { if (!video.paused || video.seeking) placer(S.replay.debut_video - S.debut + videoVersOrigine(video.currentTime), false); });
       video.addEventListener('play', () => { lecture = true; $('#b-lecture').textContent = '❚❚'; });
       video.addEventListener('pause', () => { lecture = false; $('#b-lecture').textContent = '▶'; });
     }
@@ -122,8 +136,9 @@
   }
   function aller(sec) {
     if (S.replay) {
-      const tv = sec - (S.replay.debut_video - S.debut);
-      if (tv >= 0 && tv <= S.replay.duree) { video.currentTime = tv; placer(sec); return; }
+      const tv = origineVersVideo(sec - (S.replay.debut_video - S.debut));
+      if (tv !== null && tv >= 0 && tv <= S.replay.duree) { video.currentTime = tv; placer(sec); return; }
+      if (tv === null && !video.paused) video.pause(); // passage hors montage : pas d'image, la présentation seule
     }
     placer(sec);
   }
@@ -131,8 +146,8 @@
   // ---- Lecture sans vidéo : horloge interne ----
   function basculer() {
     if (S && S.replay) {
-      const tv = t - (S.replay.debut_video - S.debut);
-      if (tv >= 0 && tv < S.replay.duree) { if (video.paused) { video.currentTime = tv; video.play(); } else video.pause(); return; }
+      const tv = origineVersVideo(t - (S.replay.debut_video - S.debut));
+      if (tv !== null && tv >= 0 && tv < S.replay.duree) { if (video.paused) { video.currentTime = tv; video.play(); } else video.pause(); return; }
     }
     lecture = !lecture;
     $('#b-lecture').textContent = lecture ? '❚❚' : '▶';

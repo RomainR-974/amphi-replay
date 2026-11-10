@@ -38,7 +38,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .journal import titres_presentation
+from .journal import diapositives_hors_montage, titres_presentation
 
 journal = logging.getLogger("amphi.replays")
 
@@ -199,6 +199,112 @@ def instant_qr(evenements: list[dict], debut_enregistrement: float, decalage: fl
     origine = debut_enregistrement + decalage
     instants = [float(ev["horodatage"]) - origine for ev in evenements if ev.get("type") == "qr_ouvrir" and ev.get("horodatage") is not None]
     return round(min(instants), 3) if instants else None
+
+
+def segments_hors_montage(evenements: list[dict], debut_enregistrement: float, duree: float, hors: set[int] | list[int],
+                          decalage: float = 0.0) -> list[list[float]]:
+    """Passages à couper [[début, fin], …] (s dans la vidéo) : de l'arrivée sur une diapositive « hors montage » à l'arrivée
+    sur une diapositive qui ne l'est pas (ou la fin de la vidéo) ; bornés à [0, durée], fusionnés s'ils se touchent."""
+    hors = set(hors)
+    if not hors:
+        return []
+    origine = debut_enregistrement + decalage
+    segments: list[list[float]] = []
+    ouvert: float | None = None
+    for ev in sorted(evenements, key=lambda e: e.get("horodatage", 0.0)):
+        if ev.get("type") != "diapositive" or ev.get("h") is None:
+            continue
+        t = float(ev["horodatage"]) - origine
+        if int(ev["h"]) in hors:
+            if ouvert is None:
+                ouvert = t
+        elif ouvert is not None:
+            segments.append([ouvert, t])
+            ouvert = None
+    if ouvert is not None:
+        segments.append([ouvert, duree])
+    propres: list[list[float]] = []
+    for a, b in segments:
+        a, b = max(0.0, a), min(duree, b)
+        if b - a < 0.5:
+            continue
+        if propres and a <= propres[-1][1] + 0.5:
+            propres[-1][1] = max(propres[-1][1], b)
+        else:
+            propres.append([round(a, 3), round(b, 3)])
+    return propres
+
+
+def temps_apres_coupes(t: float, segments: list[list[float]]) -> float | None:
+    """Instant dans la vidéo montée d'un instant `t` de la vidéo d'origine ; None s'il tombe dans un passage coupé."""
+    retire = 0.0
+    for a, b in segments:
+        if t >= b:
+            retire += b - a
+        elif t >= a:
+            return None
+    return round(t - retire, 3)
+
+
+def chapitres_apres_coupes(chapitres: list[dict], segments: list[list[float]]) -> list[dict]:
+    """Chapitres recalés sur la vidéo montée : ceux qui tombent dans un passage coupé disparaissent, les suivants avancent."""
+    resultat: list[dict] = []
+    for c in chapitres:
+        t = temps_apres_coupes(float(c["debut"]), segments)
+        if t is None:
+            continue
+        if resultat and abs(resultat[-1]["debut"] - t) < 0.5:
+            resultat[-1] = {**c, "debut": t}
+        else:
+            resultat.append({**c, "debut": t})
+    if resultat:
+        resultat[0]["debut"] = 0.0
+    return resultat
+
+
+def retirer_segments(video: Path, segments: list[list[float]], consigner: Callable[[str], None] | None = None) -> None:
+    """Coupe les passages de `video` (réencodage en haute qualité, coupe à l'image près), son compris."""
+    from .interactif import choisir_encodeur
+
+    duree = duree_fichier(video) or max(b for _a, b in segments)
+    # Passages gardés = complément des passages coupés ; trim/atrim de chacun, puis concat (image et son restent alignés).
+    gardes, debut = [], 0.0
+    for a, b in sorted(segments):
+        if a - debut > 0.05:
+            gardes.append((debut, a))
+        debut = max(debut, b)
+    if duree - debut > 0.05:
+        gardes.append((debut, duree))
+    if not gardes:
+        raise RuntimeError("tout l'enregistrement est hors montage : rien à garder")
+    son = sonder(video)["audio"] > 0
+    morceaux = []
+    for i, (a, b) in enumerate(gardes):
+        morceaux.append(f"[0:v:0]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[v{i}]")
+        if son:
+            morceaux.append(f"[0:a:0]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+    entrees = "".join(f"[v{i}]" + (f"[a{i}]" if son else "") for i in range(len(gardes)))
+    reglages = {"h264_nvenc": ["-preset", "p5", "-rc", "vbr", "-cq", "19", "-b:v", "0"], "h264_qsv": ["-preset", "medium", "-global_quality", "20"],
+                "libx264": ["-preset", "veryfast", "-crf", "18"]}
+    with tempfile.TemporaryDirectory(prefix="amphi-montage-", dir=str(video.parent)) as tmp:
+        sortie = Path(tmp) / "monte.mp4"
+
+        def commande(nom: str) -> list[str]:
+            graphe = ";".join(morceaux) + f";{entrees}concat=n={len(gardes)}:v=1:a={1 if son else 0}[v]" + ("[a]" if son else "")
+            if nom == "h264_qsv":
+                graphe += ";[v]format=nv12[vq]"
+            return (["ffmpeg", "-y", "-v", "error", "-i", str(video), "-filter_complex", graphe, "-map", "[vq]" if nom == "h264_qsv" else "[v]"]
+                    + (["-map", "[a]", "-c:a", "aac", "-b:a", "192k"] if son else [])
+                    + ["-c:v", nom, *reglages[nom], "-movflags", "+faststart", str(sortie)])
+
+        nom = choisir_encodeur()
+        try:
+            executer(commande(nom), consigner=consigner)
+        except RuntimeError:
+            if nom == "libx264":
+                raise
+            executer(commande("libx264"), consigner=consigner)  # encodeur matériel indisponible au dernier moment
+        os.replace(sortie, video)
 
 
 def couper_video(video: Path, instant: float, consigner: Callable[[str], None] | None = None) -> None:
@@ -634,13 +740,16 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
                      *, prez: str, video: str, audio: str | None = None, seance_debut: float | None = None, seance_fin: float | None = None,
                      decalage: float = 0.0, titre: str | None = None, garder_reference: bool = False, extraits: bool = False,
                      serveur: str | None = None, jeton_serveur: str | None = None, couper_qr: bool = True, scorm: bool = False,
-                     voix: bool = False, alleger: bool = False, parcours: list[str] | None = None) -> dict:
+                     voix: bool = False, alleger: bool = False, parcours: list[str] | None = None,
+                     hors_montage: list[int] | None = None) -> dict:
     """Corps d'une tâche : assemblage (ou remux), coupe avant les questions-réponses, vidéo (voix, allègement), chapitrage, VTT/TXT,
     extraits, paquet SCORM, parcours. Renvoie {slug, id}.
 
     `scorm` : construit le paquet SCORM 1.2 (docs/scorm.md) après les extraits ; ceux-ci sont alors découpés même si `extraits` est faux.
     `voix` : voix traitée (postprod/voix.py, -16 LUFS) ; `alleger` : image réencodée en qualité légère (30 i/s, ≈ 4 fois plus petit).
     `parcours` : éléments du parcours de formation (server/parcours.py, ELEMENTS) produits dans `<replay>/parcours/`.
+    `hors_montage` : index h des diapositives « hors montage » (data-obs, version du serveur de séance) ; None = lues dans
+    slides.html de la présentation locale. Leurs passages sont coupés de la vidéo et les chapitres recalés.
 
     `couper_qr` : si la séance contient un événement `qr_ouvrir` qui tombe dans la vidéo, celle-ci est tronquée à cet instant
     (la séquence questions-réponses n'est pas dans le replay) ; journal.json porte alors `coupe_qr_s`.
@@ -723,6 +832,20 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
                 coupe = None
                 tache.consigner("pas de questions-réponses dans la séance : vidéo complète")
 
+        # Diapositives « hors montage » : leurs passages sont retirés de la vidéo (docs/postprod.md §3).
+        if hors_montage is None:
+            slides_locales = replays.biblio.exiger(prez) / "slides.html"
+            hors_montage = diapositives_hors_montage(slides_locales.read_text(encoding="utf-8")) if slides_locales.is_file() else []
+        segments = segments_hors_montage(evenements, debut_enregistrement, duree_sortie, hors_montage, decalage)
+        if segments:
+            tache.etape("hors montage")
+            retirer_segments(sortie, segments, consigner=tache.consigner)
+            chapitres = chapitres_apres_coupes(chapitres, segments)
+            duree_sortie = duree_fichier(sortie) or duree_sortie
+            tache.consigner(f"hors montage : {len(segments)} passage(s) coupé(s), {sum(b - a for a, b in segments):.0f} s retirées ({duree_sortie:.0f} s restantes)")
+        elif hors_montage:
+            tache.consigner("diapositives hors montage : aucune n'a été affichée pendant l'enregistrement")
+
         if voix or alleger:
             from .interactif import encoder_video
 
@@ -752,6 +875,7 @@ def assembler_replay(tache: Tache, replays: Replays, captations: Captations, lir
             "decalage": decalage,
             "garder_reference": garder_reference,
             "coupe_qr_s": coupe,
+            "hors_montage": segments,  # passages retirés, en secondes de la vidéo d'origine (page séance : recalage de l'horloge)
             "chapitres": chapitres,
             "mesures": mesures,
             "cree": datetime.now().replace(microsecond=0).isoformat(),

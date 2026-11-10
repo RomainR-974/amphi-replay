@@ -242,6 +242,15 @@ def marqueurs_obs(html: str) -> dict[int, str]:
     return marqueurs
 
 
+HORS_MONTAGE = "hors-montage"
+
+
+def diapositives_hors_montage(html: str) -> list[int]:
+    """Index h des diapositives marquées `data-obs="hors-montage"` : leurs passages sont coupés du replay (docs/postprod.md §3)."""
+    return [i for i, section in enumerate(_sections_premier_niveau(html))
+            if (m := DATA_OBS.search(section[: section.find(">") + 1])) and m.group(1).strip().lower() == HORS_MONTAGE]
+
+
 def libelles_questions(fichier_quiz: Path) -> dict[str, str]:
     """{id: libellé} depuis un quiz.json (tolérant : fichier absent ou invalide → {})."""
     try:

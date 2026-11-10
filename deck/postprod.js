@@ -202,6 +202,8 @@
       const corps = await r.json();
       etatPage.seances = corps.seances || [];
       etatPage.titres = corps.titres || [];
+      // Diapositives « hors montage » de la version du serveur de séance (null : serveur plus ancien, le serveur local décide).
+      etatPage.horsMontage = Array.isArray(corps.hors_montage) ? corps.hors_montage : null;
       etatPage.seance = etatPage.seances.length ? 0 : null;
       etatPage.messageSeances = etatPage.seances.length ? '' : 'Aucune séance dans le journal de cette présentation : le serveur journalise les changements de diapositive depuis la télécommande ; jouez quelques diapositives puis rechargez.';
       etat(etatPage.seances.length ? etatPage.seances.length + ' séance(s) trouvée(s)' : 'aucune séance dans le journal de cette présentation', etatPage.seances.length ? 'ok' : 'erreur');
@@ -279,6 +281,28 @@
     return chapitres;
   }
 
+  /** Passages « hors montage » (même règle que server/replays.py segments_hors_montage) : [[début, fin], …] en s de la vidéo. */
+  function segmentsHorsMontage(evenements, debut, duree, hors) {
+    if (!hors || !hors.length) return [];
+    const bruts = [];
+    let ouvert = null;
+    [...evenements].sort((a, b) => a.horodatage - b.horodatage).forEach(ev => {
+      if (ev.type !== 'diapositive' || ev.h === null || ev.h === undefined) return;
+      const t = ev.horodatage - debut;
+      if (hors.includes(ev.h)) { if (ouvert === null) ouvert = t; }
+      else if (ouvert !== null) { bruts.push([ouvert, t]); ouvert = null; }
+    });
+    if (ouvert !== null) bruts.push([ouvert, duree]);
+    const propres = [];
+    bruts.forEach(([a, b]) => {
+      a = Math.max(0, a); b = Math.min(duree, b);
+      if (b - a < 0.5) return;
+      if (propres.length && a <= propres[propres.length - 1][1] + 0.5) propres[propres.length - 1][1] = Math.max(propres[propres.length - 1][1], b);
+      else propres.push([a, b]);
+    });
+    return propres;
+  }
+
   function rendreApercu() {
     if (etatPage.productionPrete) majProduction();  // estimation du temps selon la vidéo choisie
     const corps = $('#apercu tbody');
@@ -303,7 +327,13 @@
       vide.textContent = 'Aucun changement de diapositive ne tombe dans la durée de la vidéo : la séance choisie correspond-elle à cet enregistrement ? Ajuster le décalage manuel si besoin (écart séance → vidéo : ' + Math.round(seance.debut - debut) + ' s).';
     }
     resume.textContent = chapitres.length ? '(' + chapitres.length + ' chapitre' + (chapitres.length > 1 ? 's' : '') + ', diapositives dans la vidéo : ' + seance.evenements.filter(e => e.type === 'diapositive' && e.horodatage - debut >= 0 && e.horodatage - debut <= (f.duree || 0)).length + '/' + seance.evenements.filter(e => e.type === 'diapositive').length + ')' : '';
-    chapitres.forEach(c => corps.append(h('tr', {}, h('td', { class: 'temps' }, formaterDuree(c.debut)), h('td', {}, c.titre))));
+    const coupes = segmentsHorsMontage(seance.evenements, debut, coupe !== null ? coupe : (f.duree || 0), etatPage.horsMontage);
+    const dansCoupe = t => coupes.some(([a, b]) => t >= a && t < b);
+    const lignes = chapitres.map(c => ({ t: c.debut, el: h('tr', { class: dansCoupe(c.debut) ? 'coupe' : '' }, h('td', { class: 'temps' }, formaterDuree(c.debut)),
+      h('td', { class: dansCoupe(c.debut) ? 'sourd' : '' }, c.titre + (dansCoupe(c.debut) ? ' (hors montage)' : ''))) }));
+    coupes.forEach(([a, b]) => lignes.push({ t: a - 0.001, el: h('tr', { class: 'coupe' }, h('td', { class: 'temps' }, formaterDuree(a)),
+      h('td', { class: 'sourd' }, '✂ hors montage jusqu\'à ' + formaterDuree(b) + ' : ' + formaterDuree(b - a) + ' coupées')) }));
+    lignes.sort((x, y) => x.t - y.t).forEach(l => corps.append(l.el));
     if (coupe !== null) corps.append(h('tr', { class: 'coupe' }, h('td', { class: 'temps' }, formaterDuree(coupe)), h('td', { class: 'sourd' }, '✂ fin du replay : questions-réponses (coupées)')));
     $('#lancer-aide').textContent = chapitres.length ? '' : 'Le replay sera assemblé sans chapitres.';
   }
@@ -412,6 +442,7 @@
       voix: $('#voix').checked,
       alleger: $('#alleger').checked,
       couper_qr: $('#couper-qr').checked && !$('#couper-qr').disabled,
+      hors_montage: seance && Array.isArray(etatPage.horsMontage) ? etatPage.horsMontage : null,
       serveur: seance && serveur ? serveur : null,
       jeton_serveur: seance && serveur ? ($('#jeton-serveur').value || token) : null,
     };

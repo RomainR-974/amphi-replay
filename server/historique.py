@@ -47,7 +47,8 @@ def _replay(replays, slug: str, debut: float, fin: float) -> dict | None:
         debut_video = float(origine) + float(j.get("decalage") or 0)
         recouvrement = min(fin, debut_video + duree) - max(debut, debut_video)
         if recouvrement > 0 and (meilleur is None or recouvrement > meilleur["recouvrement"]):
-            meilleur = {"id": d.name, "titre": j.get("titre") or d.name, "debut_video": debut_video, "duree": duree, "recouvrement": recouvrement}
+            meilleur = {"id": d.name, "titre": j.get("titre") or d.name, "debut_video": debut_video, "duree": duree, "recouvrement": recouvrement,
+                        "coupes": j.get("hors_montage") or []}  # passages hors montage retirés (s de la vidéo d'origine)
     if meilleur:
         meilleur.pop("recouvrement")
     return meilleur

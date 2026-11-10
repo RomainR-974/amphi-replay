@@ -25,7 +25,8 @@
     'fade-in-then-semi-out', 'zoom-in', 'grow', 'shrink', 'strike', 'highlight-red', 'highlight-blue', 'highlight-green', 'semi-fade-out'];
   const TRANSITIONS = ['none', 'fade', 'slide', 'convex', 'concave', 'zoom'];
   // Enregistrement OBS déclenché par la diapositive (docs/seance.md) : valeur de data-obs → libellé.
-  const OBS_OPTIONS = [{ v: '', l: 'aucun' }, { v: 'demarrer', l: 'démarrer l\'enregistrement' }, { v: 'arreter', l: 'arrêter l\'enregistrement' }];
+  const OBS_OPTIONS = [{ v: '', l: 'aucun' }, { v: 'demarrer', l: 'démarrer l\'enregistrement' }, { v: 'arreter', l: 'arrêter l\'enregistrement' },
+    { v: 'hors-montage', l: 'hors montage (coupée en post-production)' }];
   const TYPES_EL = ['texte', 'image', 'forme', 'iframe', 'video', 'lottie', 'minuteur', 'resultats', 'classement', 'nuage', 'qr'];
   const TYPES_QUESTION = ['qcm', 'multi', 'vrai_faux', 'emoji', 'rapidite', 'buzzer', 'nuage', 'texte_libre', 'trou', 'echelle', 'classement', 'nombre', 'grille'];
   const AVEC_OPTIONS = { qcm: [2, 6], multi: [2, 6], emoji: [2, 8], rapidite: [2, 6], classement: [2, 6], grille: [2, 4] };
@@ -364,7 +365,7 @@
     const debut = indexObs('demarrer'), fin = indexObs('arreter');
     etat.sections.forEach((s, i) => {
       const enregistree = debut >= 0 && i >= debut && (fin < 0 || fin <= debut || i <= fin);
-      const li = h('li', { class: (i === etat.courant ? 'courante' : '') + (enregistree ? ' enregistree' : ''), draggable: 'true', 'data-index': i,
+      const li = h('li', { class: (i === etat.courant ? 'courante' : '') + (enregistree ? ' enregistree' : '') + (s.dataset.obs === 'hors-montage' ? ' hors-montage' : ''), draggable: 'true', 'data-index': i,
         onclick: () => { if (i !== etat.courant) { terminerEdition(true); etat.courant = i; etat.selection = null; rendreTout(); } } },
         h('div', { class: 'numero' }, String(i + 1)),
         h('div', {}, vignette(s), h('div', { class: 'type' }, libelleSection(s), badgeCamera(s), badgeObs(s))));
@@ -408,6 +409,7 @@
   function badgeObs(s) {
     if (s.dataset.obs === 'demarrer') return h('span', { class: 'badge-obs debut', title: 'L\'enregistrement OBS démarre à l\'arrivée sur cette diapositive' }, '⏺ début');
     if (s.dataset.obs === 'arreter') return h('span', { class: 'badge-obs fin', title: 'L\'enregistrement OBS s\'arrête à l\'arrivée sur cette diapositive' }, '⏹ fin');
+    if (s.dataset.obs === 'hors-montage') return h('span', { class: 'badge-obs hors', title: 'Hors montage : le passage sur cette diapositive est coupé du replay en post-production' }, '✂ hors montage');
     return null;
   }
   function titreCourt(s) {
@@ -1399,7 +1401,7 @@
   /** Champ « OBS » : pose ou retire data-obs (démarrer / arrêter l'enregistrement à l'arrivée sur la diapositive). */
   function champObs(s) {
     return champSelect('OBS', () => s.dataset.obs || '', OBS_OPTIONS, v => {
-      if (v) etat.sections.forEach(x => { if (x !== s && x.dataset.obs === v) delete x.dataset.obs; });  // une seule diapositive par action
+      if (v === 'demarrer' || v === 'arreter') etat.sections.forEach(x => { if (x !== s && x.dataset.obs === v) delete x.dataset.obs; });  // une seule diapositive par action ; « hors montage » : autant qu'on veut
       if (v) s.dataset.obs = v; else delete s.dataset.obs;
       rendreListe(); // bordure rouge et pastilles de la liste
     });
