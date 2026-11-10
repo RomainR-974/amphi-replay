@@ -487,8 +487,7 @@
       if (e.previousSlide) { window.AmphiQuizDeck.horsDiapositive(e.previousSlide); window.AmphiTeachable.horsDiapositive(e.previousSlide); }
       window.AmphiQuizDeck.surDiapositive(e.currentSlide); window.AmphiTeachable.surDiapositive(e.currentSlide);
     });
-    window.Reveal.on('fragmentshown', function (e) { window.AmphiQuizDeck.surFragment(e.fragment); window.AmphiTeachable.surFragment(e.fragment); });
-    window.Reveal.on('fragmenthidden', function (e) { window.AmphiTeachable.surFragment(e.fragment); });
+    window.Reveal.on('fragmentshown', function (e) { window.AmphiQuizDeck.surFragment(e.fragment); });
 
     calculerArrets();
     window.SCORM.initialiser(D.identifiant);

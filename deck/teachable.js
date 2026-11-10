@@ -1,36 +1,34 @@
 /*
- * Élément « teachable » : un modèle d'images Teachable Machine (export TensorFlow.js) dans une diapositive.
+ * Élément « teachable » : un modèle d'images Teachable Machine (export TensorFlow.js) en direct dans une diapositive.
  *
- *   Mode simple :  <div class="el teachable" data-amphi="teachable" data-src="medias/tm-objets/" …></div>
- *                  → caméra + probabilité par classe dès l'affichage de la diapositive.
- *   Mode atelier : <div class="el teachable" data-amphi="teachable" data-scenario="atelier" data-classes="gourde,stylo,vide"
- *                       data-src="medias/tm-objets/" …></div>
- *                  + autant de déclencheurs que d'étapes (n classes + 2), fragments invisibles de la section :
- *                  <div class="el declencheur fragment" data-amphi="tm-etape" data-fragment-index="0" …></div>
- *                  → simule la démarche Teachable Machine, une étape par « Suivant » de la télécommande :
- *                    0 : caméra prête ; 1…n : 300 images de la classe i en 5 s (compteur, miniatures) ;
- *                    n + 1 : entraînement (usine : images sur un tapis roulant, engrenages, époques, précision) ;
- *                    n + 2 : test (caméra, probabilité par classe, avec le vrai modèle exporté).
- *                  L'étape est le nombre de déclencheurs visibles : projecteur, OBS, télécommande et replay restent
- *                  synchrones, y compris après un saut (le journal enregistre les fragments).
+ *   <div class="el teachable" data-amphi="teachable" data-src="medias/tm-objets/" data-id="e7" style="…"></div>
  *
  * data-src : dossier contenant model.json, metadata.json et weights.bin (fichiers de l'export « TensorFlow.js »).
- * Caméra : rôle scene (projecteur, PC 1) dès l'affichage de la diapositive ; rôle replay (replay interactif, SCORM)
- * seulement après un clic sur « Activer ma caméra » ; rôles obs et remote jamais (la caméra du PC 2 est prise par OBS) :
- * ils montrent les mêmes étapes avec des miniatures de couleur. Caméra libérée dès qu'on quitte la diapositive.
- * Bibliothèques chargées à la demande depuis deck/vendor/tm/ (tools/fetch_reveal.sh). Voir docs/format-deck.md.
+ *
+ * data-mode="entrainement" : simulation pédagogique d'un entraînement, en trois temps.
+ *   1. Collecte : un bouton par classe du modèle (« Objet 1 · gourde », « Objet 2 · stylo », « Vide ») ; chaque appui
+ *      prend 300 images de la webcam en 5 secondes, affichées en mosaïque.
+ *   2. Entraînement : animation d'une usine (engrenages, fumée, images qui entrent sur un tapis) et barre de progression.
+ *   3. Test : la webcam et les barres de probabilité, comme le mode normal.
+ *   L'entraînement est simulé : la prédiction utilise le modèle déjà entraîné de data-src (mêmes classes, mêmes objets).
+ *
+ * Rôle scene (projecteur, PC 1) et replay : webcam du poste, uniquement pendant que la diapositive est affichée (caméra
+ * libérée dès qu'on la quitte ; la simulation repart de zéro au retour). En replay (replay interactif, SCORM), la caméra
+ * de l'apprenant ne s'allume qu'après un clic sur « Activer ma caméra » (docs/replay-interactif.md). Bibliothèques chargées à la demande depuis
+ * deck/vendor/tm/ (tools/fetch_reveal.sh) : aucune dépendance à un CDN pendant la séance.
+ * Rôles obs et remote : encadré « démonstration en direct » — la caméra du PC 2 est déjà prise par OBS, et la
+ * miniature de la télécommande n'a pas à ouvrir de caméra. Voir docs/format-deck.md.
  */
 window.AmphiTeachable = (() => {
   const SCRIPTS = ['vendor/tm/tf.min.js', 'vendor/tm/teachablemachine-image.min.js'];
-  const PERIODE_MS = 120;        // une prédiction toutes les 120 ms suffit et laisse respirer le projecteur
-  const IMAGES = 300;            // images « enregistrées » par classe
-  const CAPTURE_MS = 5000;       // … en 5 s
-  const ENTRAINEMENT_MS = 6500;  // durée de l'animation d'entraînement
-  const EPOQUES = 50;
-  const MINIATURES = 24;         // miniatures montrées par classe
-  const TEINTES = [214, 28, 145, 330, 268, 190];
+  const PERIODE_MS = 120; // une prédiction toutes les 120 ms suffit et laisse respirer le projecteur
+  const IMAGES_PAR_CLASSE = 300;
+  const DUREE_COLLECTE_MS = 5000;
+  const DUREE_ENTRAINEMENT_MS = 8000;
+  const ETAPES_ENTRAINEMENT = ['Lecture des images…', 'Recherche de motifs…', 'Ajustement des poids du modèle…', 'Vérification sur des images de test…', 'Modèle prêt !'];
   const role = () => (window.AmphiSync && window.AmphiSync.role) || 'scene';
-  const cameraPermise = el => role() === 'scene' || (role() === 'replay' && !!el.dataset.autorise);
+  const actif = () => role() === 'scene' || role() === 'replay';
+  const simulation = el => el.dataset.mode === 'entrainement';
   let chargement = null;
 
   function chargerScripts() {
@@ -45,130 +43,78 @@ window.AmphiTeachable = (() => {
     }
     return chargement;
   }
-  function chargerModele(el) {
-    if (!el._modele) {
-      const base = (el.dataset.src || '').replace(/\/?$/, '/');
-      el._modele = chargerScripts().then(() => window.tmImage.load(base + 'model.json', base + 'metadata.json'));
-      el._modele.catch(() => { el._modele = null; });
-    }
-    return el._modele;
-  }
 
-  const ICONE = '<svg class="tm-icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3l2-3h8l2 3h3v13H3z"/><circle cx="12" cy="13" r="4"/></svg>';
-  const atelier = el => el.dataset.scenario === 'atelier';
-  const classes = el => (el.dataset.classes || '').split(',').map(s => s.trim()).filter(Boolean);
-  const etapeDe = section => section ? section.querySelectorAll('[data-amphi="tm-etape"].visible').length : 0;
-  const echap = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const ICONE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3l2-3h8l2 3h3v13H3z"/><circle cx="12" cy="13" r="4"/></svg>';
 
-  // ===============================================================================================================
-  // Préparation
-  // ===============================================================================================================
+  // Usine de l'étape 2 : tapis d'images qui entrent, engrenages qui tournent, fumée qui sort des cheminées.
+  const ENGRENAGE = 'M0,-30 L6,-30 L8,-20 L16,-16 L24,-22 L28,-17 L21,-9 L24,0 L34,2 L34,9 L24,11 L21,19 L28,26 L23,30 L16,23 L8,27 L6,37 L-1,37 L-3,27 L-11,23 L-18,30 L-23,26 L-16,19 L-19,11 L-29,9 L-29,2 L-19,0 L-16,-9 L-23,-17 L-19,-22 L-11,-16 L-3,-20 Z';
+  const USINE = '<svg class="tm-usine-svg" viewBox="0 0 800 420" aria-hidden="true">'
+    + '<g class="tm-fumees"><circle class="tm-fumee f1" cx="470" cy="70" r="22"/><circle class="tm-fumee f2" cx="470" cy="70" r="26"/><circle class="tm-fumee f3" cx="470" cy="70" r="20"/>'
+    + '<circle class="tm-fumee f1" cx="580" cy="40" r="24"/><circle class="tm-fumee f2" cx="580" cy="40" r="20"/><circle class="tm-fumee f3" cx="580" cy="40" r="26"/></g>'
+    + '<g class="tm-tapis"><rect x="0" y="292" width="34" height="34" rx="4" fill="#c3992a"/><rect x="60" y="292" width="34" height="34" rx="4" fill="#009081"/><rect x="120" y="292" width="34" height="34" rx="4" fill="#3a3ad8"/><rect x="180" y="292" width="34" height="34" rx="4" fill="#c3992a"/><rect x="240" y="292" width="34" height="34" rx="4" fill="#009081"/></g>'
+    + '<rect x="450" y="80" width="40" height="120" fill="#3a3a3a"/><rect x="560" y="50" width="40" height="150" fill="#3a3a3a"/>'
+    + '<path d="M300,330 L300,200 L380,150 L380,200 L460,150 L460,200 L540,150 L540,200 L640,200 L640,330 Z" fill="#000091"/>'
+    + '<rect x="330" y="230" width="60" height="44" rx="4" fill="#f5f5fe"/><rect x="420" y="230" width="60" height="44" rx="4" fill="#f5f5fe"/><rect x="510" y="230" width="60" height="44" rx="4" fill="#f5f5fe"/>'
+    + '<g transform="translate(355,252)"><path class="tm-roue" d="' + ENGRENAGE + '" fill="#6a6af4" transform="scale(.55)"/></g>'
+    + '<g transform="translate(445,252)"><path class="tm-roue inverse" d="' + ENGRENAGE + '" fill="#e1000f" transform="scale(.55)"/></g>'
+    + '<g transform="translate(535,252)"><path class="tm-roue" d="' + ENGRENAGE + '" fill="#6a6af4" transform="scale(.55)"/></g>'
+    + '<rect x="20" y="330" width="760" height="16" rx="8" fill="#929292"/>'
+    + '<g transform="translate(700,290)"><rect x="-38" y="-30" width="76" height="40" rx="8" fill="#18753c"/><text x="0" y="-3" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">modèle</text></g>'
+    + '</svg>';
+
+  /** Prépare les éléments d'une racine (deck chargé ou rechargé). */
   function preparer(racine) {
     racine.querySelectorAll('[data-amphi="teachable"]').forEach(el => {
       arreter(el);
       el.classList.add('teachable');
-      construire(el);
-    });
-  }
-  function construire(el) {
-    if (atelier(el)) construireAtelier(el); else el.innerHTML = '<div class="tm-camera">' + zoneAttente(el) + '</div><ol class="tm-classes"></ol>';
-    const bouton = el.querySelector('.tm-activer');
-    if (bouton) bouton.addEventListener('click', () => { el.dataset.autorise = '1'; demarrerCamera(el).then(() => { if (atelier(el) && el.dataset.phase === 'test') activerPredictions(el); }); });
-  }
-
-  function zoneAttente(el) {
-    if (role() === 'replay' && !el.dataset.autorise) {
-      return '<div class="tm-attente">' + ICONE + '<span>À vous d’essayer avec votre caméra</span><button type="button" class="tm-activer">Activer ma caméra</button></div>';
-    }
-    if (role() === 'scene' || role() === 'replay') return '<div class="tm-attente">' + ICONE + '<span>La caméra s’allume…</span></div>';
-    return '<div class="tm-attente tm-absent">' + ICONE + '<span>Caméra du projecteur</span></div>';
-  }
-
-  function construireAtelier(el) {
-    const noms = classes(el);
-    el.innerHTML =
-      '<ol class="tm-phases"><li data-phase="donnees">1 · Données</li><li data-phase="entrainement">2 · Entraînement</li><li data-phase="test">3 · Test</li></ol>' +
-      '<div class="tm-scene"><div class="tm-camera">' + zoneAttente(el) + '</div><div class="tm-rec" hidden>● REC</div>' + usine() + '</div>' +
-      '<div class="tm-consigne"></div>' +
-      '<div class="tm-bacs">' + noms.map((n, i) =>
-        `<div class="tm-bac" data-i="${i}" style="--teinte:${TEINTES[i % TEINTES.length]}"><div class="tm-bac-tete"><b>${echap(n)}</b><span class="tm-compte">0 / ${IMAGES} images</span></div>` +
-        '<div class="tm-jauge"><span></span></div><div class="tm-vignettes"></div></div>').join('') + '</div>' +
-      '<ol class="tm-classes" hidden></ol>';
-    el._atelier = { etape: -1, timers: [] };
-  }
-
-  // ----- Usine d'entraînement (SVG) ------------------------------------------------------------------------------
-  function engrenage(cx, cy, r, dents) {
-    const pts = [], int = r * 0.78;
-    for (let i = 0; i < dents * 2; i++) {
-      const a0 = (Math.PI * i) / dents, a1 = (Math.PI * (i + 1)) / dents, rr = i % 2 ? int : r;
-      pts.push([cx + rr * Math.cos(a0 + 0.08), cy + rr * Math.sin(a0 + 0.08)], [cx + rr * Math.cos(a1 - 0.08), cy + rr * Math.sin(a1 - 0.08)]);
-    }
-    const t = r * 0.32;
-    return 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L') + 'Z' +
-      `M${(cx + t).toFixed(1)} ${cy}A${t.toFixed(1)} ${t.toFixed(1)} 0 1 0 ${(cx - t).toFixed(1)} ${cy}A${t.toFixed(1)} ${t.toFixed(1)} 0 1 0 ${(cx + t).toFixed(1)} ${cy}Z`;
-  }
-  function usine() {
-    const tuiles = Array.from({ length: 7 }, (_, i) =>
-      `<rect class="tm-tuile" x="-56" y="236" width="44" height="44" rx="6" style="--i:${i};--teinte:${TEINTES[i % 3]}"/>`).join('');
-    const fumees = [0, 1, 2].map(i => `<circle class="tm-fumee" cx="488" cy="66" r="14" style="--i:${i}"/>`).join('');
-    return '<div class="tm-usine" hidden><svg viewBox="0 0 580 420" aria-hidden="true">' +
-      fumees +
-      '<rect x="474" y="66" width="28" height="94" fill="#1b1b35"/>' +
-      '<path d="M290 360 V180 l45 -40 v40 l45 -40 v40 l45 -40 v40 l45 -40 v220 Z" fill="#000091"/>' +
-      '<rect x="290" y="226" width="34" height="64" fill="#1b1b35"/>' +
-      '<rect x="0" y="282" width="322" height="16" rx="8" fill="#3a3a3a"/>' +
-      [20, 80, 140, 200, 260].map(x => `<circle class="tm-rouleau" cx="${x}" cy="290" r="5" fill="#9a9a9a"/>`).join('') +
-      '<g class="tm-tapis">' + tuiles + '</g>' +
-      `<path class="tm-roue tm-roue-a" d="${engrenage(402, 250, 46, 10)}" fill="#ffffff" fill-rule="evenodd"/>` +
-      `<path class="tm-roue tm-roue-b" d="${engrenage(472, 302, 30, 8)}" fill="#e3e3fd" fill-rule="evenodd"/>` +
-      `<path class="tm-roue tm-roue-c" d="${engrenage(462, 202, 22, 7)}" fill="#cacafb" fill-rule="evenodd"/>` +
-      '<text x="380" y="340" text-anchor="middle" class="tm-usine-texte">MODÈLE</text>' +
-      '</svg><div class="tm-progression"><div class="tm-jauge"><span></span></div><div class="tm-info">Entraînement…</div></div>' +
-      '<div class="tm-pret" hidden>✔ Modèle prêt</div></div>';
-  }
-
-  // ===============================================================================================================
-  // Vie de la diapositive
-  // ===============================================================================================================
-  function surDiapositive(section) {
-    section.querySelectorAll('[data-amphi="teachable"]').forEach(el => {
-      if (atelier(el)) {
-        el._atelier.etape = -1;
-        appliquerEtape(el, etapeDe(section), false);
-        if (role() === 'scene' || role() === 'replay') chargerModele(el).catch(() => {}); // préchargé pour l'étape de test
+      el.classList.toggle('tm-simulation', simulation(el));
+      el.classList.remove('tm-en-usine', 'tm-teste');
+      if (!actif()) {
+        el.innerHTML = '<div class="tm-camera tm-absent">' + ICONE + '<span>' + (simulation(el) ? 'Entraînement en direct' : 'Démonstration en direct') + '</span></div><ol class="tm-classes"></ol>';
+        return;
       }
-      if (cameraPermise(el)) demarrerCamera(el).then(() => { if (atelier(el) && el.dataset.phase === 'test') activerPredictions(el); });
+      const attente = enAttenteDeClic(el)
+        ? '<div class="tm-attente">' + ICONE + '<span>À vous d’essayer avec votre caméra</span><button type="button" class="tm-activer">Activer ma caméra</button></div>'
+        : '<div class="tm-attente">' + ICONE + '<span>La caméra s’allume à l’affichage de la diapositive</span></div>';
+      el.innerHTML = simulation(el)
+        ? '<div class="tm-camera">' + attente + '</div>'
+          + '<div class="tm-panneau"><div class="tm-collecte"></div><button type="button" class="tm-entrainer" disabled>Entraîner le modèle</button></div>'
+          + '<div class="tm-usine" hidden>' + USINE + '<p class="tm-etape"></p><div class="tm-progression"><span></span></div></div>'
+          + '<ol class="tm-classes" hidden></ol>'
+        : '<div class="tm-camera">' + attente + '</div><ol class="tm-classes"></ol>';
+      const bouton = el.querySelector('.tm-activer');
+      if (bouton) bouton.addEventListener('click', () => { el.dataset.autorise = '1'; demarrer(el); });
     });
   }
-  /** fragmentshown / fragmenthidden : l'atelier suit les déclencheurs visibles de la section. */
-  function surFragment(fragment) {
-    const section = fragment && fragment.closest ? fragment.closest('section') : null;
-    if (!section) return;
-    section.querySelectorAll('[data-amphi="teachable"]').forEach(el => { if (atelier(el)) appliquerEtape(el, etapeDe(section), true); });
-  }
-  function horsDiapositive(section) {
-    section.querySelectorAll('[data-amphi="teachable"]').forEach(el => { arreter(el); construire(el); });
+  /** Replay : tant que l'apprenant n'a pas cliqué « Activer ma caméra », la caméra reste éteinte. */
+  function enAttenteDeClic(el) { return role() === 'replay' && !el.dataset.autorise; }
+
+  function surDiapositive(section) {
+    if (!actif()) return;
+    section.querySelectorAll('[data-amphi="teachable"]').forEach(el => { if (!enAttenteDeClic(el)) demarrer(el); });
   }
 
-  // ===============================================================================================================
-  // Caméra et prédictions
-  // ===============================================================================================================
+  function horsDiapositive(section) {
+    section.querySelectorAll('[data-amphi="teachable"]').forEach(arreter);
+  }
+
   function message(el, texte) {
     const zone = el.querySelector('.tm-camera');
-    if (!zone) return;
-    zone.innerHTML = '<div class="tm-attente">' + ICONE + '<span></span></div>';
-    zone.querySelector('span').textContent = texte;
+    if (zone) zone.innerHTML = '<div class="tm-attente">' + ICONE + '<span></span></div>';
+    const span = zone && zone.querySelector('span');
+    if (span) span.textContent = texte;
   }
 
-  async function demarrerCamera(el) {
+  async function demarrer(el) {
     if (el._tm) return;
-    const etat = el._tm = { arret: false, raf: 0, webcam: null, barres: null, predire: false };
+    const etat = el._tm = { arret: false, raf: 0, webcam: null, minuteries: [] };
     try {
-      if (!atelier(el)) message(el, 'Chargement du modèle…');
+      message(el, 'Chargement du modèle…');
       await chargerScripts();
-      if (!atelier(el)) await chargerModele(el);
+      const base = (el.dataset.src || '').replace(/\/?$/, '/');
+      if (!el._modele) el._modele = await window.tmImage.load(base + 'model.json', base + 'metadata.json');
       if (etat.arret) return;
+      message(el, 'Ouverture de la caméra…');
       const webcam = new window.tmImage.Webcam(400, 400, true); // carré, retourné comme un miroir
       await webcam.setup();
       if (etat.arret) { webcam.stop(); return; }
@@ -177,18 +123,8 @@ window.AmphiTeachable = (() => {
       const zone = el.querySelector('.tm-camera');
       zone.innerHTML = '';
       zone.appendChild(webcam.canvas);
-      if (!atelier(el)) await activerPredictions(el);
-      let derniere = 0;
-      const boucle = async t => {
-        if (etat.arret) return;
-        webcam.update();
-        if (etat.predire && t - derniere >= PERIODE_MS) {
-          derniere = t;
-          await predire(el);
-        }
-        etat.raf = requestAnimationFrame(boucle);
-      };
-      etat.raf = requestAnimationFrame(boucle);
+      if (simulation(el)) collecte(el, etat);
+      else predire(el, etat);
     } catch (e) {
       console.warn('teachable :', e);
       if (!etat.arret) message(el, 'Caméra ou modèle indisponible : ' + (e && e.message ? e.message : e));
@@ -196,169 +132,140 @@ window.AmphiTeachable = (() => {
     }
   }
 
-  async function activerPredictions(el) {
-    const etat = el._tm;
-    if (!etat || !etat.webcam) return;
-    const modele = await chargerModele(el);
-    if (etat.arret) return;
+  /** Mode normal (et dernière étape de la simulation) : une barre de probabilité par classe, en continu. */
+  function predire(el, etat) {
+    const webcam = etat.webcam;
     const liste = el.querySelector('.tm-classes');
     liste.hidden = false;
     liste.innerHTML = '';
-    etat.modele = modele;
-    etat.barres = modele.getClassLabels().map(nom => {
+    const barres = el._modele.getClassLabels().map(nom => {
       const li = document.createElement('li');
       li.innerHTML = '<span class="tm-nom"></span><span class="tm-barre"><span></span></span><span class="tm-pct">0 %</span>';
       li.querySelector('.tm-nom').textContent = nom;
       liste.appendChild(li);
       return li;
     });
-    etat.predire = true;
+    let derniere = 0;
+    const boucle = async t => {
+      if (etat.arret) return;
+      webcam.update();
+      if (t - derniere >= PERIODE_MS) {
+        derniere = t;
+        const predictions = await el._modele.predict(webcam.canvas);
+        if (etat.arret) return;
+        const meilleure = predictions.reduce((m, p, i) => (p.probability > predictions[m].probability ? i : m), 0);
+        predictions.forEach((p, i) => {
+          const pct = Math.round(p.probability * 100);
+          barres[i].querySelector('.tm-barre > span').style.width = pct + '%';
+          barres[i].querySelector('.tm-pct').textContent = pct + ' %';
+          barres[i].classList.toggle('tm-meilleure', i === meilleure);
+        });
+      }
+      etat.raf = requestAnimationFrame(boucle);
+    };
+    etat.raf = requestAnimationFrame(boucle);
   }
 
-  async function predire(el) {
-    const etat = el._tm;
-    if (!etat || !etat.modele || !etat.webcam) return;
-    const predictions = await etat.modele.predict(etat.webcam.canvas);
-    if (etat.arret || !etat.predire) return;
-    const meilleure = predictions.reduce((m, p, i) => (p.probability > predictions[m].probability ? i : m), 0);
-    predictions.forEach((p, i) => {
-      const pct = Math.round(p.probability * 100);
-      etat.barres[i].querySelector('.tm-barre > span').style.width = pct + '%';
-      etat.barres[i].querySelector('.tm-pct').textContent = pct + ' %';
-      etat.barres[i].classList.toggle('tm-meilleure', i === meilleure);
+  /** Simulation, étape 1 : boutons de collecte (300 images en 5 s par classe), mosaïque des images prises. */
+  function collecte(el, etat) {
+    const webcam = etat.webcam;
+    const noms = el._modele.getClassLabels();
+    const zone = el.querySelector('.tm-collecte');
+    const entrainer = el.querySelector('.tm-entrainer');
+    zone.innerHTML = '';
+    let enCours = null; // { mosaique, ctx, compteur, debut, prises }
+    const faites = new Set();
+    const lignes = noms.map((nom, i) => {
+      const ligne = document.createElement('div');
+      ligne.className = 'tm-ligne';
+      const vide = /^(vide|rien|fond|aucun)/i.test(nom);
+      ligne.innerHTML = '<button type="button" class="tm-prendre"></button><div class="tm-images"><canvas width="600" height="90"></canvas><span class="tm-compte">0 / ' + IMAGES_PAR_CLASSE + ' images</span></div>';
+      ligne.querySelector('.tm-prendre').textContent = (vide ? 'Vide' : 'Objet ' + (i + 1) + ' · ' + nom);
+      ligne.querySelector('.tm-prendre').addEventListener('click', e => {
+        e.currentTarget.blur(); // la barre d'espace doit rester à reveal.js
+        if (enCours || etat.arret) return;
+        const mosaique = ligne.querySelector('canvas');
+        const ctx = mosaique.getContext('2d');
+        ctx.clearRect(0, 0, mosaique.width, mosaique.height);
+        ligne.classList.add('tm-en-cours');
+        enCours = { i, ligne, ctx, compteur: ligne.querySelector('.tm-compte'), debut: performance.now(), prises: 0 };
+      });
+      zone.appendChild(ligne);
+      return ligne;
     });
+    entrainer.disabled = true;
+    entrainer.onclick = e => { e.currentTarget.blur(); if (!enCours && faites.size === noms.length) entrainement(el, etat); };
+
+    // Mosaïque : 30 colonnes × 10 lignes de vignettes 20 × 9 px (300 images), remplie au fil de la prise.
+    const COLS = 30, LV = 20, HV = 9;
+    const boucle = t => {
+      if (etat.arret) return;
+      webcam.update();
+      if (enCours) {
+        const voulu = Math.min(IMAGES_PAR_CLASSE, Math.floor((t - enCours.debut) / DUREE_COLLECTE_MS * IMAGES_PAR_CLASSE));
+        while (enCours.prises < voulu) {
+          const k = enCours.prises++;
+          enCours.ctx.drawImage(webcam.canvas, 50, 120, 300, 135, (k % COLS) * LV, Math.floor(k / COLS) * HV, LV - 1, HV - 1);
+        }
+        enCours.compteur.textContent = enCours.prises + ' / ' + IMAGES_PAR_CLASSE + ' images';
+        if (enCours.prises >= IMAGES_PAR_CLASSE) {
+          enCours.ligne.classList.remove('tm-en-cours');
+          enCours.ligne.classList.add('tm-fait');
+          faites.add(enCours.i);
+          enCours = null;
+          entrainer.disabled = faites.size < noms.length;
+        }
+      }
+      etat.raf = requestAnimationFrame(boucle);
+    };
+    etat.raf = requestAnimationFrame(boucle);
+    etat.lignes = lignes;
+  }
+
+  /** Simulation, étape 2 : l'usine tourne pendant DUREE_ENTRAINEMENT_MS, puis étape 3 (prédiction en direct). */
+  function entrainement(el, etat) {
+    cancelAnimationFrame(etat.raf);
+    const usine = el.querySelector('.tm-usine');
+    const etape = usine.querySelector('.tm-etape');
+    const barre = usine.querySelector('.tm-progression > span');
+    el.classList.add('tm-en-usine');
+    usine.hidden = false;
+    // Chauffe : la première prédiction compile les shaders WebGL (plusieurs secondes sur un petit PC) ; autant la faire pendant l'animation.
+    el._modele.predict(etat.webcam.canvas).catch(() => {});
+    const total = el._modele.getClassLabels().length * IMAGES_PAR_CLASSE;
+    const debut = performance.now();
+    const boucle = t => {
+      if (etat.arret) return;
+      const avance = Math.min(1, (t - debut) / DUREE_ENTRAINEMENT_MS);
+      barre.style.width = Math.round(avance * 100) + '%';
+      const n = Math.min(ETAPES_ENTRAINEMENT.length - 1, Math.floor(avance * (ETAPES_ENTRAINEMENT.length - 1)));
+      etape.textContent = ETAPES_ENTRAINEMENT[n] + (avance < 1 ? '  ·  ' + total + ' images, passe ' + Math.max(1, Math.ceil(avance * 50)) + ' / 50' : '');
+      if (avance < 1) { etat.raf = requestAnimationFrame(boucle); return; }
+      etat.minuteries.push(setTimeout(() => {
+        if (etat.arret) return;
+        usine.hidden = true;
+        el.classList.remove('tm-en-usine');
+        el.classList.add('tm-teste');
+        predire(el, etat);
+      }, 900));
+    };
+    etat.raf = requestAnimationFrame(boucle);
   }
 
   function arreter(el) {
-    const a = el._atelier;
-    if (a) { a.timers.forEach(t => cancelAnimationFrame(t)); a.timers = []; }
     const etat = el._tm;
     if (!etat) return;
     etat.arret = true;
     cancelAnimationFrame(etat.raf);
+    etat.minuteries.forEach(clearTimeout);
     if (etat.webcam) etat.webcam.stop();
     el._tm = null;
-  }
-
-  // ===============================================================================================================
-  // Atelier : étapes
-  // ===============================================================================================================
-  function appliquerEtape(el, etape, animer) {
-    const a = el._atelier;
-    if (!a || etape === a.etape) return;
-    a.timers.forEach(t => cancelAnimationFrame(t));
-    a.timers = [];
-    const noms = classes(el), n = noms.length;
-    a.etape = etape;
-    const phase = etape <= n ? 'donnees' : etape === n + 1 ? 'entrainement' : 'test';
-    el.dataset.phase = phase;
-    el.querySelectorAll('.tm-phases li').forEach(li => li.classList.toggle('actif', li.dataset.phase === phase));
-    el.querySelector('.tm-usine').hidden = phase !== 'entrainement';
-    el.querySelector('.tm-camera').hidden = phase === 'entrainement';
-    el.querySelector('.tm-bacs').hidden = phase === 'test';
-    el.querySelector('.tm-rec').hidden = true;
-    if (el._tm) el._tm.predire = false;
-    const liste = el.querySelector('.tm-classes');
-    if (phase !== 'test') liste.hidden = true;
-
-    // Bacs : classes déjà enregistrées pleines, classe en cours animée, suivantes vides.
-    el.querySelectorAll('.tm-bac').forEach((bac, i) => {
-      const enCours = phase === 'donnees' && i === etape - 1;
-      bac.classList.toggle('actif', enCours);
-      if (phase !== 'donnees' || i < etape - 1) remplirBac(el, bac, IMAGES);
-      else if (!enCours) viderBac(bac);
-    });
-    const consigne = el.querySelector('.tm-consigne');
-    if (phase === 'donnees' && etape === 0) consigne.textContent = 'Suivant : enregistrer « ' + noms[0] + ' »';
-    else if (phase === 'donnees') {
-      consigne.textContent = 'Enregistrement de « ' + noms[etape - 1] + ' »…';
-      capturer(el, etape - 1, animer);
-    } else if (phase === 'entrainement') {
-      consigne.textContent = n * IMAGES + ' images · ' + n + ' classes';
-      entrainer(el, animer);
-    } else {
-      consigne.textContent = 'Montrez un objet à la caméra';
-      if (el._tm && el._tm.webcam) activerPredictions(el);
-      else if (!cameraPermise(el)) {
-        // OBS, télécommande, replay sans caméra : les classes du modèle, sans mesure.
-        liste.hidden = false;
-        liste.innerHTML = noms.map(nm => `<li><span class="tm-nom">${echap(nm)}</span><span class="tm-barre"><span></span></span><span class="tm-pct">—</span></li>`).join('');
-      }
+    if (actif()) {
+      if (simulation(el)) { preparer(el.parentNode); return; } // la simulation repart de zéro
+      if (role() === 'replay') { preparer(el.parentNode); return; } // bouton « Activer ma caméra » au retour
+      message(el, 'La caméra s’allume à l’affichage de la diapositive');
     }
   }
 
-  function viderBac(bac) {
-    bac.classList.remove('plein');
-    bac.querySelector('.tm-compte').textContent = '0 / ' + IMAGES + ' images';
-    bac.querySelector('.tm-jauge > span').style.width = '0%';
-    bac.querySelector('.tm-vignettes').innerHTML = '';
-  }
-  function remplirBac(el, bac, total) {
-    bac.classList.add('plein');
-    bac.querySelector('.tm-compte').textContent = total + ' / ' + IMAGES + ' images';
-    bac.querySelector('.tm-jauge > span').style.width = Math.round(100 * total / IMAGES) + '%';
-    const zone = bac.querySelector('.tm-vignettes');
-    while (zone.children.length < MINIATURES) zone.appendChild(vignette(el));
-  }
-  /** Miniature : image de la caméra s'il y en a une, sinon carré de couleur (OBS, télécommande, replay sans caméra). */
-  function vignette(el) {
-    const webcam = el._tm && el._tm.webcam;
-    if (webcam) {
-      const c = document.createElement('canvas');
-      c.width = c.height = 48;
-      c.className = 'tm-vignette';
-      c.getContext('2d').drawImage(webcam.canvas, 0, 0, 48, 48);
-      return c;
-    }
-    const d = document.createElement('span');
-    d.className = 'tm-vignette tm-vignette-couleur';
-    d.style.setProperty('--nuance', String(Math.round(Math.random() * 30 - 15)));
-    return d;
-  }
-  function capturer(el, i, animer) {
-    const bac = el.querySelector('.tm-bac[data-i="' + i + '"]');
-    viderBac(bac);
-    const rec = el.querySelector('.tm-rec');
-    const fin = () => {
-      bac.classList.add('plein');
-      rec.hidden = true;
-      const suivante = classes(el)[i + 1];
-      el.querySelector('.tm-consigne').textContent = suivante ? 'Suivant : enregistrer « ' + suivante + ' »' : 'Suivant : entraîner le modèle';
-    };
-    if (!animer) { remplirBac(el, bac, IMAGES); fin(); return; }
-    rec.hidden = false;
-    const debut = performance.now(), zone = bac.querySelector('.tm-vignettes'), a = el._atelier;
-    const pas = () => {
-      const p = Math.min(1, (performance.now() - debut) / CAPTURE_MS);
-      bac.querySelector('.tm-compte').textContent = Math.round(p * IMAGES) + ' / ' + IMAGES + ' images';
-      bac.querySelector('.tm-jauge > span').style.width = (100 * p).toFixed(1) + '%';
-      while (zone.children.length < Math.round(p * MINIATURES)) zone.appendChild(vignette(el));
-      if (p < 1) a.timers.push(requestAnimationFrame(pas)); else fin();
-    };
-    a.timers.push(requestAnimationFrame(pas));
-  }
-  function entrainer(el, animer) {
-    const u = el.querySelector('.tm-usine'), info = u.querySelector('.tm-info'), jauge = u.querySelector('.tm-jauge > span'), pret = u.querySelector('.tm-pret');
-    const finir = () => {
-      u.classList.remove('marche');
-      jauge.style.width = '100%';
-      pret.hidden = false;
-      info.textContent = 'Époque ' + EPOQUES + ' / ' + EPOQUES + ' · précision 97 %';
-      el.querySelector('.tm-consigne').textContent = 'Suivant : tester le modèle';
-    };
-    pret.hidden = true;
-    if (!animer) { finir(); return; }
-    u.classList.add('marche');
-    const debut = performance.now(), a = el._atelier;
-    const pas = () => {
-      const p = Math.min(1, (performance.now() - debut) / ENTRAINEMENT_MS);
-      const epoque = Math.max(1, Math.ceil(p * EPOQUES)), precision = Math.round(33 + 64 * (1 - Math.exp(-4 * p)));
-      jauge.style.width = (100 * p).toFixed(1) + '%';
-      info.textContent = 'Entraînement… époque ' + epoque + ' / ' + EPOQUES + ' · précision ' + precision + ' %';
-      if (p < 1) a.timers.push(requestAnimationFrame(pas)); else finir();
-    };
-    a.timers.push(requestAnimationFrame(pas));
-  }
-
-  return { preparer, surDiapositive, horsDiapositive, surFragment };
+  return { preparer, surDiapositive, horsDiapositive };
 })();

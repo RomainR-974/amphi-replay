@@ -171,6 +171,8 @@
 /* ---- Diapositives de quiz standard construites par le runtime (section.dsfr sans .libre) ---- */
 .reveal section.dsfr.quiz { text-align: left; }
 .reveal section.dsfr.quiz::before { content: ""; position: absolute; left: -40px; right: -40px; top: -70px; height: 12px; background: linear-gradient(90deg, var(--dsfr-bleu) 0 33.4%, var(--dsfr-blanc) 33.4% 66.7%, var(--dsfr-rouge) 66.7% 100%); }
+/* Présentation sans bande tricolore : la classe sans-bande sur la section de quiz la retire. */
+.reveal section.dsfr.quiz.sans-bande::before { content: none; }
 .reveal section.dsfr.quiz .quiz-grille { height: 900px; gap: 56px; padding-top: 20px; }
 .reveal section.dsfr.quiz h2 { font-family: "Marianne", system-ui, sans-serif; font-weight: 700; font-size: 52px; line-height: 1.15; color: var(--dsfr-texte); margin: 0 0 .6em; }
 .reveal section.dsfr.quiz .quiz-options { list-style: none; margin: 0; padding: 0; counter-reset: opt; font-size: 32px; }

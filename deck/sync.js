@@ -6,7 +6,8 @@
  *   obs    : PC 2, source Navigateur d'OBS. Suit l'état reçu, aucune transition.
  *   remote : téléphone. Source de vérité : applique localement puis publie Reveal.getIndices().
  *
- * Événements : connexion, etat, ack, recharger, qr (séquence questions-réponses, voir docs/questions.md).
+ * Événements : connexion, etat, ack, recharger, qr (séquence questions-réponses, voir docs/questions.md),
+ * apercu (retour caméra et niveau du micro relayés depuis OBS, télécommande ; docs/seance.md §G).
  *
  * État partagé : {h, v, f}. À la connexion et à chaque reconnexion, le client lit
  * GET /etat et se recale avant d'écouter le WebSocket. Reconnexion à délai croissant
@@ -14,9 +15,9 @@
  */
 window.AmphiSync = (function () {
   const params = new URLSearchParams(location.search);
-  const role = ['scene', 'obs', 'remote'].includes(params.get('role')) ? params.get('role') : 'scene';
+  const role = ['scene', 'obs', 'remote', 'seance', 'impression'].includes(params.get('role')) ? params.get('role') : 'scene';
   const token = params.get('token') || '';
-  const ecouteurs = { ack: [], connexion: [], etat: [], recharger: [], qr: [] };
+  const ecouteurs = { ack: [], connexion: [], etat: [], recharger: [], qr: [], apercu: [] };
 
   let ws = null;
   let delai = 1000;
@@ -90,6 +91,8 @@ window.AmphiSync = (function () {
         emettre('recharger', m);
       } else if (m.type === 'qr') {
         emettre('qr', m);
+      } else if (m.type === 'apercu') {
+        emettre('apercu', m); // retour caméra + niveau du micro (télécommande, première diapositive)
       }
     };
     ws.onclose = () => {
@@ -111,6 +114,8 @@ window.AmphiSync = (function () {
 
   return {
     role, token, demarrer, publier,
+    /** Message libre vers le serveur (télécommande : demande du retour caméra). */
+    envoyer(m) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); },
     on(nom, f) { if (ecouteurs[nom]) ecouteurs[nom].push(f); },
     get connecte() { return !!ws && ws.readyState === WebSocket.OPEN; },
   };

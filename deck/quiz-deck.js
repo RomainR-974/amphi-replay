@@ -28,7 +28,7 @@ window.AmphiQuizDeck = (function () {
 
   /** `prez` : slug d'une présentation prévisualisée (ses questions, pas celles du quiz actif).
    *  `cam` : `camera` de la présentation ; si elle n'est pas fournie, elle est relue sur l'API. */
-  async function preparer(racine, prez, cam) {
+  async function preparer(racine, prez, cam, urlQuestions) {
     camera = cam;
     if (camera === undefined) {
       try {
@@ -38,7 +38,8 @@ window.AmphiQuizDeck = (function () {
     }
     try {
       const [rq, re] = await Promise.all([
-        fetch('/api/quiz/questions' + (prez ? '?prez=' + encodeURIComponent(prez) : ''), { cache: 'no-store' }),
+        // `urlQuestions` : quiz.json d'une copie figée (page séance) au lieu des questions actuelles.
+        fetch(urlQuestions || ('/api/quiz/questions' + (prez ? '?prez=' + encodeURIComponent(prez) : '')), { cache: 'no-store' }),
         fetch('/api/quiz/etat', { cache: 'no-store' }),
       ]);
       if (rq.ok) questions = Object.fromEntries((await rq.json()).map(q => [q.id, q]));
@@ -172,7 +173,7 @@ window.AmphiQuizDeck = (function () {
     if (AmphiSyncRoleUtile()) connecter();
   })();
   // Ni la miniature de la télécommande ni le replay interactif (hors ligne, docs/replay-interactif.md) ne se connectent au quiz.
-  function AmphiSyncRoleUtile() { return !(window.AmphiSync && ['remote', 'replay'].includes(window.AmphiSync.role)); }
+  function AmphiSyncRoleUtile() { return !(window.AmphiSync && ['remote', 'replay', 'seance', 'impression'].includes(window.AmphiSync.role)); }
 
   // Lancements à l'affichage d'une diapositive : Lottie, minuteurs, vidéos.
   function surDiapositive(section) {
@@ -271,7 +272,8 @@ window.AmphiQuizDeck = (function () {
   }
 
   /** Replay interactif (docs/replay-interactif.md) : ni résultats de la salle, ni QR de vote, aucune requête au serveur. */
-  function enReplay() { return !!(window.AmphiSync && window.AmphiSync.role === 'replay'); }
+  /** Relecture (replay interactif, page séance, export PDF) : rien de la salle en direct (ni QR, ni résultats en iframe). */
+  function enReplay() { return !!(window.AmphiSync && ['replay', 'seance', 'impression'].includes(window.AmphiSync.role)); }
   function blocQr() {
     if (enReplay()) return '';
     const lisible = urlPublique.replace(/^https?:\/\//, '') + '/q';

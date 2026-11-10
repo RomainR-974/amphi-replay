@@ -1,0 +1,20 @@
+/* Résultats d'une question rendus en HTML statique (deck/resultats-statiques.js) : page séance, relecture et export PDF (docs/seance.md §F). */
+.reveal .quiz-resultats.remplie { box-sizing: border-box; width: 100%; height: 100%; background: #fff; border-radius: 16px; padding: 24px 28px; overflow: hidden; text-align: left; }
+.res { font-size: 26px; color: #15233b; display: grid; gap: 12px; }
+.res .res-total { margin: 0; font-weight: 700; color: #55627a; font-size: 0.85em; }
+.res .res-barres { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.res .res-barres li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) max-content; gap: 14px; align-items: center; }
+.res .res-libelle { overflow-wrap: anywhere; line-height: 1.2; }
+.res .res-piste { height: 0.8em; background: #e8edf5; border-radius: 6px; overflow: hidden; }
+.res .res-barre { display: block; height: 100%; background: #8a94a6; }
+.res li.juste .res-barre { background: #000091; }
+.res li.juste .res-libelle { font-weight: 700; color: #000091; }
+.res .res-valeur { font-variant-numeric: tabular-nums; color: #55627a; font-size: 0.85em; white-space: nowrap; }
+.res .res-note { margin: 0; color: #55627a; font-size: 0.8em; }
+.res .res-nuage { margin: 0; line-height: 1.5; }
+.res .res-nuage span { margin-right: 0.5em; }
+.res .res-nuage sup { font-size: 0.5em; color: #8a94a6; }
+.res .res-textes, .res .res-classement { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.res-vide { color: #8a94a6; font-style: italic; }
+.impression-pied { position: absolute; right: 24px; bottom: 6px; font: 18px/1.2 system-ui, sans-serif; color: #55627a; background: rgba(255, 255, 255, .85); padding: 2px 8px; border-radius: 4px; }
+html[data-role="seance"] .reveal .quiz-resultats:not(.remplie), html[data-role="impression"] .reveal .quiz-resultats:not(.remplie) { visibility: hidden; }

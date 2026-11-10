@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="vendor/reveal/reveal.css">
 <link rel="stylesheet" href="vendor/reveal/theme/white.css" id="theme">
 <link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="resultats.css">
 </head>
 <body>
 <div class="reveal"><div class="slides" id="slides"></div></div>
@@ -18,6 +19,7 @@
 <script src="camera.js"></script>
 <script src="quiz-deck.js"></script>
 <script src="teachable.js"></script>
+<script src="resultats-statiques.js"></script>
 <script>
 (async () => {
   const role = AmphiSync.role;
@@ -26,6 +28,9 @@
   // ?prez=slug : prévisualisation d'une présentation non active (pas de synchronisation) ; sinon la présentation active.
   const params = new URLSearchParams(location.search);
   const prez = /^[a-z0-9-]{1,40}$/.test(params.get('prez') || '') ? params.get('prez') : null;
+  // ?copie=<AAAA-MM-JJ_HHMMSS> : la présentation telle qu'elle était pendant une séance (copie figée, docs/seance.md §F).
+  const copie = prez && /^\d{4}-\d{2}-\d{2}_\d{6}$/.test(params.get('copie') || '') ? params.get('copie') : null;
+  const base = prez ? '/p/' + prez + '/' + (copie ? 'seances/' + copie + '/' : '') : '';
 
   // Métadonnées de la présentation (titre, thème, camera) : /api/presentations/active ou l'entrée de la présentation demandée.
   let meta = {};
@@ -53,7 +58,7 @@
   /** En prévisualisation, les médias relatifs (medias/…) sont ceux de la présentation demandée, pas de l'active. */
   function reecrireMedias(racine) {
     if (!prez) return;
-    const prefixe = '/p/' + prez + '/';
+    const prefixe = base;
     racine.querySelectorAll('[src^="medias/"], [data-src^="medias/"], [data-background-image^="medias/"]').forEach(el => {
       for (const attr of ['src', 'data-src', 'data-background-image']) {
         const v = el.getAttribute(attr);
@@ -66,12 +71,12 @@
     meta = await metadonnees();
     await appliquerTheme(meta);
     // Le contenu du deck vit dans slides.html (PowerPoint converti, PDF converti ou éditeur).
-    const html = await (await fetch(prez ? '/p/' + prez + '/slides.html' : 'slides.html', { cache: 'no-store' })).text();
+    const html = await (await fetch(prez ? base + 'slides.html' : 'slides.html', { cache: 'no-store' })).text();
     slides.innerHTML = html;
     reecrireMedias(slides);
-    // Rôle obs : aucune transition, pour un rendu simultané avec le projecteur.
-    if (role === 'obs') slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
-    await AmphiQuizDeck.preparer(slides, prez, meta.camera);
+    // Rôles obs, séance, impression : aucune transition (rendu simultané, sauts de la relecture, pages du PDF).
+    if (['obs', 'seance', 'impression'].includes(role)) slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
+    await AmphiQuizDeck.preparer(slides, prez, meta.camera, copie ? base + 'quiz.json' : undefined);
     AmphiTeachable.preparer(slides);
     // Rôle obs : zone réservée à la vignette caméra (docs/zone-camera.md), ajustée en mémoire, jamais réécrite dans le fichier.
     if (role === 'obs') reserverCamera();
@@ -100,15 +105,19 @@
     obs:    { controls: false, progress: false, keyboard: false, touch: false, transition: 'none', backgroundTransition: 'none' },
     // Téléphone : miniature embarquée dans remote.html, pilotée par ses boutons.
     remote: { controls: false, progress: false, keyboard: false, touch: false, embedded: true, transition: 'none' },
+    // Page séance : la page parente pilote la position (postMessage) au rythme du journal.
+    seance: { controls: false, progress: false, keyboard: false, touch: false, transition: 'none', backgroundTransition: 'none' },
+    // Export PDF : une page par diapositive jouée, résultats des questions, puis impression.
+    impression: { controls: false, progress: false, keyboard: false, touch: false, transition: 'none', view: 'print', pdfSeparateFragments: false },
   };
+  if (role === 'impression') await preparerImpression();
   await Reveal.initialize({ ...commun, ...parRole[role] });
 
   Reveal.on('slidechanged', e => {
     if (e.previousSlide) { AmphiQuizDeck.horsDiapositive(e.previousSlide); AmphiTeachable.horsDiapositive(e.previousSlide); }
     AmphiQuizDeck.surDiapositive(e.currentSlide); AmphiTeachable.surDiapositive(e.currentSlide);
   });
-  Reveal.on('fragmentshown', e => { AmphiQuizDeck.surFragment(e.fragment); AmphiTeachable.surFragment(e.fragment); });
-  Reveal.on('fragmenthidden', e => AmphiTeachable.surFragment(e.fragment));
+  Reveal.on('fragmentshown', e => AmphiQuizDeck.surFragment(e.fragment));
   Reveal.on('ready', e => { AmphiQuizDeck.surDiapositive(e.currentSlide); AmphiTeachable.surDiapositive(e.currentSlide); });
 
   // L'éditeur a enregistré ou une autre présentation a été activée : recharger le contenu sans perdre la position
@@ -123,6 +132,62 @@
   });
   // Prévisualisation d'une présentation non active : pas de synchronisation avec la salle.
   if (!prez) { AmphiQuizDeck.demarrerQR(); AmphiSync.demarrer(); }
+
+  // ---- Page séance (deck/seance.html) : position et résultats envoyés par la page parente ----
+  if (role === 'seance') {
+    window.addEventListener('message', e => {
+      if (e.origin !== location.origin || !e.data || typeof e.data !== 'object') return;
+      const m = e.data;
+      if (m.type === 'aller') {
+        const i = Reveal.getIndices();
+        if (i.h !== m.h || (i.v || 0) !== (m.v || 0) || (i.f ?? -1) !== (m.f ?? -1)) Reveal.slide(m.h, m.v || 0, m.f ?? -1);
+      } else if (m.type === 'resultats' && m.resultats) remplirResultats(slides, m.resultats);
+    });
+    window.parent.postMessage({ type: 'deck-pret', total: Reveal.getTotalSlides() }, location.origin);
+  }
+
+  /** Place les résultats d'une question dans l'emplacement « salle » des diapositives de quiz (deck/resultats-statiques.js). */
+  function remplirResultats(racine, resultats) {
+    // Diapositive de quiz générée (emplacement « question ») ou dessinée (élément data-amphi="resultats" data-question="…").
+    racine.querySelectorAll('[data-replay-salle="question"], [data-replay-salle="resultats"]').forEach(zone => {
+      const porteur = zone.closest('[data-question]') || zone.closest('section[data-quiz]');
+      const qid = porteur && (porteur.dataset.question || porteur.dataset.quiz);
+      const r = qid && resultats[qid];
+      if (r && window.AmphiResultats) { zone.innerHTML = AmphiResultats.rendre(r.question, r.resultat); zone.classList.add('remplie'); }
+    });
+  }
+
+  /** Export PDF : garde les diapositives jouées pendant la séance, ajoute heure, durée et résultats, puis imprime. */
+  async function preparerImpression() {
+    const id = params.get('historique'), jeton = params.get('token') || '';
+    let detail = null;
+    try {
+      const r = await fetch('/api/presentations/' + prez + '/historique/' + encodeURIComponent(id) + '?token=' + encodeURIComponent(jeton), { cache: 'no-store' });
+      if (r.ok) detail = await r.json();
+    } catch (e) { /* imprimé sans les résultats */ }
+    const sections = [...slides.children].filter(s => s.tagName === 'SECTION');
+    if (detail) {
+      // Temps passé sur chaque diapositive (somme des passages), heure de la première arrivée.
+      const diapos = detail.evenements.filter(e => e.type === 'diapositive');
+      const passages = {};
+      diapos.forEach((e, k) => {
+        const suivant = diapos[k + 1] ? diapos[k + 1].horodatage : detail.fin;
+        const p = passages[e.h] || (passages[e.h] = { arrivee: e.horodatage, duree: 0 });
+        p.duree += Math.max(0, suivant - e.horodatage);
+      });
+      if (params.get('toutes') !== '1') sections.forEach((s, h) => { if (!passages[h]) s.remove(); });
+      const date = t => new Date(t * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const duree = s => s >= 60 ? Math.floor(s / 60) + ' min ' + String(Math.round(s % 60)).padStart(2, '0') : Math.round(s) + ' s';
+      sections.forEach((s, h) => {
+        if (!s.isConnected) return;
+        const p = passages[h];
+        s.insertAdjacentHTML('beforeend', '<div class="impression-pied">' + (h + 1) + ' / ' + sections.length + (p ? ' · affichée à ' + date(p.arrivee) + ' · ' + duree(p.duree) : ' · non affichée') + '</div>');
+      });
+      remplirResultats(slides, detail.resultats || {});
+      document.title = (detail.titre || 'Séance') + ' – ' + new Date(detail.debut * 1000).toLocaleDateString('fr-FR');
+    }
+    Reveal.on('pdf-ready', () => setTimeout(() => window.print(), 600));
+  }
 })();
 </script>
 </body>
