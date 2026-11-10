@@ -31,6 +31,15 @@
   // ?copie=<AAAA-MM-JJ_HHMMSS> : la présentation telle qu'elle était pendant une séance (copie figée, docs/seance.md §F).
   const copie = prez && /^\d{4}-\d{2}-\d{2}_\d{6}$/.test(params.get('copie') || '') ? params.get('copie') : null;
   const base = prez ? '/p/' + prez + '/' + (copie ? 'seances/' + copie + '/' : '') : '';
+  // ?apercu=1 (bouton « Aperçu » de l'éditeur) : diapositives et questions du brouillon de l'éditeur, même non enregistrées.
+  let apercu = null;
+  if (params.get('apercu') === '1' && prez) {
+    try {
+      const b = JSON.parse(localStorage.getItem('amphi-apercu') || 'null');
+      if (b && b.prez === prez && typeof b.html === 'string') apercu = b;
+    } catch (e) { /* stockage indisponible : version enregistrée */ }
+  }
+  const departH = Number.parseInt(params.get('h'), 10);
 
   // Métadonnées de la présentation (titre, thème, camera) : /api/presentations/active ou l'entrée de la présentation demandée.
   let meta = {};
@@ -71,12 +80,15 @@
     meta = await metadonnees();
     await appliquerTheme(meta);
     // Le contenu du deck vit dans slides.html (PowerPoint converti, PDF converti ou éditeur).
-    const html = await (await fetch(prez ? base + 'slides.html' : 'slides.html', { cache: 'no-store' })).text();
+    const html = apercu ? apercu.html : await (await fetch(prez ? base + 'slides.html' : 'slides.html', { cache: 'no-store' })).text();
     slides.innerHTML = html;
     reecrireMedias(slides);
     // Rôles obs, séance, impression : aucune transition (rendu simultané, sauts de la relecture, pages du PDF).
     if (['obs', 'seance', 'impression'].includes(role)) slides.querySelectorAll('[data-transition]').forEach(s => s.removeAttribute('data-transition'));
-    await AmphiQuizDeck.preparer(slides, prez, meta.camera, copie ? base + 'quiz.json' : undefined);
+    const urlQuestions = apercu && Array.isArray(apercu.questions)
+      ? URL.createObjectURL(new Blob([JSON.stringify(apercu.questions)], { type: 'application/json' }))
+      : copie ? base + 'quiz.json' : undefined;
+    await AmphiQuizDeck.preparer(slides, prez, meta.camera, urlQuestions);
     AmphiTeachable.preparer(slides);
     // Rôle obs : zone réservée à la vignette caméra (docs/zone-camera.md), ajustée en mémoire, jamais réécrite dans le fichier.
     if (role === 'obs') reserverCamera();
@@ -112,6 +124,16 @@
   };
   if (role === 'impression') await preparerImpression();
   await Reveal.initialize({ ...commun, ...parRole[role] });
+  // ?h=n : ouvrir sur une diapositive (aperçu de l'éditeur).
+  if (Number.isInteger(departH) && departH > 0) Reveal.slide(Math.min(departH, Reveal.getTotalSlides() - 1), 0, -1);
+  if (apercu) {
+    document.title = 'Aperçu – ' + (meta.titre || prez);
+    const bandeau = document.createElement('div');
+    bandeau.className = 'bandeau-apercu';
+    bandeau.textContent = apercu.nonEnregistre ? 'Aperçu · modifications non enregistrées' : 'Aperçu';
+    bandeau.title = 'Brouillon de l\'éditeur, sans synchronisation avec la salle. Flèches ou clic pour naviguer ; « Aperçu » dans l\'éditeur met cet onglet à jour.';
+    document.body.append(bandeau);
+  }
 
   Reveal.on('slidechanged', e => {
     if (e.previousSlide) { AmphiQuizDeck.horsDiapositive(e.previousSlide); AmphiTeachable.horsDiapositive(e.previousSlide); }

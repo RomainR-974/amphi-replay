@@ -106,4 +106,6 @@ Liste de questions. Champs communs : `id` (unique, `[a-z0-9_-]+`), `type`, `ques
 | WS | `/ws/quiz` | état poussé : `{ type:"quiz", question, ouverte, revele, reste, resultat }`, `{ type:"obs", action, h }`, `{ type:"fin", terminee, contact }` |
 | WS | `/ws/deck?role=` | synchronisation `{h, v, f}` |
 
+**Aperçu de l'éditeur** : le bouton « Aperçu » range le brouillon (diapositives et questions, même non enregistrées) dans le stockage du navigateur (clé `amphi-apercu`) et ouvre `/deck/?role=scene&prez=<slug>&apercu=1&h=<diapositive courante>` : pas de synchronisation avec la salle, bandeau « Aperçu · modifications non enregistrées », même onglet réutilisé à chaque clic.
+
 Vues : `/q` (participant), `/q/resultats?question=` (résultats d'une question), `/q/classement?nombre=` (podium + top N ; `?ceremonie=1` : cérémonie animée déclenchée par `postMessage({type:"ceremonie"})`, `?ceremonie=auto` pour les tests), `/deck/?role=scene|obs|remote`, `/deck/remote.html?token=`, `/deck/editeur.html?token=`.

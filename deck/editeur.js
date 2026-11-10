@@ -1521,8 +1521,24 @@
     }
   }
   $('#b-enregistrer').onclick = enregistrer;
-  // Aperçu : la présentation éditée en prévisualisation (sans synchronisation) si elle est désignée, sinon la scène.
-  $('#b-apercu').onclick = () => window.open(prezDemandee ? '/deck/?prez=' + encodeURIComponent(prezDemandee) + '&role=scene' : '/deck/?role=scene', '_blank');
+  // Aperçu : la présentation telle qu'elle est dans l'éditeur, même non enregistrée, ouverte sur la diapositive courante,
+  // sans synchronisation avec la salle. Le brouillon passe par le stockage du navigateur (même origine) ; l'onglet
+  // d'aperçu reste ouvert et se met à jour à chaque nouveau clic sur « Aperçu ».
+  const CLE_APERCU = 'amphi-apercu';
+  function ouvrirApercu() {
+    terminerEdition(true);
+    let stocke = false;
+    try {
+      localStorage.setItem(CLE_APERCU, JSON.stringify({ prez, html: serialiser(), questions: etat.questions, h: etat.courant,
+        nonEnregistre: !!(etat.modifie || etat.questionsModifiees), t: Date.now() }));
+      stocke = true;
+    } catch (e) { /* stockage plein ou bloqué : aperçu de la version enregistrée */ }
+    const url = '/deck/?role=scene' + (prez ? '&prez=' + encodeURIComponent(prez) : '') + (stocke ? '&apercu=1' : '') + '&h=' + etat.courant;
+    const w = window.open(url, 'amphi-apercu-' + (prez || 'active'));
+    if (w) w.focus();
+    if (!stocke) etatSauvegarde('aperçu de la version enregistrée (brouillon trop gros pour le navigateur)', 'erreur');
+  }
+  $('#b-apercu').onclick = ouvrirApercu;
   $('#b-annuler').onclick = annuler;
   $('#b-retablir').onclick = retablir;
   $('#b-importer').onclick = () => $('#fichier-import').click();
