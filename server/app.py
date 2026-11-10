@@ -205,7 +205,9 @@ def reponse_media(slug: str, chemin: str) -> Response:
     fichier = biblio.media(slug, chemin)
     if fichier is None:
         raise HTTPException(status_code=404)
-    return FileResponse(fichier)
+    # no-cache : le navigateur revalide (ETag) à chaque chargement ; un média remplacé (image, modèle Teachable Machine)
+    # est pris en compte tout de suite, sans Ctrl+F5.
+    return FileResponse(fichier, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/deck/slides.html")
